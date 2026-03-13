@@ -6,10 +6,12 @@
 - Preserve the public SDK API deliberately while the repo is cleaned up and moved toward a standard package layout.
 
 ## Project Layout
-- `xian_py/wallet.py`: wallet and key handling.
-- `xian_py/transaction.py`: transaction construction and helpers.
-- `xian_py/xian.py` and `xian_py/xian_async.py`: synchronous and asynchronous clients.
-- `xian_py/crypto.py`, `encoding.py`, `validator.py`: shared SDK utilities.
+- `src/xian_py/__init__.py`: public SDK exports.
+- `src/xian_py/wallet.py`: wallet and key handling.
+- `src/xian_py/transaction.py`: transaction construction and helpers.
+- `src/xian_py/xian.py` and `src/xian_py/xian_async.py`: synchronous and asynchronous clients.
+- `src/xian_py/crypto.py`, `src/xian_py/encoding.py`, `src/xian_py/validator.py`: shared SDK utilities.
+- `tests/unit/`: public API, wallet, crypto, encoding, validator, transaction, and client coverage.
 
 ## Change Routing
 - Do not import private ABCI internals into the SDK.
@@ -24,4 +26,4 @@
 
 ## Notes
 - The repo now uses `src/` layout, `pytest`, and `uv`.
-- Validation CI is still pending; add local tests in the same change whenever you touch SDK behavior.
+- The public API should remain intentionally small: `Xian`, `XianAsync`, `Wallet`, `XianException`, `run_sync`, and contract-time helpers.
