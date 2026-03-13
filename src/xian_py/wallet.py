@@ -1,24 +1,22 @@
 import secrets
 
-from bip_utils.utils.mnemonic import Mnemonic
-from nacl.signing import SigningKey, VerifyKey
-from nacl.exceptions import BadSignatureError
-
 from bip_utils import (
+    Bip32Secp256k1,
+    Bip32Slip10Ed25519,
     Bip39MnemonicGenerator,
     Bip39SeedGenerator,
     Bip39WordsNum,
-    Bip32Slip10Ed25519,
-    Bip32Secp256k1,
     Bip44,
+    Bip44Changes,
     Bip44Coins,
-    Bip44Changes
 )
+from bip_utils.utils.mnemonic import Mnemonic
+from nacl.exceptions import BadSignatureError
+from nacl.signing import SigningKey, VerifyKey
 
 try:
     from eth_account import Account
     from eth_account.messages import encode_defunct
-    from eth_utils import to_checksum_address
 
     ETHEREUM_SUPPORT = True
 except ImportError:
@@ -27,7 +25,7 @@ except ImportError:
 
 # TODO: Unify this function with the method with the same name from 'Wallet' class
 def verify_msg(public_key: str, msg: str, signature: str) -> bool:
-    """ Verify signed message by public key """
+    """Verify signed message by public key"""
     signature = bytes.fromhex(signature)
     pk = bytes.fromhex(public_key)
     msg = msg.encode()
@@ -58,12 +56,12 @@ class Wallet:
         return str(self.vk.encode().hex())
 
     def sign_msg(self, msg: str):
-        """ Sign message with private key """
+        """Sign message with private key"""
         sig = self.sk.sign(msg.encode())
         return sig.signature.hex()
 
     def verify_msg(self, msg: str, signature: str) -> bool:
-        """ Verify signed message """
+        """Verify signed message"""
         signature = bytes.fromhex(signature)
         msg = msg.encode()
         try:
@@ -74,12 +72,12 @@ class Wallet:
 
     @staticmethod
     def is_valid_key(key: str) -> bool:
-        """ Check if the given key (public or private) is valid """
+        """Check if the given key (public or private) is valid"""
         if not len(key) == 64:
             return False
         try:
             int(key, 16)
-        except:
+        except Exception:
             return False
         return True
 
@@ -103,32 +101,34 @@ class EthereumWallet:
         return str(self.account.address)
 
     def sign_msg(self, msg: str):
-        """ Sign message with private key """
+        """Sign message with private key"""
         message = encode_defunct(text=msg)
         signed_message = self.account.sign_message(message)
         return signed_message.signature.hex()
 
     def verify_msg(self, msg: str, signature: str) -> bool:
-        """ Verify signed message """
+        """Verify signed message"""
         message = encode_defunct(text=msg)
         try:
-            recovered_address = Account.recover_message(message, signature=bytes.fromhex(signature))
+            recovered_address = Account.recover_message(
+                message, signature=bytes.fromhex(signature)
+            )
             return recovered_address.lower() == self.public_key.lower()
-        except:
+        except Exception:
             return False
 
     @staticmethod
     def is_valid_key(key: str) -> bool:
-        """ Check if the given key is a valid Ethereum address """
+        """Check if the given key is a valid Ethereum address"""
         try:
             # Ethereum addresses are 40 hex chars (not counting '0x')
-            if key.startswith('0x'):
+            if key.startswith("0x"):
                 key = key[2:]
             if len(key) != 40:
                 return False
             int(key, 16)
             return True
-        except:
+        except Exception:
             return False
 
 
@@ -137,7 +137,9 @@ class HDWallet:
         if mnemonic:
             self.mnemonic = Mnemonic(mnemonic.split())
         else:
-            self.mnemonic = Bip39MnemonicGenerator().FromWordsNumber(Bip39WordsNum.WORDS_NUM_24)
+            self.mnemonic = Bip39MnemonicGenerator().FromWordsNumber(
+                Bip39WordsNum.WORDS_NUM_24
+            )
 
         self.seed_bytes = Bip39SeedGenerator(self.mnemonic).Generate()
 
@@ -150,12 +152,12 @@ class HDWallet:
 
     @property
     def mnemonic_str(self) -> str:
-        """ Returns the mnemonic seed as a string """
+        """Returns the mnemonic seed as a string"""
         return str(self.mnemonic)
 
     @property
     def mnemonic_lst(self) -> list[str]:
-        """ Returns the mnemonic seed as a list of strings """
+        """Returns the mnemonic seed as a list of strings"""
         return str(self.mnemonic).split()
 
     def get_wallet(self, derivation_path):
@@ -171,10 +173,14 @@ class HDWallet:
     def get_ethereum_wallet(self, account_idx: int = 0):
         """Get Ethereum wallet for specific account index"""
         if not ETHEREUM_SUPPORT:
-            raise ImportError("Ethereum support not installed. Install with 'pip install xian-py[eth]'")
+            raise ImportError(
+                "Ethereum support not installed. Install with 'pip install xian-py[eth]'"
+            )
 
         bip44_ctx = Bip44.FromSeed(self.seed_bytes, Bip44Coins.ETHEREUM)
-        account_keys = bip44_ctx.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT)
+        account_keys = (
+            bip44_ctx.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT)
+        )
         eth_child_key = account_keys.AddressIndex(account_idx)
         private_key_hex = eth_child_key.PrivateKey().Raw().ToHex()
         return EthereumWallet(private_key=private_key_hex)

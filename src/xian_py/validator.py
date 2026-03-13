@@ -1,12 +1,11 @@
 import ast
-
 from enum import Enum, auto
-from typing import List, Set, Dict
+from typing import Dict, List, Set
 
 
 class XianStandard(Enum):
     XSC001 = auto()
-    #XSC002 = auto()  # Future standards
+    # XSC002 = auto()  # Future standards
 
 
 class ValidatorBase(ast.NodeVisitor):
@@ -16,33 +15,38 @@ class ValidatorBase(ast.NodeVisitor):
 
 class ValidatorXSC001(ValidatorBase):
     def __init__(self):
-        self.required_variables = {'balances', 'metadata'}
+        self.required_variables = {"balances", "metadata"}
         self.required_functions = {
-            'change_metadata': {'key', 'value'},
-            'transfer': {'amount', 'to'},
-            'approve': {'amount', 'to'},
-            'transfer_from': {'amount', 'to', 'main_account'},
-            'balance_of': {'address'}
+            "change_metadata": {"key", "value"},
+            "transfer": {"amount", "to"},
+            "approve": {"amount", "to"},
+            "transfer_from": {"amount", "to", "main_account"},
+            "balance_of": {"address"},
         }
         self.found_variables: Set[str] = set()
         self.found_functions: Dict[str, Set[str]] = {}
         self.has_constructor = False
         self.is_hash_type: Dict[str, bool] = {}
         self.metadata_fields = {
-            'token_name',
-            'token_symbol',
-            'token_logo_url',
-            'token_website',
-            'operator'
+            "token_name",
+            "token_symbol",
+            "token_logo_url",
+            "token_website",
+            "operator",
         }
         self.found_metadata_fields: Set[str] = set()
 
     def visit_Assign(self, node: ast.Assign) -> None:
-        if isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.Call):
+        if isinstance(node.targets[0], ast.Name) and isinstance(
+            node.value, ast.Call
+        ):
             var_name = node.targets[0].id
             self.found_variables.add(var_name)
 
-            if isinstance(node.value.func, ast.Name) and node.value.func.id == 'Hash':
+            if (
+                isinstance(node.value.func, ast.Name)
+                and node.value.func.id == "Hash"
+            ):
                 self.is_hash_type[var_name] = True
 
         self.generic_visit(node)
@@ -53,17 +57,21 @@ class ValidatorXSC001(ValidatorBase):
         self.found_functions[func_name] = args
 
         for decorator in node.decorator_list:
-            if isinstance(decorator, ast.Name) and decorator.id == 'construct':
+            if isinstance(decorator, ast.Name) and decorator.id == "construct":
                 self.has_constructor = True
 
-        if func_name == 'seed':
+        if func_name == "seed":
             for stmt in node.body:
                 if isinstance(stmt, ast.Assign):
                     if isinstance(stmt.targets[0], ast.Subscript):
-                        if isinstance(stmt.targets[0].value, ast.Name) and \
-                                stmt.targets[0].value.id == 'metadata':
+                        if (
+                            isinstance(stmt.targets[0].value, ast.Name)
+                            and stmt.targets[0].value.id == "metadata"
+                        ):
                             if isinstance(stmt.targets[0].slice, ast.Constant):
-                                self.found_metadata_fields.add(stmt.targets[0].slice.value)
+                                self.found_metadata_fields.add(
+                                    stmt.targets[0].slice.value
+                                )
 
         self.generic_visit(node)
 
@@ -84,14 +92,17 @@ class ValidatorXSC001(ValidatorBase):
             elif self.found_functions[func] != required_args:
                 errors.append(
                     f"Function {func} has incorrect arguments. "
-                    f"Expected {required_args}, got {self.found_functions[func]}")
+                    f"Expected {required_args}, got {self.found_functions[func]}"
+                )
 
         if not self.has_constructor:
             errors.append("Missing constructor (@construct decorator)")
 
         missing_metadata = self.metadata_fields - self.found_metadata_fields
         if missing_metadata:
-            errors.append(f"Missing required metadata fields: {missing_metadata}")
+            errors.append(
+                f"Missing required metadata fields: {missing_metadata}"
+            )
 
         return len(errors) == 0, errors
 
@@ -104,7 +115,9 @@ class ValidatorFactory:
         raise ValueError(f"Unsupported standard: {standard}")
 
 
-def validate_contract(contract_code: str, standard: XianStandard = XianStandard.XSC001) -> tuple[bool, List[str]]:
+def validate_contract(
+    contract_code: str, standard: XianStandard = XianStandard.XSC001
+) -> tuple[bool, List[str]]:
     """
     Validates if a contract follows the specified token standard
     Args:

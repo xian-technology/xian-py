@@ -32,6 +32,14 @@ With Ethereum support:
 pip install "xian-py[eth]"
 ```
 
+Development setup:
+```bash
+uv sync --group dev
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+```
+
 ## Features
 
 - **Dual API Support**: Both synchronous and asynchronous interfaces for all operations

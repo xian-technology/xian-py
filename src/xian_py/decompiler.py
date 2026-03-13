@@ -1,6 +1,7 @@
 import ast
-import astor
 from typing import Optional
+
+import astor
 
 
 class CustomSourceGenerator(astor.SourceGenerator):
@@ -35,7 +36,9 @@ class CustomSourceGenerator(astor.SourceGenerator):
         for value in node.values:
             if isinstance(value, ast.Str):
                 self.write(value.s)
-            elif isinstance(value, ast.Constant) and isinstance(value.value, str):
+            elif isinstance(value, ast.Constant) and isinstance(
+                value.value, str
+            ):
                 self.write(value.value)
             elif isinstance(value, ast.FormattedValue):
                 self.write("{")
@@ -88,12 +91,14 @@ class ContractDecompiler(ast.NodeTransformer):
     def _collect_orm_vars(self, node: ast.AST) -> None:
         """Record underlying names for ORM variables to strip prefixes safely."""
         for child in ast.walk(node):
-            if isinstance(child, ast.Assign) and isinstance(child.value, ast.Call):
+            if isinstance(child, ast.Assign) and isinstance(
+                child.value, ast.Call
+            ):
                 if not isinstance(child.value.func, ast.Name):
                     continue
                 for kw in child.value.keywords or []:
                     if kw.arg == "name" and isinstance(
-                            getattr(kw, "value", None), ast.Str
+                        getattr(kw, "value", None), ast.Str
                     ):
                         self.orm_vars.add(kw.value.s)
 
@@ -116,12 +121,14 @@ class ContractDecompiler(ast.NodeTransformer):
             first = node.decorator_list[0]
             if isinstance(first, ast.Call):
                 if (
-                        isinstance(first.func, ast.Name)
-                        and first.func.id in {"export", "__export"}
-                        and first.args
-                        and isinstance(first.args[0], ast.Constant)
+                    isinstance(first.func, ast.Name)
+                    and first.func.id in {"export", "__export"}
+                    and first.args
+                    and isinstance(first.args[0], ast.Constant)
                 ):
-                    node.decorator_list = [ast.Name(id="export", ctx=ast.Load())]
+                    node.decorator_list = [
+                        ast.Name(id="export", ctx=ast.Load())
+                    ]
             elif isinstance(first, ast.Name) and first.id.startswith("__"):
                 first.id = first.id[2:]
 

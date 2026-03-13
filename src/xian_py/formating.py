@@ -10,7 +10,7 @@ def kwargs_are_formatted(k: dict):
 
 def identifier_is_formatted(s: str):
     try:
-        iden = re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', s)
+        iden = re.match(r"^[a-zA-Z][a-zA-Z0-9_]*$", s)
         if iden is None:
             return False
         return True
@@ -43,13 +43,13 @@ def cid_id_formatted(s: str):
 
 
 TRANSACTION_PAYLOAD_RULES = {
-    'sender': key_is_formatted,
-    'nonce': number_is_formatted,
-    'stamps_supplied': number_is_formatted,
-    'contract': identifier_is_formatted,
-    'function': identifier_is_formatted,
-    'kwargs': kwargs_are_formatted,
-    'chain_id': cid_id_formatted
+    "sender": key_is_formatted,
+    "nonce": number_is_formatted,
+    "stamps_supplied": number_is_formatted,
+    "contract": identifier_is_formatted,
+    "function": identifier_is_formatted,
+    "kwargs": kwargs_are_formatted,
+    "chain_id": cid_id_formatted,
 }
 
 
@@ -60,7 +60,7 @@ def dict_has_keys(d: dict, keys: set):
 
 def format_dictionary(d: dict) -> dict:
     for k, v in d.items():
-        assert type(k) is str, 'Non-string key types not allowed.'
+        assert type(k) is str, "Non-string key types not allowed."
         if type(v) is list:
             for i in range(len(v)):
                 if isinstance(v[i], dict):

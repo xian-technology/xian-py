@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from typing import Awaitable, TypeVar, Optional
+from typing import Awaitable, Optional, TypeVar
 
 T = TypeVar("T")
+
 
 def run_sync(
     awaitable: Awaitable[T],

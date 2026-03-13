@@ -1,17 +1,14 @@
+from nacl.bindings import (
+    crypto_sign_ed25519_pk_to_curve25519,
+    crypto_sign_ed25519_sk_to_curve25519,
+)
+from nacl.public import Box, PrivateKey, PublicKey
 from nacl.signing import SigningKey
 
-from nacl.public import (
-    PrivateKey,
-    PublicKey,
-    Box
-)
 
-from nacl.bindings import (
-    crypto_sign_ed25519_sk_to_curve25519,
-    crypto_sign_ed25519_pk_to_curve25519
-)
-
-def encrypt(sender_private_key: str, receiver_public_key: str, cleartext_msg: str) -> str:
+def encrypt(
+    sender_private_key: str, receiver_public_key: str, cleartext_msg: str
+) -> str:
     """
     Encrypts a message using the sender's private key and the receiver's public key.
 
@@ -39,11 +36,13 @@ def encrypt(sender_private_key: str, receiver_public_key: str, cleartext_msg: st
     recipient_pk = PublicKey(x25519_pk)
 
     box = Box(sender_pk, recipient_pk)
-    encrypted = box.encrypt(cleartext_msg.encode('utf-8'))
+    encrypted = box.encrypt(cleartext_msg.encode("utf-8"))
     return encrypted.hex()
 
 
-def decrypt_as_receiver(sender_public_key: str, receiver_private_key: str, encrypted_msg: str) -> str:
+def decrypt_as_receiver(
+    sender_public_key: str, receiver_private_key: str, encrypted_msg: str
+) -> str:
     """
     Decrypts a message as the intended receiver using the receiver's private key and sender's public key.
 
@@ -71,9 +70,12 @@ def decrypt_as_receiver(sender_public_key: str, receiver_private_key: str, encry
 
     recipient_box = Box(recipient_sk, sender_pk)
     decrypted_plaintext = recipient_box.decrypt(bytes.fromhex(encrypted_msg))
-    return decrypted_plaintext.decode('utf-8')
+    return decrypted_plaintext.decode("utf-8")
 
-def decrypt_as_sender(sender_private_key: str, receiver_public_key: str, encrypted_msg: str) -> str:
+
+def decrypt_as_sender(
+    sender_private_key: str, receiver_public_key: str, encrypted_msg: str
+) -> str:
     """
     Decrypts a message as the sender using the sender's private key and the receiver's public key.
 
@@ -101,4 +103,4 @@ def decrypt_as_sender(sender_private_key: str, receiver_public_key: str, encrypt
 
     sender_box = Box(sender_sk, receiver_pk)
     decrypted_plaintext = sender_box.decrypt(bytes.fromhex(encrypted_msg))
-    return decrypted_plaintext.decode('utf-8')
+    return decrypted_plaintext.decode("utf-8")
