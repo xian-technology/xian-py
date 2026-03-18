@@ -30,6 +30,12 @@ Optional Ethereum helpers:
 pip install "xian-py[eth]"
 ```
 
+Optional HD wallet and mnemonic helpers:
+
+```bash
+pip install "xian-py[hd]"
+```
+
 ## Public API
 
 The intentionally small top-level API is:

@@ -1,16 +1,5 @@
 import secrets
-
-from bip_utils import (
-    Bip32Secp256k1,
-    Bip32Slip10Ed25519,
-    Bip39MnemonicGenerator,
-    Bip39SeedGenerator,
-    Bip39WordsNum,
-    Bip44,
-    Bip44Changes,
-    Bip44Coins,
-)
-from bip_utils.utils.mnemonic import Mnemonic
+from functools import lru_cache
 from nacl.exceptions import BadSignatureError
 from nacl.signing import SigningKey, VerifyKey
 
@@ -21,6 +10,39 @@ try:
     ETHEREUM_SUPPORT = True
 except ImportError:
     ETHEREUM_SUPPORT = False
+
+
+@lru_cache(maxsize=1)
+def _load_bip_utils() -> dict[str, object]:
+    try:
+        from bip_utils import (
+            Bip32Secp256k1,
+            Bip32Slip10Ed25519,
+            Bip39MnemonicGenerator,
+            Bip39SeedGenerator,
+            Bip39WordsNum,
+            Bip44,
+            Bip44Changes,
+            Bip44Coins,
+        )
+        from bip_utils.utils.mnemonic import Mnemonic
+    except ImportError as exc:
+        raise ImportError(
+            "HD wallet support requires the optional 'hd' dependency group; "
+            "install with 'pip install xian-py[hd]'"
+        ) from exc
+
+    return {
+        "Bip32Secp256k1": Bip32Secp256k1,
+        "Bip32Slip10Ed25519": Bip32Slip10Ed25519,
+        "Bip39MnemonicGenerator": Bip39MnemonicGenerator,
+        "Bip39SeedGenerator": Bip39SeedGenerator,
+        "Bip39WordsNum": Bip39WordsNum,
+        "Bip44": Bip44,
+        "Bip44Changes": Bip44Changes,
+        "Bip44Coins": Bip44Coins,
+        "Mnemonic": Mnemonic,
+    }
 
 
 # TODO: Unify this function with the method with the same name from 'Wallet' class
@@ -134,21 +156,31 @@ class EthereumWallet:
 
 class HDWallet:
     def __init__(self, mnemonic: str = None):
+        bip_utils = _load_bip_utils()
+        mnemonic_type = bip_utils["Mnemonic"]
+        words_num = bip_utils["Bip39WordsNum"]
+        mnemonic_generator = bip_utils["Bip39MnemonicGenerator"]
+        seed_generator = bip_utils["Bip39SeedGenerator"]
+        ed25519_key = bip_utils["Bip32Slip10Ed25519"]
+        secp256k1_key = bip_utils["Bip32Secp256k1"]
+
         if mnemonic:
-            self.mnemonic = Mnemonic(mnemonic.split())
+            self.mnemonic = mnemonic_type(mnemonic.split())
         else:
-            self.mnemonic = Bip39MnemonicGenerator().FromWordsNumber(
-                Bip39WordsNum.WORDS_NUM_24
+            self.mnemonic = mnemonic_generator().FromWordsNumber(
+                words_num.WORDS_NUM_24
             )
 
-        self.seed_bytes = Bip39SeedGenerator(self.mnemonic).Generate()
+        self.seed_bytes = seed_generator(self.mnemonic).Generate()
 
         # Initialize ED25519 master key
-        self.ed25519_master_key = Bip32Slip10Ed25519.FromSeed(self.seed_bytes)
+        self.ed25519_master_key = ed25519_key.FromSeed(self.seed_bytes)
 
         # Only initialize secp256k1 if ethereum support is installed
         if ETHEREUM_SUPPORT:
-            self.secp256k1_master_key = Bip32Secp256k1.FromSeed(self.seed_bytes)
+            self.secp256k1_master_key = secp256k1_key.FromSeed(
+                self.seed_bytes
+            )
 
     @property
     def mnemonic_str(self) -> str:
@@ -177,9 +209,16 @@ class HDWallet:
                 "Ethereum support not installed. Install with 'pip install xian-py[eth]'"
             )
 
-        bip44_ctx = Bip44.FromSeed(self.seed_bytes, Bip44Coins.ETHEREUM)
+        bip_utils = _load_bip_utils()
+        bip44 = bip_utils["Bip44"]
+        bip44_changes = bip_utils["Bip44Changes"]
+        bip44_coins = bip_utils["Bip44Coins"]
+        bip44_ctx = bip44.FromSeed(self.seed_bytes, bip44_coins.ETHEREUM)
         account_keys = (
-            bip44_ctx.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT)
+            bip44_ctx.Purpose()
+            .Coin()
+            .Account(0)
+            .Change(bip44_changes.CHAIN_EXT)
         )
         eth_child_key = account_keys.AddressIndex(account_idx)
         private_key_hex = eth_child_key.PrivateKey().Raw().ToHex()

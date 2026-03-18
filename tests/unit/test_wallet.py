@@ -1,3 +1,6 @@
+import pytest
+
+import xian_py.wallet as wallet_module
 from xian_py.wallet import Wallet, verify_msg
 
 
@@ -18,3 +21,14 @@ def test_wallet_keys_are_valid_hex_strings() -> None:
     assert Wallet.is_valid_key(wallet.private_key) is True
     assert Wallet.is_valid_key(wallet.public_key) is True
     assert Wallet.is_valid_key("not-a-key") is False
+
+
+def test_hd_wallet_requires_optional_dependency(monkeypatch) -> None:
+    monkeypatch.setattr(
+        wallet_module,
+        "_load_bip_utils",
+        lambda: (_ for _ in ()).throw(ImportError("missing bip_utils")),
+    )
+
+    with pytest.raises(ImportError, match="missing bip_utils"):
+        wallet_module.HDWallet()
