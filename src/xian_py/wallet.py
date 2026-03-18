@@ -1,5 +1,6 @@
 import secrets
 from functools import lru_cache
+
 from nacl.exceptions import BadSignatureError
 from nacl.signing import SigningKey, VerifyKey
 
@@ -178,9 +179,7 @@ class HDWallet:
 
         # Only initialize secp256k1 if ethereum support is installed
         if ETHEREUM_SUPPORT:
-            self.secp256k1_master_key = secp256k1_key.FromSeed(
-                self.seed_bytes
-            )
+            self.secp256k1_master_key = secp256k1_key.FromSeed(self.seed_bytes)
 
     @property
     def mnemonic_str(self) -> str:
