@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from xian_py.xian_decimal import (
+from xian_runtime_types.decimal import (
     MAX_DECIMAL,
     ContractingDecimal,
     DecimalOverflowError,

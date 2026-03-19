@@ -2,8 +2,9 @@ import base64
 import decimal
 import json
 
+from xian_runtime_types.decimal import ContractingDecimal, fix_precision
+
 from xian_py.xian_datetime import Datetime, Timedelta
-from xian_py.xian_decimal import ContractingDecimal, fix_precision
 
 MIN_INT = -(2**63)
 MAX_INT = 2**63 - 1

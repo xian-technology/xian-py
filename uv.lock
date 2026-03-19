@@ -1993,7 +1993,7 @@ requires-dist = [
     { name = "eth-account", marker = "extra == 'eth'", specifier = ">=0.13.4,<0.14" },
     { name = "eth-utils", marker = "extra == 'eth'", specifier = ">=5.2.0,<6" },
     { name = "pynacl", specifier = ">=1.5.0,<2" },
-    { name = "xian-runtime-types", git = "https://github.com/xian-technology/xian-contracting.git?subdirectory=packages%2Fxian-runtime-types&rev=15201818cf157ae0c8be3d3ecef48630ee3f8731" },
+    { name = "xian-runtime-types", editable = "../xian-contracting/packages/xian-runtime-types" },
 ]
 provides-extras = ["hd", "eth"]
 
@@ -2007,7 +2007,7 @@ dev = [
 [[package]]
 name = "xian-runtime-types"
 version = "0.1.0"
-source = { git = "https://github.com/xian-technology/xian-contracting.git?subdirectory=packages%2Fxian-runtime-types&rev=15201818cf157ae0c8be3d3ecef48630ee3f8731#15201818cf157ae0c8be3d3ecef48630ee3f8731" }
+source = { editable = "../xian-contracting/packages/xian-runtime-types" }
 
 [[package]]
 name = "yarl"
