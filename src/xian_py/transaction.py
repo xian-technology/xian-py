@@ -9,14 +9,25 @@ Both versions are exported to allow users to choose based on their needs.
 """
 
 import json
+from base64 import b64decode
 
 import aiohttp
+from xian_runtime_types.encoding import encode
 
 from xian_py.async_utils import sync_wrapper
-from xian_py.encoding import decode_dict, decode_str, encode
 from xian_py.exception import XianException
 from xian_py.formating import check_format_of_payload, format_dictionary
 from xian_py.wallet import Wallet
+
+
+def decode_str(encoded_data: str) -> str:
+    return b64decode(encoded_data).decode("utf-8")
+
+
+def decode_dict(encoded_dict: str) -> dict:
+    decoded_data = decode_str(encoded_dict)
+    decoded_tx = bytes.fromhex(decoded_data).decode("utf-8")
+    return json.loads(decoded_tx)
 
 
 async def get_nonce_async(node_url: str, address: str) -> int:

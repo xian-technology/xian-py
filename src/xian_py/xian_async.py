@@ -5,7 +5,6 @@ import aiohttp
 
 import xian_py.transaction as tr
 from xian_py.decompiler import ContractDecompiler
-from xian_py.encoding import decode_str
 from xian_py.exception import XianException
 from xian_py.wallet import Wallet
 
@@ -111,7 +110,7 @@ class XianAsync:
                 if not balance_bytes or balance_bytes == "AA==":
                     return "0"
 
-                return decode_str(balance_bytes)
+                return tr.decode_str(balance_bytes)
 
         def normalize_balance(balance: str) -> int | float:
             if balance.isdigit():
@@ -244,7 +243,7 @@ class XianAsync:
         if byte_string is None or byte_string == "AA==":
             return None
 
-        data = decode_str(byte_string)
+        data = tr.decode_str(byte_string)
 
         try:
             return int(data)
@@ -282,7 +281,7 @@ class XianAsync:
         if byte_string is None or byte_string == "AA==":
             return None
 
-        code = decode_str(byte_string)
+        code = tr.decode_str(byte_string)
 
         if clean:
             return ContractDecompiler().decompile(code)

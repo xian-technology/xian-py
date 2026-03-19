@@ -1,9 +1,8 @@
 from decimal import Decimal
 
 from xian_runtime_types.decimal import ContractingDecimal
-
-from xian_py.encoding import decode, encode
-from xian_py.xian_datetime import Datetime
+from xian_runtime_types.encoding import decode, encode
+from xian_runtime_types.time import Datetime
 
 
 def test_encode_decode_round_trip_preserves_supported_types() -> None:
