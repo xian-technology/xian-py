@@ -14,19 +14,19 @@ jobs:
 
     steps:
       - name: Checkout xian-py
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: xian-py
 
       - name: Checkout xian-contracting
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: xian-technology/xian-contracting
           ref: main
           path: xian-contracting
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -51,7 +51,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: xian-py-coverage
           path: xian-py/coverage.xml
