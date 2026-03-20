@@ -72,7 +72,11 @@ class XianAsync:
     async def get_tx(self, tx_hash: str) -> dict:
         """Return transaction data"""
 
-        data = await tr.get_tx_async(self.node_url, tx_hash)
+        data = await tr.get_tx_async(
+            self.node_url,
+            tx_hash,
+            session=self.session,
+        )
 
         if "error" in data:
             data["success"] = False
@@ -97,7 +101,11 @@ class XianAsync:
                 "kwargs": {"address": address},
                 "sender": self.wallet.public_key,
             }
-            data = await tr.simulate_tx_async(self.node_url, payload)
+            data = await tr.simulate_tx_async(
+                self.node_url,
+                payload,
+                session=self.session,
+            )
             return data["result"]
 
         async def query_abci():
@@ -144,7 +152,9 @@ class XianAsync:
 
         if nonce is None:
             nonce = await tr.get_nonce_async(
-                self.node_url, self.wallet.public_key
+                self.node_url,
+                self.wallet.public_key,
+                session=self.session,
             )
 
         payload = {
@@ -158,7 +168,11 @@ class XianAsync:
         }
 
         if stamps == 0:
-            simulated_tx = await tr.simulate_tx_async(self.node_url, payload)
+            simulated_tx = await tr.simulate_tx_async(
+                self.node_url,
+                payload,
+                session=self.session,
+            )
 
             stamps = simulated_tx["stamps_used"]
             payload["stamps_supplied"] = stamps
@@ -166,7 +180,11 @@ class XianAsync:
         tx = tr.create_tx(payload, self.wallet)
 
         if synchronous:
-            data = await tr.broadcast_tx_wait_async(self.node_url, tx)
+            data = await tr.broadcast_tx_wait_async(
+                self.node_url,
+                tx,
+                session=self.session,
+            )
 
             result = {
                 "success": None,
@@ -189,7 +207,11 @@ class XianAsync:
             return result
 
         else:
-            await tr.broadcast_tx_nowait_async(self.node_url, tx)
+            await tr.broadcast_tx_nowait_async(
+                self.node_url,
+                tx,
+                session=self.session,
+            )
 
     async def send(
         self,
@@ -216,7 +238,11 @@ class XianAsync:
             "kwargs": kwargs,
             "sender": self.wallet.public_key,
         }
-        return await tr.simulate_tx_async(self.node_url, payload)
+        return await tr.simulate_tx_async(
+            self.node_url,
+            payload,
+            session=self.session,
+        )
 
     # TODO: Might be better to use a state_string as input...
     async def get_state(

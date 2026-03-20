@@ -1,6 +1,6 @@
 import asyncio
 import base64
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
 
@@ -54,6 +54,16 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_stamps() -> None:
     client = XianAsync("http://node", wallet=wallet)
     client.get_chain_id = AsyncMock(return_value="xian-mainnet-1")
 
+    async def run_send_tx() -> dict:
+        try:
+            return await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+            )
+        finally:
+            await client.close()
+
     with patch.object(
         tr, "get_nonce_async", AsyncMock(return_value=11)
     ) as get_nonce_async:
@@ -74,15 +84,13 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_stamps() -> None:
                         return_value={"result": {"code": 0, "hash": "abc123"}}
                     ),
                 ) as broadcast_tx_wait_async:
-                    result = asyncio.run(
-                        client.send_tx(
-                            "currency",
-                            "transfer",
-                            {"amount": 1, "to": wallet.public_key},
-                        )
-                    )
+                    result = asyncio.run(run_send_tx())
 
-    get_nonce_async.assert_awaited_once_with("http://node", wallet.public_key)
+    get_nonce_async.assert_awaited_once_with(
+        "http://node",
+        wallet.public_key,
+        session=ANY,
+    )
     simulate_tx_async.assert_awaited_once()
     create_payload = create_tx.call_args.args[0]
     assert create_payload["chain_id"] == "xian-mainnet-1"
@@ -91,6 +99,7 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_stamps() -> None:
     broadcast_tx_wait_async.assert_awaited_once_with(
         "http://node",
         {"signed": True},
+        session=ANY,
     )
     assert result["success"] is True
     assert result["tx_hash"] == "abc123"
