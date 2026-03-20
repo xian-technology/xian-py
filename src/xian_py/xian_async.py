@@ -88,9 +88,7 @@ class XianAsync:
             tx_data = data["result"]["tx_result"].get("data")
             if isinstance(tx_data, dict):
                 data["message"] = (
-                    tx_data.get("result")
-                    or tx_data.get("error")
-                    or tx_data
+                    tx_data.get("result") or tx_data.get("error") or tx_data
                 )
             elif tx_data is not None:
                 data["message"] = tx_data

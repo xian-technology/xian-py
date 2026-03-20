@@ -143,6 +143,7 @@ def test_xian_async_get_tx_surfaces_error_payloads() -> None:
             }
         ),
     ):
+
         async def run_get_tx() -> dict:
             try:
                 return await client.get_tx("abc123")
