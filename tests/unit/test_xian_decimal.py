@@ -47,6 +47,8 @@ def test_max_decimal_exceeds_ethereum_18_decimal_range() -> None:
     assert MAX_DECIMAL > ethereum_style_max
 
 
-def test_fix_precision_allows_extra_fractional_digits_if_value_stays_in_range() -> None:
+def test_fix_precision_allows_extra_fractional_digits_if_value_stays_in_range() -> (
+    None
+):
     value = Decimal("9" * 61 + "." + "9" * 30 + "9")
     assert fix_precision(value) == MAX_DECIMAL
