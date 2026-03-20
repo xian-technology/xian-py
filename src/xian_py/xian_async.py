@@ -77,26 +77,33 @@ class XianAsync:
             tx_hash,
             session=self.session,
         )
+        result = data.get("result", {})
+        tx = result.get("tx")
+        tx_result = result.get("tx_result", {})
+        execution = tx_result.get("data")
+
+        if tx is not None:
+            data["transaction"] = tx
+        if isinstance(execution, dict):
+            data["execution"] = execution
 
         if "error" in data:
             data["success"] = False
             data["message"] = data["error"]["data"]
-        elif data["result"]["tx_result"]["code"] == 0:
+        elif tx_result["code"] == 0:
             data["success"] = True
         else:
             data["success"] = False
-            tx_data = data["result"]["tx_result"].get("data")
-            if isinstance(tx_data, dict):
+            if isinstance(execution, dict):
                 data["message"] = (
-                    tx_data.get("result") or tx_data.get("error") or tx_data
+                    execution.get("result")
+                    or execution.get("error")
+                    or execution
                 )
-            elif tx_data is not None:
-                data["message"] = tx_data
+            elif execution is not None:
+                data["message"] = execution
             else:
-                data["message"] = (
-                    data["result"]["tx_result"].get("log")
-                    or "Transaction failed"
-                )
+                data["message"] = tx_result.get("log") or "Transaction failed"
 
         return data
 

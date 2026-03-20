@@ -156,6 +156,40 @@ def test_xian_async_get_tx_surfaces_error_payloads() -> None:
     assert data["message"] == "boom"
 
 
+def test_xian_async_get_tx_exposes_transaction_and_execution() -> None:
+    client = XianAsync("http://node", chain_id="xian-1")
+    tx = {"payload": {"contract": "currency", "function": "transfer"}}
+    execution = {"status": 0, "result": "ok", "stamps_used": 7}
+
+    with patch.object(
+        tr,
+        "get_tx_async",
+        AsyncMock(
+            return_value={
+                "result": {
+                    "tx": tx,
+                    "tx_result": {
+                        "code": 0,
+                        "data": execution,
+                    },
+                }
+            }
+        ),
+    ):
+
+        async def run_get_tx() -> dict:
+            try:
+                return await client.get_tx("abc123")
+            finally:
+                await client.close()
+
+        data = asyncio.run(run_get_tx())
+
+    assert data["success"] is True
+    assert data["transaction"] == tx
+    assert data["execution"] == execution
+
+
 def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
