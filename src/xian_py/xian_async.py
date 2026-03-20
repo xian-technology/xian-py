@@ -85,7 +85,20 @@ class XianAsync:
             data["success"] = True
         else:
             data["success"] = False
-            data["message"] = data["result"]["tx_result"]["data"]["result"]
+            tx_data = data["result"]["tx_result"].get("data")
+            if isinstance(tx_data, dict):
+                data["message"] = (
+                    tx_data.get("result")
+                    or tx_data.get("error")
+                    or tx_data
+                )
+            elif tx_data is not None:
+                data["message"] = tx_data
+            else:
+                data["message"] = (
+                    data["result"]["tx_result"].get("log")
+                    or "Transaction failed"
+                )
 
         return data
 

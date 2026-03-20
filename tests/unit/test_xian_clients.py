@@ -126,6 +126,35 @@ def test_xian_async_get_balance_falls_back_to_abci_query() -> None:
     assert balance == 12.5
 
 
+def test_xian_async_get_tx_surfaces_error_payloads() -> None:
+    client = XianAsync("http://node", chain_id="xian-1")
+
+    with patch.object(
+        tr,
+        "get_tx_async",
+        AsyncMock(
+            return_value={
+                "result": {
+                    "tx_result": {
+                        "code": 1,
+                        "data": {"error": "boom"},
+                    }
+                }
+            }
+        ),
+    ):
+        async def run_get_tx() -> dict:
+            try:
+                return await client.get_tx("abc123")
+            finally:
+                await client.close()
+
+        data = asyncio.run(run_get_tx())
+
+    assert data["success"] is False
+    assert data["message"] == "boom"
+
+
 def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
