@@ -3,8 +3,10 @@ import base64
 from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
+from xian_runtime_types.decimal import ContractingDecimal
 
 import xian_py.transaction as tr
+from xian_py.decompiler import ContractDecompiler
 from xian_py.wallet import Wallet
 from xian_py.xian import Xian
 from xian_py.xian_async import XianAsync
@@ -111,7 +113,14 @@ def test_xian_async_get_balance_falls_back_to_abci_query() -> None:
     client._session = _FakeSession(
         get_responses=[
             _FakeResponse(
-                {"result": {"response": {"value": _b64("12.5")}}},
+                {
+                    "result": {
+                        "response": {
+                            "value": _b64("12.5"),
+                            "info": "decimal",
+                        }
+                    }
+                },
             )
         ]
     )
@@ -123,7 +132,7 @@ def test_xian_async_get_balance_falls_back_to_abci_query() -> None:
     ):
         balance = asyncio.run(client.get_balance())
 
-    assert balance == 12.5
+    assert balance == ContractingDecimal("12.5")
 
 
 def test_xian_async_get_tx_surfaces_error_payloads() -> None:
@@ -196,10 +205,28 @@ def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
     client._session = _FakeSession(
         get_responses=[
             _FakeResponse({"result": {"response": {"value": "AA=="}}}),
-            _FakeResponse({"result": {"response": {"value": _b64("15")}}}),
-            _FakeResponse({"result": {"response": {"value": _b64("12.5")}}}),
             _FakeResponse(
-                {"result": {"response": {"value": _b64("{'owner': 'alice'}")}}},
+                {"result": {"response": {"value": _b64("15"), "info": "int"}}}
+            ),
+            _FakeResponse(
+                {
+                    "result": {
+                        "response": {
+                            "value": _b64("12.5"),
+                            "info": "decimal",
+                        }
+                    }
+                }
+            ),
+            _FakeResponse(
+                {
+                    "result": {
+                        "response": {
+                            "value": _b64('{"owner":"alice"}'),
+                            "info": "dict",
+                        }
+                    }
+                },
             ),
         ]
     )
@@ -208,12 +235,74 @@ def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
         asyncio.run(client.get_state("currency", "balances", "alice")) is None
     )
     assert asyncio.run(client.get_state("currency", "balances", "alice")) == 15
-    assert (
-        asyncio.run(client.get_state("currency", "balances", "alice")) == 12.5
+    assert asyncio.run(client.get_state("currency", "balances", "alice")) == (
+        ContractingDecimal("12.5")
     )
     assert asyncio.run(client.get_state("currency", "balances", "alice")) == {
         "owner": "alice",
     }
+
+
+def test_xian_async_send_preserves_decimal_precision() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+
+    with patch.object(
+        client,
+        "send_tx",
+        AsyncMock(return_value={"success": True}),
+    ) as send_tx:
+        asyncio.run(
+            client.send(
+                "12345678901234567890.123456789012345678901234567890",
+                wallet.public_key,
+            )
+        )
+
+    kwargs = send_tx.await_args.args[2]
+    assert kwargs["amount"] == ContractingDecimal(
+        "12345678901234567890.123456789012345678901234567890"
+    )
+
+
+def test_xian_async_approve_preserves_decimal_precision() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+
+    with patch.object(
+        client,
+        "send_tx",
+        AsyncMock(return_value={"success": True}),
+    ) as send_tx:
+        asyncio.run(
+            client.approve(
+                "dex",
+                amount="12345678901234567890.123456789012345678901234567890",
+            )
+        )
+
+    kwargs = send_tx.await_args.args[2]
+    assert kwargs["amount"] == ContractingDecimal(
+        "12345678901234567890.123456789012345678901234567890"
+    )
+
+
+def test_contract_decompiler_supports_python_314_ast() -> None:
+    source = """
+balances = Hash(default_value=0, contract='con_test', name='balances')
+
+@__export('con_test')
+def foo() -> str:
+    return decimal('1.25')
+"""
+
+    output = ContractDecompiler().decompile(source)
+
+    assert "def foo() ->str:" in output or "def foo() -> str:" in output
+    assert (
+        'return decimal("1.25")' in output
+        or "return decimal('1.25')" in output
+    )
 
 
 def test_xian_async_get_contract_clean_uses_decompiler() -> None:

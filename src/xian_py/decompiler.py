@@ -34,11 +34,7 @@ class CustomSourceGenerator(astor.SourceGenerator):
         """Handle f-strings using double quotes."""
         self.write('f"')
         for value in node.values:
-            if isinstance(value, ast.Str):
-                self.write(value.s)
-            elif isinstance(value, ast.Constant) and isinstance(
-                value.value, str
-            ):
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
                 self.write(value.value)
             elif isinstance(value, ast.FormattedValue):
                 self.write("{")
@@ -98,9 +94,10 @@ class ContractDecompiler(ast.NodeTransformer):
                     continue
                 for kw in child.value.keywords or []:
                     if kw.arg == "name" and isinstance(
-                        getattr(kw, "value", None), ast.Str
+                        getattr(kw, "value", None), ast.Constant
                     ):
-                        self.orm_vars.add(kw.value.s)
+                        if isinstance(kw.value.value, str):
+                            self.orm_vars.add(kw.value.value)
 
     def visit_Name(self, node: ast.Name) -> ast.AST:
         ident = node.id
@@ -144,15 +141,14 @@ class ContractDecompiler(ast.NodeTransformer):
         if isinstance(func, ast.Name) and func.id == "decimal" and node.args:
             arg = node.args[0]
             value: Optional[str] = None
-            if isinstance(arg, ast.Str):
-                value = arg.s
-            elif isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                 value = arg.value
             if value is not None:
-                try:
-                    return ast.Num(n=float(value))
-                except ValueError:
-                    pass
+                return ast.Call(
+                    func=ast.Name(id="decimal", ctx=ast.Load()),
+                    args=[ast.Constant(value=value)],
+                    keywords=[],
+                )
         return node
 
     def visit_Assign(self, node: ast.Assign) -> ast.AST:

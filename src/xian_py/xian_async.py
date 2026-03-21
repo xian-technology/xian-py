@@ -1,7 +1,9 @@
-import ast
+from decimal import Decimal
 from typing import Optional
 
 import aiohttp
+from xian_runtime_types.decimal import ContractingDecimal
+from xian_runtime_types.encoding import decode
 
 import xian_py.transaction as tr
 from xian_py.decompiler import ContractDecompiler
@@ -109,7 +111,7 @@ class XianAsync:
 
     async def get_balance(
         self, address: str = None, contract: str = "currency"
-    ) -> int | float:
+    ) -> int | ContractingDecimal:
         address = address or self.wallet.public_key
 
         async def query_simulate():
@@ -131,18 +133,33 @@ class XianAsync:
                 f'{self.node_url}/abci_query?path="/get/{contract}.balances:{address}"'
             ) as r:
                 response = await r.json()
-                balance_bytes = response["result"]["response"]["value"]
+                result = response["result"]["response"]
+                balance_bytes = result["value"]
 
                 if not balance_bytes or balance_bytes == "AA==":
-                    return "0"
+                    return 0
 
-                return tr.decode_str(balance_bytes)
+                return self._decode_abci_value(
+                    tr.decode_str(balance_bytes),
+                    result.get("info"),
+                )
 
-        def normalize_balance(balance: str) -> int | float:
-            if balance.isdigit():
-                return int(balance)
-            num = float(balance)
-            return int(num) if num.is_integer() else num
+        def normalize_balance(
+            balance: int | float | str | ContractingDecimal,
+        ) -> int | ContractingDecimal:
+            if isinstance(balance, ContractingDecimal):
+                return balance
+            if isinstance(balance, int):
+                return balance
+            if isinstance(balance, float):
+                if balance.is_integer():
+                    return int(balance)
+                return ContractingDecimal(str(balance))
+            if isinstance(balance, str):
+                if balance.isdigit():
+                    return int(balance)
+                return ContractingDecimal(balance)
+            raise TypeError(f"Unsupported balance type: {type(balance)}")
 
         try:
             return normalize_balance(await query_simulate())
@@ -233,7 +250,7 @@ class XianAsync:
 
     async def send(
         self,
-        amount: int | float | str,
+        amount: int | float | str | Decimal | ContractingDecimal,
         to_address: str,
         token: str = "currency",
         stamps: int = 0,
@@ -243,7 +260,7 @@ class XianAsync:
         return await self.send_tx(
             token,
             "transfer",
-            {"amount": float(amount), "to": to_address},
+            {"amount": self._coerce_amount(amount), "to": to_address},
             stamps=stamps,
         )
 
@@ -265,7 +282,7 @@ class XianAsync:
     # TODO: Might be better to use a state_string as input...
     async def get_state(
         self, contract: str, variable: str, *keys: str
-    ) -> None | int | float | dict | str:
+    ) -> None | int | ContractingDecimal | dict | list | str:
         """Retrieve contract state and decode it"""
 
         path = f"/get/{contract}.{variable}"
@@ -281,30 +298,15 @@ class XianAsync:
         except Exception as e:
             raise XianException(e)
 
-        byte_string = response["result"]["response"]["value"]
+        abci_response = response["result"]["response"]
+        byte_string = abci_response["value"]
+        type_of_data = abci_response.get("info")
 
         # Decodes to 'None'
         if byte_string is None or byte_string == "AA==":
             return None
 
-        data = tr.decode_str(byte_string)
-
-        try:
-            return int(data)
-        except Exception:
-            pass
-        try:
-            if float(data).is_integer():
-                return int(float(data))
-            return float(data)
-        except Exception:
-            pass
-        try:
-            return ast.literal_eval(data)
-        except Exception:
-            pass
-
-        return data
+        return self._decode_abci_value(tr.decode_str(byte_string), type_of_data)
 
     async def get_contract(
         self, contract: str, clean: bool = False
@@ -334,7 +336,7 @@ class XianAsync:
 
     async def get_approved_amount(
         self, contract: str, address: str = None, token: str = "currency"
-    ) -> int | float:
+    ) -> int | ContractingDecimal:
         """Retrieve approved token amount for a contract"""
 
         address = address if address else self.wallet.public_key
@@ -353,12 +355,14 @@ class XianAsync:
         self,
         contract: str,
         token: str = "currency",
-        amount: int | float | str = 999999999999,
+        amount: int | float | str | Decimal | ContractingDecimal = 999999999999,
     ) -> dict:
         """Approve smart contract to spend max token amount"""
 
         return await self.send_tx(
-            token, "approve", {"amount": float(amount), "to": contract}
+            token,
+            "approve",
+            {"amount": self._coerce_amount(amount), "to": contract},
         )
 
     async def submit_contract(
@@ -411,3 +415,43 @@ class XianAsync:
         genesis = await self.get_genesis()
         chain_id = genesis["result"]["genesis"]["chain_id"]
         return chain_id
+
+    @staticmethod
+    def _coerce_amount(
+        amount: int | float | str | Decimal | ContractingDecimal,
+    ) -> int | ContractingDecimal:
+        if isinstance(amount, ContractingDecimal):
+            return amount
+        if isinstance(amount, Decimal):
+            return ContractingDecimal(str(amount))
+        if isinstance(amount, int):
+            return amount
+        if isinstance(amount, float):
+            if amount.is_integer():
+                return int(amount)
+            return ContractingDecimal(str(amount))
+        if isinstance(amount, str):
+            if amount.isdigit():
+                return int(amount)
+            return ContractingDecimal(amount)
+        raise TypeError(f"Unsupported amount type: {type(amount)}")
+
+    @staticmethod
+    def _decode_abci_value(
+        data: str,
+        type_of_data: str | None,
+    ) -> int | ContractingDecimal | dict | list | str:
+        if type_of_data == "int":
+            return int(data)
+        if type_of_data == "decimal":
+            return ContractingDecimal(data)
+        if type_of_data in {"dict", "list"}:
+            return decode(data)
+        if type_of_data == "str":
+            return data
+
+        # Fallback for endpoints that do not annotate a precise type.
+        try:
+            return decode(data)
+        except Exception:
+            return data
