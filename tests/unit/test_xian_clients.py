@@ -613,13 +613,29 @@ def test_xian_async_exposes_bds_status_as_typed_model() -> None:
     assert status.indexed_height == 41
 
 
-def test_sync_client_delegates_and_closes_async_client() -> None:
+def test_sync_client_reuses_background_runtime_until_closed() -> None:
     wallet = Wallet()
     client = Xian("http://node", chain_id="xian-1", wallet=wallet)
     client._async_client.get_balance = AsyncMock(return_value=42)
     client._async_client.close = AsyncMock()
 
     assert client.get_balance() == 42
+    assert client.get_balance() == 42
+    client._async_client.close.assert_not_awaited()
+
+    client.close()
+    client._async_client.close.assert_awaited_once()
+
+
+def test_sync_client_context_manager_closes_async_client() -> None:
+    wallet = Wallet()
+    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    client._async_client.get_balance = AsyncMock(return_value=42)
+    client._async_client.close = AsyncMock()
+
+    with client as managed:
+        assert managed.get_balance() == 42
+
     client._async_client.close.assert_awaited_once()
 
 

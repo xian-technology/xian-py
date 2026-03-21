@@ -1,4 +1,7 @@
 import asyncio
+import threading
+from concurrent.futures import Future
+from typing import Any
 
 from xian_py.models import (
     BdsStatus,
@@ -15,16 +18,21 @@ from xian_py.xian_async import XianAsync
 
 
 class Xian:
-    """Synchronous wrapper around XianAsync for backward compatibility"""
+    """Synchronous wrapper around a persistent XianAsync runtime."""
 
     def __init__(
-        self, node_url: str, chain_id: str = None, wallet: Wallet = None
+        self,
+        node_url: str,
+        chain_id: str = None,
+        wallet: Wallet = None,
     ):
         self.node_url = node_url
         self.wallet = wallet if wallet else Wallet()
         self._async_client = XianAsync(node_url, chain_id, self.wallet)
+        self._runtime_lock = threading.Lock()
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._thread: threading.Thread | None = None
 
-        # Initialize chain_id synchronously if not provided
         if chain_id is None:
             self.chain_id = self.get_chain_id()
             self._async_client.chain_id = self.chain_id
@@ -32,28 +40,88 @@ class Xian:
         else:
             self.chain_id = chain_id
 
-    def _run_async(self, coro):
+    def __enter__(self) -> "Xian":
+        self._ensure_runtime()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+    def _ensure_runtime(self) -> None:
+        with self._runtime_lock:
+            if (
+                self._loop is not None
+                and self._thread is not None
+                and self._thread.is_alive()
+            ):
+                return
+
+            started = threading.Event()
+
+            def _thread_main() -> None:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                self._loop = loop
+                started.set()
+                loop.run_forever()
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    loop.run_until_complete(
+                        asyncio.gather(*pending, return_exceptions=True)
+                    )
+                loop.close()
+
+            self._thread = threading.Thread(
+                target=_thread_main,
+                name="xian-py-sync-runtime",
+                daemon=True,
+            )
+            self._thread.start()
+            started.wait()
+
+    def _schedule(self, coro: Any) -> Future:
+        self._ensure_runtime()
+        assert self._loop is not None
+        return asyncio.run_coroutine_threadsafe(coro, self._loop)
+
+    def _run_async(self, coro: Any) -> Any:
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            return asyncio.run(self._run_with_cleanup(coro))
+            return self._schedule(coro).result()
+
+        if hasattr(coro, "close"):
+            coro.close()
         raise RuntimeError(
             "Cannot call sync methods from within an async context. "
             "Use XianAsync directly for async operations."
         )
 
-    async def _run_with_cleanup(self, coro):
-        try:
-            return await coro
-        finally:
-            await self._async_client.close()
+    def close(self) -> None:
+        with self._runtime_lock:
+            loop = self._loop
+            thread = self._thread
+            if loop is None or thread is None:
+                return
+
+            asyncio.run_coroutine_threadsafe(
+                self._async_client.close(),
+                loop,
+            ).result()
+            loop.call_soon_threadsafe(loop.stop)
+            thread.join()
+            self._loop = None
+            self._thread = None
 
     def get_tx(self, tx_hash: str) -> TransactionReceipt:
-        """Return a decoded transaction receipt."""
         return self._run_async(self._async_client.get_tx(tx_hash))
 
     def get_balance(
-        self, address: str = None, contract: str = "currency"
+        self,
+        address: str = None,
+        contract: str = "currency",
     ) -> int | float:
         return self._run_async(
             self._async_client.get_balance(address, contract)
@@ -74,7 +142,6 @@ class Xian:
         stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
         min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
     ) -> TransactionSubmission:
-        """Send a transaction using an explicit broadcast mode."""
         return self._run_async(
             self._async_client.send_tx(
                 contract=contract,
@@ -105,7 +172,6 @@ class Xian:
         stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
         min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
     ) -> TransactionSubmission:
-        """Send a token to a given address"""
         return self._run_async(
             self._async_client.send(
                 amount,
@@ -146,21 +212,24 @@ class Xian:
         )
 
     def get_state(
-        self, contract: str, variable: str, *keys: str
+        self,
+        contract: str,
+        variable: str,
+        *keys: str,
     ) -> None | int | float | dict | str:
-        """Retrieve contract state and decode it"""
         return self._run_async(
             self._async_client.get_state(contract, variable, *keys)
         )
 
     def get_contract(self, contract: str, clean: bool = False) -> None | str:
-        """Retrieve contract and decode it"""
         return self._run_async(self._async_client.get_contract(contract, clean))
 
     def get_approved_amount(
-        self, contract: str, address: str = None, token: str = "currency"
+        self,
+        contract: str,
+        address: str = None,
+        token: str = "currency",
     ) -> int | float:
-        """Retrieve approved token amount for a contract"""
         return self._run_async(
             self._async_client.get_approved_amount(contract, address, token)
         )
@@ -178,7 +247,6 @@ class Xian:
         stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
         min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
     ) -> TransactionSubmission:
-        """Approve smart contract to spend max token amount"""
         return self._run_async(
             self._async_client.approve(
                 contract,
@@ -207,7 +275,6 @@ class Xian:
         stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
         min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
     ) -> TransactionSubmission:
-        """Submit a contract to the network"""
         return self._run_async(
             self._async_client.submit_contract(
                 name,
@@ -230,7 +297,6 @@ class Xian:
         timeout_seconds: float = 30.0,
         poll_interval_seconds: float = 0.25,
     ) -> TransactionReceipt:
-        """Wait until a transaction can be retrieved from the node."""
         return self._run_async(
             self._async_client.wait_for_tx(
                 tx_hash,
@@ -240,19 +306,15 @@ class Xian:
         )
 
     def refresh_nonce(self) -> int:
-        """Refresh the wallet nonce from the node."""
         return self._run_async(self._async_client.refresh_nonce())
 
     def get_nodes(self) -> list:
-        """Retrieve list of nodes from the network"""
         return self._run_async(self._async_client.get_nodes())
 
     def get_genesis(self):
-        """Retrieve genesis info from the network"""
         return self._run_async(self._async_client.get_genesis())
 
     def get_chain_id(self):
-        """Retrieve chain_id from the network"""
         return self._run_async(self._async_client.get_chain_id())
 
     def get_perf_status(self) -> PerformanceStatus:

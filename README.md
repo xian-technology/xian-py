@@ -61,8 +61,8 @@ Synchronous example:
 from xian_py import Wallet, Xian
 
 wallet = Wallet()
-client = Xian("http://127.0.0.1:26657", wallet=wallet)
-balance = client.get_balance(wallet.public_key)
+with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
+    balance = client.get_balance(wallet.public_key)
 ```
 
 Asynchronous example:
@@ -82,6 +82,10 @@ asyncio.run(main())
 Use `run_sync(...)` only when you need to bridge async SDK calls into a
 strictly synchronous context. Compatibility notes for public module cleanup live
 in [`docs/API_COMPATIBILITY.md`](docs/API_COMPATIBILITY.md).
+
+`Xian` now keeps a persistent background event loop and HTTP session for the
+life of the client. Prefer using it as a context manager or calling `close()`
+explicitly when you are done.
 
 ## Transaction Lifecycle
 
