@@ -17,7 +17,15 @@ import aiohttp
 from xian_runtime_types.encoding import encode
 
 from xian_py.async_utils import sync_wrapper
-from xian_py.exception import XianException
+from xian_py.exception import (
+    AbciError,
+    RpcError,
+    SimulationError,
+    TransactionError,
+    TransportError,
+    TxTimeoutError,
+    XianException,
+)
 from xian_py.formating import check_format_of_payload, format_dictionary
 from xian_py.wallet import Wallet
 
@@ -32,7 +40,7 @@ def decode_dict(encoded_dict: str) -> dict:
     return json.loads(decoded_tx)
 
 
-async def _request_json(
+async def request_json_async(
     method: str,
     url: str,
     *,
@@ -41,7 +49,7 @@ async def _request_json(
 ) -> dict[str, Any]:
     if session is None:
         async with aiohttp.ClientSession() as owned_session:
-            return await _request_json(
+            return await request_json_async(
                 method,
                 url,
                 session=owned_session,
@@ -54,10 +62,43 @@ async def _request_json(
     else:
         request_context = getattr(session, method.lower())(url)
 
-    async with request_context as response:
-        if raise_for_status:
-            response.raise_for_status()
-        return await response.json()
+    try:
+        async with request_context as response:
+            if raise_for_status and hasattr(response, "raise_for_status"):
+                response.raise_for_status()
+            return await response.json()
+    except XianException:
+        raise
+    except Exception as exc:
+        raise TransportError(exc) from exc
+
+
+async def abci_query_async(
+    node_url: str,
+    path: str,
+    *,
+    session: aiohttp.ClientSession | None = None,
+) -> dict[str, Any]:
+    data = await request_json_async(
+        "POST",
+        f'{node_url}/abci_query?path="{path}"',
+        session=session,
+        raise_for_status=True,
+    )
+    if "error" in data:
+        raise RpcError(
+            data["error"].get("data") or data["error"].get("message") or "RPC error",
+            details=data["error"],
+        )
+
+    response = data.get("result", {}).get("response", {})
+    if response.get("code", 0) != 0:
+        raise AbciError(
+            response.get("log") or "ABCI query failed",
+            details={"path": path, "response": response},
+        )
+
+    return data
 
 
 async def get_nonce_async(
@@ -73,14 +114,15 @@ async def get_nonce_async(
     :return: Next unused nonce
     """
     try:
-        data = await _request_json(
-            "POST",
-            f'{node_url}/abci_query?path="/get_next_nonce/{address}"',
+        data = await abci_query_async(
+            node_url,
+            f"/get_next_nonce/{address}",
             session=session,
-            raise_for_status=True,
         )
+    except XianException:
+        raise
     except Exception as e:
-        raise XianException(e)
+        raise XianException(e) from e
 
     value = data["result"]["response"]["value"]
 
@@ -111,13 +153,15 @@ async def get_tx_async(
     :return: Transaction data in JSON
     """
     try:
-        data = await _request_json(
+        data = await request_json_async(
             "GET",
             f"{node_url}/tx?hash=0x{tx_hash}",
             session=session,
         )
+    except XianException:
+        raise
     except Exception as e:
-        raise XianException(e)
+        raise XianException(e) from e
 
     if decode and "result" in data:
         decoded = decode_dict(data["result"]["tx"])
@@ -144,19 +188,22 @@ async def simulate_tx_async(
     encoded = json.dumps(payload).encode().hex()
 
     try:
-        data = await _request_json(
-            "POST",
-            f'{node_url}/abci_query?path="/simulate_tx/{encoded}"',
+        data = await abci_query_async(
+            node_url,
+            f"/simulate_tx/{encoded}",
             session=session,
-            raise_for_status=True,
         )
+    except AbciError as e:
+        raise SimulationError(str(e), cause=e, details=e.details) from e
+    except XianException:
+        raise
     except Exception as e:
-        raise XianException(e)
+        raise XianException(e) from e
 
     res = data["result"]["response"]
 
     if res["code"] != 0:
-        raise XianException(res["log"])
+        raise SimulationError(res["log"], details=res)
 
     return json.loads(decode_str(res["value"]))
 
@@ -181,7 +228,7 @@ def create_tx(payload: dict, wallet: Wallet) -> dict:
     """
     payload = format_dictionary(payload)
     if not check_format_of_payload(payload):
-        raise XianException(ValueError("Invalid payload provided"))
+        raise TransactionError("Invalid payload provided")
 
     tx = {
         "payload": payload,
@@ -209,13 +256,15 @@ async def broadcast_tx_commit_async(
     payload = json.dumps(tx).encode().hex()
 
     try:
-        data = await _request_json(
+        data = await request_json_async(
             "POST",
             f'{node_url}/broadcast_tx_commit?tx="{payload}"',
             session=session,
         )
+    except XianException:
+        raise
     except Exception as e:
-        raise XianException(e)
+        raise XianException(e) from e
 
     return data
 
@@ -240,13 +289,15 @@ async def broadcast_tx_wait_async(
     payload = json.dumps(tx).encode().hex()
 
     try:
-        data = await _request_json(
+        data = await request_json_async(
             "POST",
             f'{node_url}/broadcast_tx_sync?tx="{payload}"',
             session=session,
         )
+    except XianException:
+        raise
     except Exception as e:
-        raise XianException(e)
+        raise XianException(e) from e
 
     return data
 
@@ -274,14 +325,16 @@ async def broadcast_tx_nowait_async(
     payload = json.dumps(tx).encode().hex()
 
     try:
-        await _request_json(
+        return await request_json_async(
             "POST",
             f'{node_url}/broadcast_tx_async?tx="{payload}"',
             session=session,
             raise_for_status=True,
         )
+    except XianException:
+        raise
     except Exception as e:
-        raise XianException(e)
+        raise XianException(e) from e
 
 
 # Sync wrapper for backward compatibility
@@ -313,10 +366,8 @@ async def wait_for_tx_async(
 
         last_error = data["error"].get("data") or data["error"].get("message")
         if get_running_loop().time() >= deadline:
-            raise XianException(
-                TimeoutError(
-                    f"Timed out waiting for transaction {tx_hash}: {last_error or 'not found'}"
-                )
+            raise TxTimeoutError(
+                f"Timed out waiting for transaction {tx_hash}: {last_error or 'not found'}"
             )
 
         await sleep(poll_interval_seconds)

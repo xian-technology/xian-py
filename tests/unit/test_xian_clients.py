@@ -7,6 +7,12 @@ from xian_runtime_types.decimal import ContractingDecimal
 
 import xian_py.transaction as tr
 from xian_py.decompiler import ContractDecompiler
+from xian_py.models import (
+    BdsStatus,
+    PerformanceStatus,
+    TransactionReceipt,
+    TransactionSubmission,
+)
 from xian_py.wallet import Wallet
 from xian_py.xian import Xian
 from xian_py.xian_async import XianAsync
@@ -28,6 +34,9 @@ class _FakeResponse:
 
     async def json(self) -> dict:
         return self.payload
+
+    def raise_for_status(self) -> None:
+        return None
 
 
 class _FakeSession:
@@ -56,7 +65,7 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_stamps() -> None:
     client = XianAsync("http://node", wallet=wallet)
     client.get_chain_id = AsyncMock(return_value="xian-mainnet-1")
 
-    async def run_send_tx() -> dict:
+    async def run_send_tx() -> TransactionSubmission:
         try:
             return await client.send_tx(
                 "currency",
@@ -103,12 +112,12 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_stamps() -> None:
         {"signed": True},
         session=ANY,
     )
-    assert result["submitted"] is True
-    assert result["accepted"] is True
-    assert result["finalized"] is False
-    assert result["tx_hash"] == "abc123"
-    assert result["stamps_estimated"] == 77
-    assert result["stamps_supplied"] == 87
+    assert result.submitted is True
+    assert result.accepted is True
+    assert result.finalized is False
+    assert result.tx_hash == "abc123"
+    assert result.stamps_estimated == 77
+    assert result.stamps_supplied == 87
 
 
 def test_xian_async_send_tx_reserves_nonces_locally_for_concurrent_calls() -> None:
@@ -201,9 +210,9 @@ def test_xian_async_send_tx_invalidates_reserved_nonce_after_checktx_failure() -
             ):
                 failed, succeeded = asyncio.run(run_sends())
 
-    assert failed["accepted"] is False
-    assert failed["submitted"] is True
-    assert succeeded["accepted"] is True
+    assert failed.accepted is False
+    assert failed.submitted is True
+    assert succeeded.accepted is True
     assert observed_nonces == [7, 7]
     assert get_nonce_async.await_count == 2
 
@@ -212,7 +221,7 @@ def test_xian_async_send_tx_can_wait_for_finalized_receipt() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
 
-    async def run_send() -> dict:
+    async def run_send() -> TransactionSubmission:
         try:
             return await client.send_tx(
                 "currency",
@@ -250,17 +259,18 @@ def test_xian_async_send_tx_can_wait_for_finalized_receipt() -> None:
             ):
                 result = asyncio.run(run_send())
 
-    assert result["accepted"] is True
-    assert result["submitted"] is True
-    assert result["finalized"] is True
-    assert result["receipt"]["success"] is True
+    assert result.accepted is True
+    assert result.submitted is True
+    assert result.finalized is True
+    assert result.receipt is not None
+    assert result.receipt.success is True
 
 
 def test_xian_async_send_tx_async_mode_reports_submission_without_checktx() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
 
-    async def run_send() -> dict:
+    async def run_send() -> TransactionSubmission:
         try:
             return await client.send_tx(
                 "currency",
@@ -284,17 +294,17 @@ def test_xian_async_send_tx_async_mode_reports_submission_without_checktx() -> N
         ):
             result = asyncio.run(run_send())
 
-    assert result["submitted"] is True
-    assert result["accepted"] is None
-    assert result["finalized"] is False
-    assert result["tx_hash"] == "abc123"
+    assert result.submitted is True
+    assert result.accepted is None
+    assert result.finalized is False
+    assert result.tx_hash == "abc123"
 
 
 def test_xian_async_get_balance_falls_back_to_abci_query() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
     client._session = _FakeSession(
-        get_responses=[
+        post_responses=[
             _FakeResponse(
                 {
                     "result": {
@@ -336,7 +346,7 @@ def test_xian_async_get_tx_surfaces_error_payloads() -> None:
         ),
     ):
 
-        async def run_get_tx() -> dict:
+        async def run_get_tx() -> TransactionReceipt:
             try:
                 return await client.get_tx("abc123")
             finally:
@@ -344,8 +354,8 @@ def test_xian_async_get_tx_surfaces_error_payloads() -> None:
 
         data = asyncio.run(run_get_tx())
 
-    assert data["success"] is False
-    assert data["message"] == "boom"
+    assert data.success is False
+    assert data.message == "boom"
 
 
 def test_xian_async_get_tx_exposes_transaction_and_execution() -> None:
@@ -369,7 +379,7 @@ def test_xian_async_get_tx_exposes_transaction_and_execution() -> None:
         ),
     ):
 
-        async def run_get_tx() -> dict:
+        async def run_get_tx() -> TransactionReceipt:
             try:
                 return await client.get_tx("abc123")
             finally:
@@ -377,16 +387,16 @@ def test_xian_async_get_tx_exposes_transaction_and_execution() -> None:
 
         data = asyncio.run(run_get_tx())
 
-    assert data["success"] is True
-    assert data["transaction"] == tx
-    assert data["execution"] == execution
+    assert data.success is True
+    assert data.transaction == tx
+    assert data.execution == execution
 
 
 def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
     client._session = _FakeSession(
-        get_responses=[
+        post_responses=[
             _FakeResponse({"result": {"response": {"value": "AA=="}}}),
             _FakeResponse(
                 {"result": {"response": {"value": _b64("15"), "info": "int"}}}
@@ -492,7 +502,7 @@ def test_xian_async_get_contract_clean_uses_decompiler() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
     client._session = _FakeSession(
-        get_responses=[
+        post_responses=[
             _FakeResponse(
                 {"result": {"response": {"value": _b64("compiled-code")}}},
             )
@@ -549,6 +559,58 @@ def test_xian_async_get_nodes_returns_remote_ips() -> None:
     )
 
     assert asyncio.run(client.get_nodes()) == ["10.0.0.1", "10.0.0.2"]
+
+
+def test_xian_async_exposes_perf_status_as_typed_model() -> None:
+    client = XianAsync("http://node", chain_id="xian-1")
+    client._session = _FakeSession(
+        post_responses=[
+            _FakeResponse(
+                {
+                    "result": {
+                        "response": {
+                            "value": _b64(
+                                '{"enabled":true,"tracer_mode":"native_instruction_v1","node_name":"node-0","chain_id":"xian-local-1","global_metrics":{},"recent_blocks":[]}'
+                            ),
+                            "info": "dict",
+                        }
+                    }
+                }
+            )
+        ]
+    )
+
+    status = asyncio.run(client.get_perf_status())
+
+    assert isinstance(status, PerformanceStatus)
+    assert status.enabled is True
+    assert status.tracer_mode == "native_instruction_v1"
+
+
+def test_xian_async_exposes_bds_status_as_typed_model() -> None:
+    client = XianAsync("http://node", chain_id="xian-1")
+    client._session = _FakeSession(
+        post_responses=[
+            _FakeResponse(
+                {
+                    "result": {
+                        "response": {
+                            "value": _b64(
+                                '{"worker_running":true,"catchup_running":false,"queue_depth":2,"height_lag":1,"indexed":{"indexed_height":41},"spool_pending_count":0,"alerts":[]}'
+                            ),
+                            "info": "dict",
+                        }
+                    }
+                }
+            )
+        ]
+    )
+
+    status = asyncio.run(client.get_bds_status())
+
+    assert isinstance(status, BdsStatus)
+    assert status.worker_running is True
+    assert status.indexed_height == 41
 
 
 def test_sync_client_delegates_and_closes_async_client() -> None:

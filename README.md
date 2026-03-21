@@ -38,10 +38,21 @@ pip install "xian-py[hd]"
 
 ## Public API
 
-The intentionally small top-level API is:
+The top-level API now includes the main clients, core exception types, and the
+most useful typed result models:
 
 ```python
-from xian_py import Wallet, Xian, XianAsync, XianException, run_sync
+from xian_py import (
+    Wallet,
+    Xian,
+    XianAsync,
+    XianException,
+    TransactionReceipt,
+    TransactionSubmission,
+    PerformanceStatus,
+    BdsStatus,
+    run_sync,
+)
 ```
 
 Synchronous example:
@@ -102,11 +113,67 @@ Result fields now distinguish the lifecycle stages clearly:
 - `finalized`: the tx receipt was retrieved or the commit path finalized it
 - `tx_hash`: transaction hash when available
 
+The SDK now returns typed lifecycle objects:
+
+- `TransactionSubmission` from `send_tx`, `send`, `approve`, `submit_contract`
+- `TransactionReceipt` from `get_tx` and `wait_for_tx`
+
+Example:
+
+```python
+result = client.send_tx(
+    contract="currency",
+    function="transfer",
+    kwargs={"amount": 10, "to": recipient},
+    mode="checktx",
+    wait_for_tx=True,
+)
+
+assert result.submitted is True
+assert result.accepted is True
+assert result.receipt is not None
+print(result.receipt.execution)
+```
+
 If you omit `stamps`, the SDK simulates the transaction, estimates stamp usage,
 and applies a small configurable headroom before submission.
 
 The async client also keeps a local nonce reservation cache per wallet, so
 concurrent submissions from one client instance do not reuse the same nonce.
+
+## Typed Queries
+
+`xian-py` now exposes node perf and indexed BDS reads directly:
+
+```python
+perf = client.get_perf_status()
+blocks = client.list_blocks(limit=20)
+tx = client.get_indexed_tx("ABC123...")
+events = client.list_events("currency", "Transfer", limit=50)
+history = client.get_state_history("currency.balances:alice")
+```
+
+These methods return typed models instead of loose dictionaries:
+
+- `PerformanceStatus`
+- `BdsStatus`
+- `IndexedBlock`
+- `IndexedTransaction`
+- `IndexedEvent`
+- `StateEntry`
+
+## Structured Errors
+
+The SDK now distinguishes the main error classes:
+
+- `TransportError`
+- `RpcError`
+- `AbciError`
+- `SimulationError`
+- `TransactionError`
+- `TxTimeoutError`
+
+They all inherit from `XianException`.
 
 ## Development
 

@@ -1,4 +1,8 @@
 from xian_py import (
+    BdsStatus,
+    PerformanceStatus,
+    TransactionReceipt,
+    TransactionSubmission,
     Wallet,
     Xian,
     XianAsync,
@@ -12,6 +16,10 @@ def test_public_exports_are_available() -> None:
     assert Wallet is not None
     assert Xian is not None
     assert XianAsync is not None
+    assert BdsStatus is not None
+    assert PerformanceStatus is not None
+    assert TransactionReceipt is not None
+    assert TransactionSubmission is not None
     assert XianException is not None
     assert run_sync is not None
     assert to_contract_time is not None

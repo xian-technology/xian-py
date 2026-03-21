@@ -1,5 +1,15 @@
 import asyncio
 
+from xian_py.models import (
+    BdsStatus,
+    IndexedBlock,
+    IndexedEvent,
+    IndexedTransaction,
+    PerformanceStatus,
+    StateEntry,
+    TransactionReceipt,
+    TransactionSubmission,
+)
 from xian_py.wallet import Wallet
 from xian_py.xian_async import XianAsync
 
@@ -38,8 +48,8 @@ class Xian:
         finally:
             await self._async_client.close()
 
-    def get_tx(self, tx_hash: str) -> dict:
-        """Return transaction data"""
+    def get_tx(self, tx_hash: str) -> TransactionReceipt:
+        """Return a decoded transaction receipt."""
         return self._run_async(self._async_client.get_tx(tx_hash))
 
     def get_balance(
@@ -63,7 +73,7 @@ class Xian:
         poll_interval_seconds: float = 0.25,
         stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
         min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
-    ) -> dict:
+    ) -> TransactionSubmission:
         """Send a transaction using an explicit broadcast mode."""
         return self._run_async(
             self._async_client.send_tx(
@@ -94,7 +104,7 @@ class Xian:
         poll_interval_seconds: float = 0.25,
         stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
         min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
-    ) -> dict:
+    ) -> TransactionSubmission:
         """Send a token to a given address"""
         return self._run_async(
             self._async_client.send(
@@ -167,7 +177,7 @@ class Xian:
         poll_interval_seconds: float = 0.25,
         stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
         min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
-    ) -> dict:
+    ) -> TransactionSubmission:
         """Approve smart contract to spend max token amount"""
         return self._run_async(
             self._async_client.approve(
@@ -196,7 +206,7 @@ class Xian:
         poll_interval_seconds: float = 0.25,
         stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
         min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
-    ) -> dict:
+    ) -> TransactionSubmission:
         """Submit a contract to the network"""
         return self._run_async(
             self._async_client.submit_contract(
@@ -219,7 +229,7 @@ class Xian:
         *,
         timeout_seconds: float = 30.0,
         poll_interval_seconds: float = 0.25,
-    ) -> dict:
+    ) -> TransactionReceipt:
         """Wait until a transaction can be retrieved from the node."""
         return self._run_async(
             self._async_client.wait_for_tx(
@@ -244,3 +254,110 @@ class Xian:
     def get_chain_id(self):
         """Retrieve chain_id from the network"""
         return self._run_async(self._async_client.get_chain_id())
+
+    def get_perf_status(self) -> PerformanceStatus:
+        return self._run_async(self._async_client.get_perf_status())
+
+    def get_bds_status(self) -> BdsStatus:
+        return self._run_async(self._async_client.get_bds_status())
+
+    def list_blocks(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[IndexedBlock]:
+        return self._run_async(
+            self._async_client.list_blocks(limit=limit, offset=offset)
+        )
+
+    def get_block(self, height: int) -> IndexedBlock | None:
+        return self._run_async(self._async_client.get_block(height))
+
+    def get_block_by_hash(self, block_hash: str) -> IndexedBlock | None:
+        return self._run_async(self._async_client.get_block_by_hash(block_hash))
+
+    def get_indexed_tx(self, tx_hash: str) -> IndexedTransaction | None:
+        return self._run_async(self._async_client.get_indexed_tx(tx_hash))
+
+    def list_txs_for_block(
+        self,
+        block_ref: str | int,
+    ) -> list[IndexedTransaction]:
+        return self._run_async(self._async_client.list_txs_for_block(block_ref))
+
+    def list_txs_by_sender(
+        self,
+        sender: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[IndexedTransaction]:
+        return self._run_async(
+            self._async_client.list_txs_by_sender(
+                sender,
+                limit=limit,
+                offset=offset,
+            )
+        )
+
+    def list_txs_by_contract(
+        self,
+        contract: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[IndexedTransaction]:
+        return self._run_async(
+            self._async_client.list_txs_by_contract(
+                contract,
+                limit=limit,
+                offset=offset,
+            )
+        )
+
+    def get_events_for_tx(self, tx_hash: str) -> list[IndexedEvent]:
+        return self._run_async(self._async_client.get_events_for_tx(tx_hash))
+
+    def list_events(
+        self,
+        contract: str,
+        event: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[IndexedEvent]:
+        return self._run_async(
+            self._async_client.list_events(
+                contract,
+                event,
+                limit=limit,
+                offset=offset,
+            )
+        )
+
+    def get_state_history(
+        self,
+        key: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[StateEntry]:
+        return self._run_async(
+            self._async_client.get_state_history(
+                key,
+                limit=limit,
+                offset=offset,
+            )
+        )
+
+    def get_state_for_tx(self, tx_hash: str) -> list[StateEntry]:
+        return self._run_async(self._async_client.get_state_for_tx(tx_hash))
+
+    def get_state_for_block(
+        self,
+        block_ref: str | int,
+    ) -> list[StateEntry]:
+        return self._run_async(
+            self._async_client.get_state_for_block(block_ref)
+        )
