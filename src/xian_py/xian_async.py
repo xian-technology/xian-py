@@ -1,5 +1,7 @@
+import asyncio
+import math
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 
 import aiohttp
 from xian_runtime_types.decimal import ContractingDecimal
@@ -13,6 +15,9 @@ from xian_py.wallet import Wallet
 
 class XianAsync:
     """Async version of the Xian class for non-blocking operations"""
+
+    DEFAULT_STAMP_MARGIN = 0.10
+    DEFAULT_MIN_STAMP_HEADROOM = 10
 
     def __init__(
         self,
@@ -34,6 +39,14 @@ class XianAsync:
         )
         self._connector_params = connector
         self._session: Optional[aiohttp.ClientSession] = session
+        self._nonce_lock: asyncio.Lock | None = None
+        self._next_nonce: int | None = None
+
+    @property
+    def _nonce_reservation_lock(self):
+        if self._nonce_lock is None:
+            self._nonce_lock = asyncio.Lock()
+        return self._nonce_lock
 
     async def __aenter__(self) -> "XianAsync":
         if self._session is None:
@@ -71,43 +84,25 @@ class XianAsync:
             self.chain_id = await self.get_chain_id()
             self._chain_id_set = True
 
+    async def refresh_nonce(self) -> int:
+        """Refresh and return the next nonce from the node."""
+        nonce = await tr.get_nonce_async(
+            self.node_url,
+            self.wallet.public_key,
+            session=self.session,
+        )
+        async with self._nonce_reservation_lock:
+            self._next_nonce = nonce
+        return nonce
+
     async def get_tx(self, tx_hash: str) -> dict:
         """Return transaction data"""
-
         data = await tr.get_tx_async(
             self.node_url,
             tx_hash,
             session=self.session,
         )
-        result = data.get("result", {})
-        tx = result.get("tx")
-        tx_result = result.get("tx_result", {})
-        execution = tx_result.get("data")
-
-        if tx is not None:
-            data["transaction"] = tx
-        if isinstance(execution, dict):
-            data["execution"] = execution
-
-        if "error" in data:
-            data["success"] = False
-            data["message"] = data["error"]["data"]
-        elif tx_result["code"] == 0:
-            data["success"] = True
-        else:
-            data["success"] = False
-            if isinstance(execution, dict):
-                data["message"] = (
-                    execution.get("result")
-                    or execution.get("error")
-                    or execution
-                )
-            elif execution is not None:
-                data["message"] = execution
-            else:
-                data["message"] = tx_result.get("log") or "Transaction failed"
-
-        return data
+        return self._normalize_tx_lookup(data)
 
     async def get_balance(
         self, address: str = None, contract: str = "currency"
@@ -169,91 +164,302 @@ class XianAsync:
             except Exception as e:
                 raise XianException(e)
 
+    def _normalize_tx_lookup(self, data: dict) -> dict:
+        result = data.get("result", {})
+        tx = result.get("tx")
+        tx_result = result.get("tx_result", {})
+        execution = tx_result.get("data")
+
+        if tx is not None:
+            data["transaction"] = tx
+        if isinstance(execution, dict):
+            data["execution"] = execution
+
+        if "error" in data:
+            data["success"] = False
+            data["message"] = data["error"].get("data") or data["error"].get(
+                "message"
+            )
+        elif tx_result.get("code") == 0:
+            data["success"] = True
+        else:
+            data["success"] = False
+            if isinstance(execution, dict):
+                data["message"] = (
+                    execution.get("result")
+                    or execution.get("error")
+                    or execution
+                )
+            elif execution is not None:
+                data["message"] = execution
+            else:
+                data["message"] = tx_result.get("log") or "Transaction failed"
+
+        return data
+
+    async def wait_for_tx(
+        self,
+        tx_hash: str,
+        *,
+        timeout_seconds: float = 30.0,
+        poll_interval_seconds: float = 0.25,
+    ) -> dict:
+        """Wait until a transaction can be retrieved from the node."""
+        import asyncio
+
+        deadline = asyncio.get_running_loop().time() + timeout_seconds
+        last_error: str | None = None
+
+        while True:
+            data = await tr.get_tx_async(
+                self.node_url,
+                tx_hash,
+                session=self.session,
+            )
+            normalized = self._normalize_tx_lookup(data)
+            if "error" not in normalized:
+                return normalized
+
+            last_error = normalized.get("message")
+            if asyncio.get_running_loop().time() >= deadline:
+                raise TimeoutError(
+                    f"Timed out waiting for transaction {tx_hash}: {last_error or 'not found'}"
+                )
+
+            await asyncio.sleep(poll_interval_seconds)
+
+    async def estimate_stamps(
+        self,
+        contract: str,
+        function: str,
+        kwargs: dict,
+        *,
+        stamp_margin: float = DEFAULT_STAMP_MARGIN,
+        min_stamp_headroom: int = DEFAULT_MIN_STAMP_HEADROOM,
+    ) -> dict:
+        payload = {
+            "contract": contract,
+            "function": function,
+            "kwargs": kwargs,
+            "sender": self.wallet.public_key,
+        }
+        simulation = await tr.simulate_tx_async(
+            self.node_url,
+            payload,
+            session=self.session,
+        )
+        estimated = int(simulation["stamps_used"])
+        suggested = self._apply_stamp_headroom(
+            estimated,
+            stamp_margin=stamp_margin,
+            min_stamp_headroom=min_stamp_headroom,
+        )
+        return {
+            "estimated": estimated,
+            "suggested": suggested,
+            "simulation": simulation,
+        }
+
+    async def _reserve_nonce(self, explicit_nonce: int | None) -> int:
+        if explicit_nonce is not None:
+            async with self._nonce_reservation_lock:
+                if self._next_nonce is None or explicit_nonce >= self._next_nonce:
+                    self._next_nonce = explicit_nonce + 1
+            return explicit_nonce
+
+        async with self._nonce_reservation_lock:
+            if self._next_nonce is None:
+                self._next_nonce = await tr.get_nonce_async(
+                    self.node_url,
+                    self.wallet.public_key,
+                    session=self.session,
+                )
+            nonce = self._next_nonce
+            self._next_nonce += 1
+            return nonce
+
+    async def _invalidate_reserved_nonce(self, nonce: int) -> None:
+        async with self._nonce_reservation_lock:
+            if self._next_nonce is not None and nonce < self._next_nonce:
+                self._next_nonce = None
+
+    @classmethod
+    def _apply_stamp_headroom(
+        cls,
+        estimated: int,
+        *,
+        stamp_margin: float,
+        min_stamp_headroom: int,
+    ) -> int:
+        if stamp_margin < 0:
+            raise ValueError("stamp_margin must be >= 0")
+        if min_stamp_headroom < 0:
+            raise ValueError("min_stamp_headroom must be >= 0")
+
+        proportional = math.ceil(estimated * stamp_margin)
+        headroom = max(proportional, min_stamp_headroom)
+        return estimated + headroom
+
     async def send_tx(
         self,
         contract: str,
         function: str,
         kwargs: dict,
-        stamps: int = 0,
+        stamps: int | None = None,
         nonce: int = None,
         chain_id: str = None,
-        synchronous: bool = True,
-    ) -> Optional[dict]:
-        """Send a transaction to the network"""
+        mode: Literal["async", "checktx", "commit"] = "checktx",
+        wait_for_tx: bool = False,
+        timeout_seconds: float = 30.0,
+        poll_interval_seconds: float = 0.25,
+        stamp_margin: float = DEFAULT_STAMP_MARGIN,
+        min_stamp_headroom: int = DEFAULT_MIN_STAMP_HEADROOM,
+    ) -> dict:
+        """Send a transaction using an explicit broadcast mode."""
+
+        if mode not in {"async", "checktx", "commit"}:
+            raise ValueError(
+                "mode must be one of: 'async', 'checktx', 'commit'"
+            )
 
         if chain_id is None:
             await self.ensure_chain_id()
             chain_id = self.chain_id
 
-        if nonce is None:
-            nonce = await tr.get_nonce_async(
-                self.node_url,
-                self.wallet.public_key,
-                session=self.session,
+        estimated_stamps: int | None = None
+        supplied_stamps = stamps
+        if supplied_stamps is None:
+            stamp_estimate = await self.estimate_stamps(
+                contract,
+                function,
+                kwargs,
+                stamp_margin=stamp_margin,
+                min_stamp_headroom=min_stamp_headroom,
             )
+            estimated_stamps = stamp_estimate["estimated"]
+            supplied_stamps = stamp_estimate["suggested"]
+
+        reserved_nonce = await self._reserve_nonce(nonce)
 
         payload = {
             "chain_id": chain_id,
             "contract": contract,
             "function": function,
             "kwargs": kwargs,
-            "nonce": nonce,
+            "nonce": reserved_nonce,
             "sender": self.wallet.public_key,
-            "stamps_supplied": stamps,
+            "stamps_supplied": supplied_stamps,
         }
-
-        if stamps == 0:
-            simulated_tx = await tr.simulate_tx_async(
-                self.node_url,
-                payload,
-                session=self.session,
-            )
-
-            stamps = simulated_tx["stamps_used"]
-            payload["stamps_supplied"] = stamps
 
         tx = tr.create_tx(payload, self.wallet)
 
-        if synchronous:
-            data = await tr.broadcast_tx_wait_async(
-                self.node_url,
-                tx,
-                session=self.session,
-            )
-
-            result = {
-                "success": None,
-                "message": None,
-                "tx_hash": None,
-                "response": data,
-            }
-
-            if "error" in data:
-                result["success"] = False
-                result["message"] = data["error"]["data"]
-            elif data["result"]["code"] == 0:
-                result["success"] = True
-                result["tx_hash"] = data["result"]["hash"]
+        try:
+            if mode == "async":
+                data = await tr.broadcast_tx_nowait_async(
+                    self.node_url,
+                    tx,
+                    session=self.session,
+                )
+            elif mode == "commit":
+                data = await tr.broadcast_tx_commit_async(
+                    self.node_url,
+                    tx,
+                    session=self.session,
+                )
             else:
-                result["success"] = False
-                result["message"] = data["result"]["log"]
-                result["tx_hash"] = data["result"]["hash"]
+                data = await tr.broadcast_tx_wait_async(
+                    self.node_url,
+                    tx,
+                    session=self.session,
+                )
+        except Exception:
+            await self._invalidate_reserved_nonce(reserved_nonce)
+            raise
 
+        result = {
+            "submitted": False,
+            "accepted": False,
+            "finalized": False,
+            "message": None,
+            "tx_hash": None,
+            "mode": mode,
+            "nonce": reserved_nonce,
+            "stamps_supplied": supplied_stamps,
+            "stamps_estimated": estimated_stamps,
+            "response": data,
+            "receipt": None,
+        }
+
+        if "error" in data:
+            await self._invalidate_reserved_nonce(reserved_nonce)
+            result["message"] = data["error"].get("data") or data["error"].get(
+                "message"
+            )
             return result
 
-        else:
-            await tr.broadcast_tx_nowait_async(
-                self.node_url,
-                tx,
-                session=self.session,
+        result["submitted"] = True
+
+        if mode == "commit":
+            commit_result = data.get("result", {})
+            check_tx = commit_result.get("check_tx", {})
+            deliver_tx = (
+                commit_result.get("deliver_tx")
+                or commit_result.get("tx_result")
+                or {}
             )
+            result["tx_hash"] = commit_result.get("hash")
+            result["accepted"] = check_tx.get("code", 1) == 0
+            result["finalized"] = deliver_tx.get("code", 1) == 0
+            if not result["accepted"]:
+                await self._invalidate_reserved_nonce(reserved_nonce)
+                result["message"] = check_tx.get("log") or "CheckTx failed"
+            elif not result["finalized"]:
+                result["message"] = deliver_tx.get("log") or "DeliverTx failed"
+            return result
+
+        checktx_result = data.get("result", {})
+        result["tx_hash"] = checktx_result.get("hash")
+        if mode == "async":
+            result["accepted"] = None
+            if wait_for_tx:
+                receipt = await self.wait_for_tx(
+                    result["tx_hash"],
+                    timeout_seconds=timeout_seconds,
+                    poll_interval_seconds=poll_interval_seconds,
+                )
+                result["receipt"] = receipt
+                result["finalized"] = True
+            return result
+
+        result["accepted"] = checktx_result.get("code", 1) == 0
+        if not result["accepted"]:
+            await self._invalidate_reserved_nonce(reserved_nonce)
+            result["message"] = checktx_result.get("log") or "CheckTx failed"
+            return result
+
+        if wait_for_tx:
+            receipt = await self.wait_for_tx(
+                result["tx_hash"],
+                timeout_seconds=timeout_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+            )
+            result["receipt"] = receipt
+            result["finalized"] = True
+
+        return result
 
     async def send(
         self,
         amount: int | float | str | Decimal | ContractingDecimal,
         to_address: str,
         token: str = "currency",
-        stamps: int = 0,
+        stamps: int | None = None,
+        mode: Literal["async", "checktx", "commit"] = "checktx",
+        wait_for_tx: bool = False,
+        timeout_seconds: float = 30.0,
+        poll_interval_seconds: float = 0.25,
+        stamp_margin: float = DEFAULT_STAMP_MARGIN,
+        min_stamp_headroom: int = DEFAULT_MIN_STAMP_HEADROOM,
     ) -> dict:
         """Send a token to a given address"""
 
@@ -262,6 +468,12 @@ class XianAsync:
             "transfer",
             {"amount": self._coerce_amount(amount), "to": to_address},
             stamps=stamps,
+            mode=mode,
+            wait_for_tx=wait_for_tx,
+            timeout_seconds=timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+            stamp_margin=stamp_margin,
+            min_stamp_headroom=min_stamp_headroom,
         )
 
     async def simulate(
@@ -356,6 +568,13 @@ class XianAsync:
         contract: str,
         token: str = "currency",
         amount: int | float | str | Decimal | ContractingDecimal = 999999999999,
+        stamps: int | None = None,
+        mode: Literal["async", "checktx", "commit"] = "checktx",
+        wait_for_tx: bool = False,
+        timeout_seconds: float = 30.0,
+        poll_interval_seconds: float = 0.25,
+        stamp_margin: float = DEFAULT_STAMP_MARGIN,
+        min_stamp_headroom: int = DEFAULT_MIN_STAMP_HEADROOM,
     ) -> dict:
         """Approve smart contract to spend max token amount"""
 
@@ -363,10 +582,27 @@ class XianAsync:
             token,
             "approve",
             {"amount": self._coerce_amount(amount), "to": contract},
+            stamps=stamps,
+            mode=mode,
+            wait_for_tx=wait_for_tx,
+            timeout_seconds=timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+            stamp_margin=stamp_margin,
+            min_stamp_headroom=min_stamp_headroom,
         )
 
     async def submit_contract(
-        self, name: str, code: str, args: dict = None, stamps: int = 0
+        self,
+        name: str,
+        code: str,
+        args: dict = None,
+        stamps: int | None = None,
+        mode: Literal["async", "checktx", "commit"] = "checktx",
+        wait_for_tx: bool = False,
+        timeout_seconds: float = 30.0,
+        poll_interval_seconds: float = 0.25,
+        stamp_margin: float = DEFAULT_STAMP_MARGIN,
+        min_stamp_headroom: int = DEFAULT_MIN_STAMP_HEADROOM,
     ) -> dict:
         """Submit a contract to the network"""
 
@@ -378,7 +614,16 @@ class XianAsync:
             kwargs["constructor_args"] = args
 
         return await self.send_tx(
-            "submission", "submit_contract", kwargs, stamps
+            "submission",
+            "submit_contract",
+            kwargs,
+            stamps=stamps,
+            mode=mode,
+            wait_for_tx=wait_for_tx,
+            timeout_seconds=timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+            stamp_margin=stamp_margin,
+            min_stamp_headroom=min_stamp_headroom,
         )
 
     async def get_nodes(self) -> list:

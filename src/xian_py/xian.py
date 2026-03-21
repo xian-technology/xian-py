@@ -1,5 +1,4 @@
 import asyncio
-from typing import Optional
 
 from xian_py.wallet import Wallet
 from xian_py.xian_async import XianAsync
@@ -55,15 +54,31 @@ class Xian:
         contract: str,
         function: str,
         kwargs: dict,
-        stamps: int = 0,
+        stamps: int | None = None,
         nonce: int = None,
         chain_id: str = None,
-        synchronous: bool = True,
-    ) -> Optional[dict]:
-        """Send a transaction to the network"""
+        mode: str = "checktx",
+        wait_for_tx: bool = False,
+        timeout_seconds: float = 30.0,
+        poll_interval_seconds: float = 0.25,
+        stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
+        min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
+    ) -> dict:
+        """Send a transaction using an explicit broadcast mode."""
         return self._run_async(
             self._async_client.send_tx(
-                contract, function, kwargs, stamps, nonce, chain_id, synchronous
+                contract=contract,
+                function=function,
+                kwargs=kwargs,
+                stamps=stamps,
+                nonce=nonce,
+                chain_id=chain_id,
+                mode=mode,
+                wait_for_tx=wait_for_tx,
+                timeout_seconds=timeout_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+                stamp_margin=stamp_margin,
+                min_stamp_headroom=min_stamp_headroom,
             )
         )
 
@@ -72,16 +87,52 @@ class Xian:
         amount: int | float | str,
         to_address: str,
         token: str = "currency",
-        stamps: int = 0,
+        stamps: int | None = None,
+        mode: str = "checktx",
+        wait_for_tx: bool = False,
+        timeout_seconds: float = 30.0,
+        poll_interval_seconds: float = 0.25,
+        stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
+        min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
     ) -> dict:
         """Send a token to a given address"""
         return self._run_async(
-            self._async_client.send(amount, to_address, token, stamps)
+            self._async_client.send(
+                amount,
+                to_address,
+                token,
+                stamps=stamps,
+                mode=mode,
+                wait_for_tx=wait_for_tx,
+                timeout_seconds=timeout_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+                stamp_margin=stamp_margin,
+                min_stamp_headroom=min_stamp_headroom,
+            )
         )
 
     def simulate(self, contract: str, function: str, kwargs: dict) -> dict:
         return self._run_async(
             self._async_client.simulate(contract, function, kwargs)
+        )
+
+    def estimate_stamps(
+        self,
+        contract: str,
+        function: str,
+        kwargs: dict,
+        *,
+        stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
+        min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
+    ) -> dict:
+        return self._run_async(
+            self._async_client.estimate_stamps(
+                contract,
+                function,
+                kwargs,
+                stamp_margin=stamp_margin,
+                min_stamp_headroom=min_stamp_headroom,
+            )
         )
 
     def get_state(
@@ -109,19 +160,78 @@ class Xian:
         contract: str,
         token: str = "currency",
         amount: int | float | str = 999999999999,
+        stamps: int | None = None,
+        mode: str = "checktx",
+        wait_for_tx: bool = False,
+        timeout_seconds: float = 30.0,
+        poll_interval_seconds: float = 0.25,
+        stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
+        min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
     ) -> dict:
         """Approve smart contract to spend max token amount"""
         return self._run_async(
-            self._async_client.approve(contract, token, amount)
+            self._async_client.approve(
+                contract,
+                token,
+                amount,
+                stamps=stamps,
+                mode=mode,
+                wait_for_tx=wait_for_tx,
+                timeout_seconds=timeout_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+                stamp_margin=stamp_margin,
+                min_stamp_headroom=min_stamp_headroom,
+            )
         )
 
     def submit_contract(
-        self, name: str, code: str, args: dict = None, stamps: int = 0
+        self,
+        name: str,
+        code: str,
+        args: dict = None,
+        stamps: int | None = None,
+        mode: str = "checktx",
+        wait_for_tx: bool = False,
+        timeout_seconds: float = 30.0,
+        poll_interval_seconds: float = 0.25,
+        stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
+        min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
     ) -> dict:
         """Submit a contract to the network"""
         return self._run_async(
-            self._async_client.submit_contract(name, code, args, stamps)
+            self._async_client.submit_contract(
+                name,
+                code,
+                args,
+                stamps=stamps,
+                mode=mode,
+                wait_for_tx=wait_for_tx,
+                timeout_seconds=timeout_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+                stamp_margin=stamp_margin,
+                min_stamp_headroom=min_stamp_headroom,
+            )
         )
+
+    def wait_for_tx(
+        self,
+        tx_hash: str,
+        *,
+        timeout_seconds: float = 30.0,
+        poll_interval_seconds: float = 0.25,
+    ) -> dict:
+        """Wait until a transaction can be retrieved from the node."""
+        return self._run_async(
+            self._async_client.wait_for_tx(
+                tx_hash,
+                timeout_seconds=timeout_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+            )
+        )
+
+    def refresh_nonce(self) -> int:
+        """Refresh the wallet nonce from the node."""
+        return self._run_async(self._async_client.refresh_nonce())
 
     def get_nodes(self) -> list:
         """Retrieve list of nodes from the network"""

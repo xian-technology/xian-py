@@ -9,6 +9,7 @@ Both versions are exported to allow users to choose based on their needs.
 """
 
 import json
+from asyncio import get_running_loop, sleep
 from base64 import b64decode
 from typing import Any
 
@@ -179,7 +180,8 @@ def create_tx(payload: dict, wallet: Wallet) -> dict:
     :return: Encoded transaction data
     """
     payload = format_dictionary(payload)
-    assert check_format_of_payload(payload), "Invalid payload provided!"
+    if not check_format_of_payload(payload):
+        raise XianException(ValueError("Invalid payload provided"))
 
     tx = {
         "payload": payload,
@@ -284,3 +286,40 @@ async def broadcast_tx_nowait_async(
 
 # Sync wrapper for backward compatibility
 broadcast_tx_nowait = sync_wrapper(broadcast_tx_nowait_async)
+
+
+async def wait_for_tx_async(
+    node_url: str,
+    tx_hash: str,
+    *,
+    timeout_seconds: float = 30.0,
+    poll_interval_seconds: float = 0.25,
+    session: aiohttp.ClientSession | None = None,
+) -> dict:
+    """
+    Poll the node until a transaction becomes available or timeout expires.
+    """
+    deadline = get_running_loop().time() + timeout_seconds
+    last_error: str | None = None
+
+    while True:
+        data = await get_tx_async(
+            node_url,
+            tx_hash,
+            session=session,
+        )
+        if "error" not in data:
+            return data
+
+        last_error = data["error"].get("data") or data["error"].get("message")
+        if get_running_loop().time() >= deadline:
+            raise XianException(
+                TimeoutError(
+                    f"Timed out waiting for transaction {tx_hash}: {last_error or 'not found'}"
+                )
+            )
+
+        await sleep(poll_interval_seconds)
+
+
+wait_for_tx = sync_wrapper(wait_for_tx_async)

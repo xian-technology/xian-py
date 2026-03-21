@@ -72,6 +72,42 @@ Use `run_sync(...)` only when you need to bridge async SDK calls into a
 strictly synchronous context. Compatibility notes for public module cleanup live
 in [`docs/API_COMPATIBILITY.md`](docs/API_COMPATIBILITY.md).
 
+## Transaction Lifecycle
+
+`xian-py` now uses explicit broadcast modes instead of the old ambiguous
+`synchronous=True` flag.
+
+Available modes:
+
+- `"async"`: submit to the node and return immediately
+- `"checktx"`: wait for mempool admission / `CheckTx`
+- `"commit"`: wait for the full `broadcast_tx_commit` response
+
+Example:
+
+```python
+result = client.send_tx(
+    contract="currency",
+    function="transfer",
+    kwargs={"amount": 10, "to": recipient},
+    mode="checktx",
+    wait_for_tx=True,
+)
+```
+
+Result fields now distinguish the lifecycle stages clearly:
+
+- `submitted`: the node accepted the broadcast request
+- `accepted`: `CheckTx` status when the chosen mode exposes it, otherwise `None`
+- `finalized`: the tx receipt was retrieved or the commit path finalized it
+- `tx_hash`: transaction hash when available
+
+If you omit `stamps`, the SDK simulates the transaction, estimates stamp usage,
+and applies a small configurable headroom before submission.
+
+The async client also keeps a local nonce reservation cache per wallet, so
+concurrent submissions from one client instance do not reuse the same nonce.
+
 ## Development
 
 ```bash

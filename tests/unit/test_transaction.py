@@ -8,7 +8,12 @@ import pytest
 
 from xian_py.exception import XianException
 from xian_py.formating import format_dictionary
-from xian_py.transaction import create_tx, get_nonce_async, simulate_tx_async
+from xian_py.transaction import (
+    create_tx,
+    get_nonce_async,
+    simulate_tx_async,
+    wait_for_tx_async,
+)
 from xian_py.wallet import Wallet
 
 
@@ -190,5 +195,47 @@ def test_create_tx_formats_payload_and_signs_it() -> None:
 def test_create_tx_rejects_invalid_payload() -> None:
     wallet = Wallet()
 
-    with pytest.raises(AssertionError, match="Invalid payload provided!"):
+    with pytest.raises(XianException, match="Invalid payload provided"):
         create_tx({"contract": "currency"}, wallet)
+
+
+def test_wait_for_tx_async_returns_decoded_transaction_once_found() -> None:
+    fake_session = _FakeClientSession(
+        get_responses=[
+            _FakeResponse({"error": {"message": "not found", "data": "missing"}}),
+            _FakeResponse(
+                {
+                    "result": {
+                        "tx": _b64(
+                            json.dumps(
+                                {
+                                    "payload": {
+                                        "contract": "currency",
+                                        "function": "transfer",
+                                    }
+                                }
+                            ).encode("utf-8").hex()
+                        ),
+                        "tx_result": {
+                            "data": _b64(json.dumps({"status": 0, "result": "ok"})),
+                        },
+                    }
+                }
+            ),
+        ]
+    )
+
+    with patch(
+        "xian_py.transaction.aiohttp.ClientSession", return_value=fake_session
+    ):
+        result = asyncio.run(
+            wait_for_tx_async(
+                "http://node",
+                "abc123",
+                timeout_seconds=1.0,
+                poll_interval_seconds=0.0,
+            )
+        )
+
+    assert result["result"]["tx"]["payload"]["function"] == "transfer"
+    assert result["result"]["tx_result"]["data"]["result"] == "ok"

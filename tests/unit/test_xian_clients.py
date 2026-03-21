@@ -97,13 +97,196 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_stamps() -> None:
     create_payload = create_tx.call_args.args[0]
     assert create_payload["chain_id"] == "xian-mainnet-1"
     assert create_payload["nonce"] == 11
-    assert create_payload["stamps_supplied"] == 77
+    assert create_payload["stamps_supplied"] == 87
     broadcast_tx_wait_async.assert_awaited_once_with(
         "http://node",
         {"signed": True},
         session=ANY,
     )
-    assert result["success"] is True
+    assert result["submitted"] is True
+    assert result["accepted"] is True
+    assert result["finalized"] is False
+    assert result["tx_hash"] == "abc123"
+    assert result["stamps_estimated"] == 77
+    assert result["stamps_supplied"] == 87
+
+
+def test_xian_async_send_tx_reserves_nonces_locally_for_concurrent_calls() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    observed_nonces: list[int] = []
+
+    def _capture_tx(payload: dict, wallet: Wallet) -> dict:
+        observed_nonces.append(payload["nonce"])
+        return {"signed": payload["nonce"]}
+
+    async def run_sends() -> None:
+        try:
+            await asyncio.gather(
+                client.send_tx(
+                    "currency",
+                    "transfer",
+                    {"amount": 1, "to": wallet.public_key},
+                    stamps=100,
+                ),
+                client.send_tx(
+                    "currency",
+                    "transfer",
+                    {"amount": 2, "to": wallet.public_key},
+                    stamps=100,
+                ),
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr, "get_nonce_async", AsyncMock(return_value=7)
+    ) as get_nonce_async:
+        with patch.object(tr, "create_tx", side_effect=_capture_tx):
+            with patch.object(
+                tr,
+                "broadcast_tx_wait_async",
+                AsyncMock(return_value={"result": {"code": 0, "hash": "ok"}}),
+            ):
+                asyncio.run(run_sends())
+
+    get_nonce_async.assert_awaited_once_with(
+        "http://node",
+        wallet.public_key,
+        session=ANY,
+    )
+    assert sorted(observed_nonces) == [7, 8]
+
+
+def test_xian_async_send_tx_invalidates_reserved_nonce_after_checktx_failure() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    observed_nonces: list[int] = []
+
+    def _capture_tx(payload: dict, wallet: Wallet) -> dict:
+        observed_nonces.append(payload["nonce"])
+        return {"signed": payload["nonce"]}
+
+    async def run_sends() -> None:
+        try:
+            failed = await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+                stamps=100,
+            )
+            succeeded = await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+                stamps=100,
+            )
+            return failed, succeeded
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr, "get_nonce_async", AsyncMock(side_effect=[7, 7])
+    ) as get_nonce_async:
+        with patch.object(tr, "create_tx", side_effect=_capture_tx):
+            with patch.object(
+                tr,
+                "broadcast_tx_wait_async",
+                AsyncMock(
+                    side_effect=[
+                        {"result": {"code": 7, "log": "bad nonce", "hash": "bad"}},
+                        {"result": {"code": 0, "hash": "good"}},
+                    ]
+                ),
+            ):
+                failed, succeeded = asyncio.run(run_sends())
+
+    assert failed["accepted"] is False
+    assert failed["submitted"] is True
+    assert succeeded["accepted"] is True
+    assert observed_nonces == [7, 7]
+    assert get_nonce_async.await_count == 2
+
+
+def test_xian_async_send_tx_can_wait_for_finalized_receipt() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+
+    async def run_send() -> dict:
+        try:
+            return await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+                stamps=100,
+                wait_for_tx=True,
+                timeout_seconds=1.0,
+                poll_interval_seconds=0.0,
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr,
+        "get_nonce_async",
+        AsyncMock(return_value=11),
+    ):
+        with patch.object(
+        tr,
+        "broadcast_tx_wait_async",
+        AsyncMock(return_value={"result": {"code": 0, "hash": "abc123"}}),
+        ):
+            with patch.object(
+                tr,
+                "get_tx_async",
+                AsyncMock(
+                    return_value={
+                        "result": {
+                            "tx": {"payload": {"contract": "currency"}},
+                            "tx_result": {"code": 0, "data": {"result": "ok"}},
+                        }
+                    }
+                ),
+            ):
+                result = asyncio.run(run_send())
+
+    assert result["accepted"] is True
+    assert result["submitted"] is True
+    assert result["finalized"] is True
+    assert result["receipt"]["success"] is True
+
+
+def test_xian_async_send_tx_async_mode_reports_submission_without_checktx() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+
+    async def run_send() -> dict:
+        try:
+            return await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+                stamps=100,
+                mode="async",
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr,
+        "get_nonce_async",
+        AsyncMock(return_value=11),
+    ):
+        with patch.object(
+            tr,
+            "broadcast_tx_nowait_async",
+            AsyncMock(return_value={"result": {"hash": "abc123"}}),
+        ):
+            result = asyncio.run(run_send())
+
+    assert result["submitted"] is True
+    assert result["accepted"] is None
+    assert result["finalized"] is False
     assert result["tx_hash"] == "abc123"
 
 
