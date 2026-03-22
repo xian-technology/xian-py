@@ -271,7 +271,10 @@ class XianAsync:
     async def _reserve_nonce(self, explicit_nonce: int | None) -> int:
         if explicit_nonce is not None:
             async with self._nonce_reservation_lock:
-                if self._next_nonce is None or explicit_nonce >= self._next_nonce:
+                if (
+                    self._next_nonce is None
+                    or explicit_nonce >= self._next_nonce
+                ):
                     self._next_nonce = explicit_nonce + 1
             return explicit_nonce
 
@@ -325,7 +328,9 @@ class XianAsync:
     ) -> TransactionSubmission:
         """Send a transaction using an explicit broadcast mode."""
         if mode not in {"async", "checktx", "commit"}:
-            raise ValueError("mode must be one of: 'async', 'checktx', 'commit'")
+            raise ValueError(
+                "mode must be one of: 'async', 'checktx', 'commit'"
+            )
 
         if chain_id is None:
             await self.ensure_chain_id()
@@ -479,7 +484,9 @@ class XianAsync:
             min_stamp_headroom=min_stamp_headroom,
         )
 
-    async def simulate(self, contract: str, function: str, kwargs: dict) -> dict:
+    async def simulate(
+        self, contract: str, function: str, kwargs: dict
+    ) -> dict:
         payload = {
             "contract": contract,
             "function": function,
@@ -504,7 +511,9 @@ class XianAsync:
             path = f"{path}:{':'.join(keys)}"
         return await self._abci_query_value(path)
 
-    async def get_contract(self, contract: str, clean: bool = False) -> None | str:
+    async def get_contract(
+        self, contract: str, clean: bool = False
+    ) -> None | str:
         """Retrieve contract source and decode it."""
         response = await tr.abci_query_async(
             self.node_url,

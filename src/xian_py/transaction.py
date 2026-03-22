@@ -87,7 +87,9 @@ async def abci_query_async(
     )
     if "error" in data:
         raise RpcError(
-            data["error"].get("data") or data["error"].get("message") or "RPC error",
+            data["error"].get("data")
+            or data["error"].get("message")
+            or "RPC error",
             details=data["error"],
         )
 

@@ -202,7 +202,9 @@ def test_create_tx_rejects_invalid_payload() -> None:
 def test_wait_for_tx_async_returns_decoded_transaction_once_found() -> None:
     fake_session = _FakeClientSession(
         get_responses=[
-            _FakeResponse({"error": {"message": "not found", "data": "missing"}}),
+            _FakeResponse(
+                {"error": {"message": "not found", "data": "missing"}}
+            ),
             _FakeResponse(
                 {
                     "result": {
@@ -214,10 +216,14 @@ def test_wait_for_tx_async_returns_decoded_transaction_once_found() -> None:
                                         "function": "transfer",
                                     }
                                 }
-                            ).encode("utf-8").hex()
+                            )
+                            .encode("utf-8")
+                            .hex()
                         ),
                         "tx_result": {
-                            "data": _b64(json.dumps({"status": 0, "result": "ok"})),
+                            "data": _b64(
+                                json.dumps({"status": 0, "result": "ok"})
+                            ),
                         },
                     }
                 }

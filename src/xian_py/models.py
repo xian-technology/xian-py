@@ -59,7 +59,9 @@ class TransactionSubmission:
             stamps_estimated=raw_dict.get("stamps_estimated"),
             message=raw_dict.get("message"),
             response=dict(raw_dict.get("response", {})),
-            receipt=receipt if isinstance(receipt, TransactionReceipt) else None,
+            receipt=receipt
+            if isinstance(receipt, TransactionReceipt)
+            else None,
         )
 
 

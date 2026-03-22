@@ -120,7 +120,9 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_stamps() -> None:
     assert result.stamps_supplied == 87
 
 
-def test_xian_async_send_tx_reserves_nonces_locally_for_concurrent_calls() -> None:
+def test_xian_async_send_tx_reserves_nonces_locally_for_concurrent_calls() -> (
+    None
+):
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
     observed_nonces: list[int] = []
@@ -167,7 +169,9 @@ def test_xian_async_send_tx_reserves_nonces_locally_for_concurrent_calls() -> No
     assert sorted(observed_nonces) == [7, 8]
 
 
-def test_xian_async_send_tx_invalidates_reserved_nonce_after_checktx_failure() -> None:
+def test_xian_async_send_tx_invalidates_reserved_nonce_after_checktx_failure() -> (
+    None
+):
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
     observed_nonces: list[int] = []
@@ -203,7 +207,13 @@ def test_xian_async_send_tx_invalidates_reserved_nonce_after_checktx_failure() -
                 "broadcast_tx_wait_async",
                 AsyncMock(
                     side_effect=[
-                        {"result": {"code": 7, "log": "bad nonce", "hash": "bad"}},
+                        {
+                            "result": {
+                                "code": 7,
+                                "log": "bad nonce",
+                                "hash": "bad",
+                            }
+                        },
                         {"result": {"code": 0, "hash": "good"}},
                     ]
                 ),
@@ -241,9 +251,9 @@ def test_xian_async_send_tx_can_wait_for_finalized_receipt() -> None:
         AsyncMock(return_value=11),
     ):
         with patch.object(
-        tr,
-        "broadcast_tx_wait_async",
-        AsyncMock(return_value={"result": {"code": 0, "hash": "abc123"}}),
+            tr,
+            "broadcast_tx_wait_async",
+            AsyncMock(return_value={"result": {"code": 0, "hash": "abc123"}}),
         ):
             with patch.object(
                 tr,
@@ -266,7 +276,9 @@ def test_xian_async_send_tx_can_wait_for_finalized_receipt() -> None:
     assert result.receipt.success is True
 
 
-def test_xian_async_send_tx_async_mode_reports_submission_without_checktx() -> None:
+def test_xian_async_send_tx_async_mode_reports_submission_without_checktx() -> (
+    None
+):
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
 
@@ -493,8 +505,7 @@ def foo() -> str:
 
     assert "def foo() ->str:" in output or "def foo() -> str:" in output
     assert (
-        'return decimal("1.25")' in output
-        or "return decimal('1.25')" in output
+        'return decimal("1.25")' in output or "return decimal('1.25')" in output
     )
 
 
