@@ -1,5 +1,9 @@
 # Repository Guidelines
 
+## Shared Convention
+- Follow the shared repo convention in `xian-meta/docs/REPO_CONVENTIONS.md`.
+- Keep this repo aligned with that standard for stable root docs, backlog placement, and folder-level README entrypoints.
+
 ## Scope
 - `xian-py` is the external Python SDK for wallets, transactions, RPC interaction, and contract-facing client helpers.
 - Keep node internals, ABCI behavior, and contract runtime semantics out of this repo.
