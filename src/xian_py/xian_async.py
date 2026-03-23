@@ -15,6 +15,7 @@ from xian_py.models import (
     IndexedBlock,
     IndexedEvent,
     IndexedTransaction,
+    NodeStatus,
     PerformanceStatus,
     StateEntry,
     TransactionReceipt,
@@ -628,6 +629,17 @@ class XianAsync:
         genesis = await self.get_genesis()
         return genesis["result"]["genesis"]["chain_id"]
 
+    async def get_node_status(self) -> NodeStatus:
+        payload = await tr.request_json_async(
+            "GET",
+            f"{self.node_url}/status",
+            session=self.session,
+            raise_for_status=True,
+        )
+        if not isinstance(payload, dict):
+            raise XianException("Unexpected node status payload")
+        return NodeStatus.from_status_response(payload)
+
     async def get_perf_status(self) -> PerformanceStatus:
         payload = await self._abci_query_value("/perf_status")
         if not isinstance(payload, dict):
@@ -727,10 +739,14 @@ class XianAsync:
         *,
         limit: int = 100,
         offset: int = 0,
+        after_id: int | None = None,
     ) -> list[IndexedEvent]:
-        payload = await self._abci_query_value(
-            f"/events/{contract}/{event}/limit={limit}/offset={offset}"
-        )
+        path = f"/events/{contract}/{event}/limit={limit}"
+        if after_id is not None:
+            path = f"{path}/after_id={after_id}"
+        else:
+            path = f"{path}/offset={offset}"
+        payload = await self._abci_query_value(path)
         if not isinstance(payload, list):
             raise XianException("Unexpected event list payload")
         return [IndexedEvent.from_dict(item) for item in payload]
@@ -763,6 +779,107 @@ class XianAsync:
         if not isinstance(payload, list):
             raise XianException("Unexpected state-for-block payload")
         return [StateEntry.from_dict(item) for item in payload]
+
+    async def _get_latest_block_height(self) -> int:
+        status = await self.get_node_status()
+        if status.latest_block_height is None:
+            raise XianException("Node status did not include latest_block_height")
+        return status.latest_block_height
+
+    async def _get_live_block(self, height: int) -> IndexedBlock | None:
+        payload = await tr.request_json_async(
+            "GET",
+            f"{self.node_url}/block?height={height}",
+            session=self.session,
+            raise_for_status=True,
+        )
+        if not isinstance(payload, dict):
+            raise XianException("Unexpected live block payload")
+
+        result = payload.get("result", {})
+        block = result.get("block")
+        if not isinstance(block, dict):
+            return None
+
+        header = block.get("header", {})
+        block_data = block.get("data", {})
+        raw_height = header.get("height")
+        try:
+            block_height = int(raw_height) if raw_height is not None else None
+        except (TypeError, ValueError):
+            block_height = None
+
+        txs = block_data.get("txs") or []
+        return IndexedBlock(
+            height=block_height,
+            block_hash=result.get("block_id", {}).get("hash"),
+            tx_count=len(txs),
+            app_hash=header.get("app_hash"),
+            block_time_iso=header.get("time"),
+            raw=payload,
+        )
+
+    async def watch_blocks(
+        self,
+        *,
+        start_height: int | None = None,
+        poll_interval_seconds: float = 1.0,
+    ):
+        if poll_interval_seconds <= 0:
+            raise ValueError("poll_interval_seconds must be > 0")
+
+        next_height = start_height
+        if next_height is None:
+            next_height = await self._get_latest_block_height() + 1
+
+        while True:
+            latest_height = await self._get_latest_block_height()
+            emitted = False
+            while next_height <= latest_height:
+                block = await self._get_live_block(next_height)
+                if block is None:
+                    break
+                emitted = True
+                yield block
+                next_height += 1
+
+            if not emitted:
+                await asyncio.sleep(poll_interval_seconds)
+
+    async def watch_events(
+        self,
+        contract: str,
+        event: str,
+        *,
+        after_id: int | None = None,
+        limit: int = 100,
+        poll_interval_seconds: float = 1.0,
+    ):
+        if limit <= 0:
+            raise ValueError("limit must be > 0")
+        if poll_interval_seconds <= 0:
+            raise ValueError("poll_interval_seconds must be > 0")
+
+        cursor = after_id if after_id is not None else 0
+
+        while True:
+            events = await self.list_events(
+                contract,
+                event,
+                limit=limit,
+                after_id=cursor,
+            )
+            if not events:
+                await asyncio.sleep(poll_interval_seconds)
+                continue
+
+            for item in events:
+                if item.id is None:
+                    raise XianException(
+                        "Event watcher requires event IDs in indexed payloads"
+                    )
+                cursor = item.id
+                yield item
 
     @staticmethod
     def _coerce_amount(

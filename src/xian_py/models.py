@@ -90,6 +90,54 @@ class PerformanceStatus:
 
 
 @dataclass(frozen=True)
+class NodeStatus:
+    node_id: str | None
+    moniker: str | None
+    network: str | None
+    latest_block_height: int | None
+    latest_block_hash: str | None
+    latest_app_hash: str | None
+    latest_block_time_iso: str | None
+    catching_up: bool | None
+    raw: dict[str, Any]
+
+    @classmethod
+    def from_status_response(cls, raw: Mapping[str, Any]) -> "NodeStatus":
+        raw_dict = dict(raw)
+        result = raw_dict.get("result", {})
+        node_info = result.get("node_info", {})
+        sync_info = result.get("sync_info", {})
+
+        latest_height = sync_info.get("latest_block_height")
+        try:
+            latest_height = (
+                int(latest_height) if latest_height is not None else None
+            )
+        except (TypeError, ValueError):
+            latest_height = None
+
+        catching_up = sync_info.get("catching_up")
+        if isinstance(catching_up, str):
+            catching_up = catching_up.lower() == "true"
+
+        return cls(
+            node_id=node_info.get("id"),
+            moniker=node_info.get("moniker"),
+            network=node_info.get("network"),
+            latest_block_height=latest_height,
+            latest_block_hash=sync_info.get("latest_block_hash"),
+            latest_app_hash=sync_info.get("latest_app_hash"),
+            latest_block_time_iso=sync_info.get("latest_block_time"),
+            catching_up=(
+                bool(catching_up)
+                if isinstance(catching_up, bool)
+                else None
+            ),
+            raw=raw_dict,
+        )
+
+
+@dataclass(frozen=True)
 class BdsStatus:
     worker_running: bool
     catchup_running: bool
@@ -175,12 +223,17 @@ class IndexedTransaction:
 
 @dataclass(frozen=True)
 class IndexedEvent:
+    id: int | None
     tx_hash: str | None
     block_height: int | None
+    tx_index: int | None
+    event_index: int | None
     contract: str | None
     event: str | None
     signer: str | None
     caller: str | None
+    data_indexed: dict[str, Any] | None
+    data: dict[str, Any] | None
     created: str | None
     raw: dict[str, Any]
 
@@ -188,12 +241,17 @@ class IndexedEvent:
     def from_dict(cls, raw: Mapping[str, Any]) -> "IndexedEvent":
         raw_dict = dict(raw)
         return cls(
+            id=raw_dict.get("id"),
             tx_hash=raw_dict.get("tx_hash"),
             block_height=raw_dict.get("block_height"),
+            tx_index=raw_dict.get("tx_index"),
+            event_index=raw_dict.get("event_index"),
             contract=raw_dict.get("contract"),
             event=raw_dict.get("event"),
             signer=raw_dict.get("signer"),
             caller=raw_dict.get("caller"),
+            data_indexed=raw_dict.get("data_indexed"),
+            data=raw_dict.get("data"),
             created=raw_dict.get("created"),
             raw=raw_dict,
         )

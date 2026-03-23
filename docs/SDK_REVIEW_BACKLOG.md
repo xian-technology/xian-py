@@ -12,11 +12,14 @@
   reuse
 - automatic stamp estimation headroom for implicit stamp selection
 - `refresh_nonce()` and `estimate_stamps()` helpers
+- block watchers driven from node RPC with resume by height
+- event watchers driven from indexed BDS reads with stable `after_id` cursor
+- typed `NodeStatus` reads for application and operator workflows
 
 ## Still Worth Doing
 
-- add typed response models for tx receipts, blocks, events, BDS status, and
-  perf status instead of raw dicts
+- add explicit config objects for transport, retry, submission, and watcher
+  policies instead of loose parameters
 - split `XianException` into transport, RPC, ABCI, simulation, and transaction
   error types
 - expose the newer stack surfaces directly in the SDK:

@@ -9,6 +9,9 @@ import xian_py.transaction as tr
 from xian_py.decompiler import ContractDecompiler
 from xian_py.models import (
     BdsStatus,
+    IndexedBlock,
+    IndexedEvent,
+    NodeStatus,
     PerformanceStatus,
     TransactionReceipt,
     TransactionSubmission,
@@ -662,3 +665,227 @@ def test_sync_client_rejects_calls_inside_running_loop() -> None:
             coroutine.close()
 
     asyncio.run(invoke())
+
+
+def test_xian_async_get_node_status_returns_typed_model() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", wallet=wallet)
+
+    async def run_status() -> NodeStatus:
+        try:
+            return await client.get_node_status()
+        finally:
+            await client.close()
+
+    payload = {
+        "result": {
+            "node_info": {
+                "id": "NODE-1",
+                "moniker": "validator-1",
+                "network": "xian-testnet",
+            },
+            "sync_info": {
+                "latest_block_height": "12",
+                "latest_block_hash": "BLOCK-12",
+                "latest_app_hash": "APP-12",
+                "latest_block_time": "2026-03-23T12:00:00Z",
+                "catching_up": False,
+            },
+        }
+    }
+
+    with patch.object(
+        tr,
+        "request_json_async",
+        AsyncMock(return_value=payload),
+    ):
+        status = asyncio.run(run_status())
+
+    assert status.node_id == "NODE-1"
+    assert status.moniker == "validator-1"
+    assert status.network == "xian-testnet"
+    assert status.latest_block_height == 12
+    assert status.latest_block_hash == "BLOCK-12"
+    assert status.latest_app_hash == "APP-12"
+    assert status.catching_up is False
+
+
+def test_xian_async_watch_blocks_yields_new_blocks_from_rpc() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", wallet=wallet)
+
+    async def run_watch() -> list[IndexedBlock]:
+        try:
+            blocks: list[IndexedBlock] = []
+            async for block in client.watch_blocks(
+                start_height=12,
+                poll_interval_seconds=0.01,
+            ):
+                blocks.append(block)
+                if len(blocks) == 2:
+                    break
+            return blocks
+        finally:
+            await client.close()
+
+    with patch.object(
+        client,
+        "get_node_status",
+        AsyncMock(
+            return_value=NodeStatus(
+                node_id="NODE-1",
+                moniker="validator-1",
+                network="xian-testnet",
+                latest_block_height=13,
+                latest_block_hash="BLOCK-13",
+                latest_app_hash="APP-13",
+                latest_block_time_iso="2026-03-23T12:00:13Z",
+                catching_up=False,
+                raw={},
+            )
+        ),
+    ):
+        with patch.object(
+            client,
+            "_get_live_block",
+            AsyncMock(
+                side_effect=[
+                    IndexedBlock(
+                        height=12,
+                        block_hash="BLOCK-12",
+                        tx_count=1,
+                        app_hash="APP-12",
+                        block_time_iso="2026-03-23T12:00:12Z",
+                        raw={},
+                    ),
+                    IndexedBlock(
+                        height=13,
+                        block_hash="BLOCK-13",
+                        tx_count=2,
+                        app_hash="APP-13",
+                        block_time_iso="2026-03-23T12:00:13Z",
+                        raw={},
+                    ),
+                ]
+            ),
+        ):
+            blocks = asyncio.run(run_watch())
+
+    assert [block.height for block in blocks] == [12, 13]
+    assert [block.tx_count for block in blocks] == [1, 2]
+
+
+def test_xian_async_watch_events_uses_after_id_cursor() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", wallet=wallet)
+
+    async def run_watch() -> list[IndexedEvent]:
+        try:
+            events: list[IndexedEvent] = []
+            async for event in client.watch_events(
+                "currency",
+                "Transfer",
+                after_id=10,
+                limit=2,
+                poll_interval_seconds=0.01,
+            ):
+                events.append(event)
+                if len(events) == 2:
+                    break
+            return events
+        finally:
+            await client.close()
+
+    with patch.object(
+        client,
+        "list_events",
+        AsyncMock(
+            return_value=[
+                IndexedEvent(
+                    id=11,
+                    tx_hash="TX-11",
+                    block_height=12,
+                    tx_index=0,
+                    event_index=0,
+                    contract="currency",
+                    event="Transfer",
+                    signer="alice",
+                    caller="alice",
+                    data_indexed={"to": "bob"},
+                    data={"amount": "5", "to": "bob"},
+                    created="2026-03-23T12:00:12Z",
+                    raw={},
+                ),
+                IndexedEvent(
+                    id=12,
+                    tx_hash="TX-12",
+                    block_height=12,
+                    tx_index=1,
+                    event_index=0,
+                    contract="currency",
+                    event="Transfer",
+                    signer="alice",
+                    caller="alice",
+                    data_indexed={"to": "carol"},
+                    data={"amount": "7", "to": "carol"},
+                    created="2026-03-23T12:00:12Z",
+                    raw={},
+                ),
+            ]
+        ),
+    ) as list_events:
+        events = asyncio.run(run_watch())
+
+    assert [event.id for event in events] == [11, 12]
+    first_call = list_events.await_args_list[0]
+    assert first_call.kwargs["after_id"] == 10
+    assert first_call.kwargs["limit"] == 2
+
+
+def test_sync_watch_events_wraps_async_iterator() -> None:
+    wallet = Wallet()
+    client = Xian("http://node", chain_id="xian-testnet", wallet=wallet)
+
+    async def async_events():
+        yield IndexedEvent(
+            id=21,
+            tx_hash="TX-21",
+            block_height=21,
+            tx_index=0,
+            event_index=0,
+            contract="currency",
+            event="Transfer",
+            signer="alice",
+            caller="alice",
+            data_indexed={"to": "bob"},
+            data={"amount": "2", "to": "bob"},
+            created="2026-03-23T12:00:21Z",
+            raw={},
+        )
+        yield IndexedEvent(
+            id=22,
+            tx_hash="TX-22",
+            block_height=22,
+            tx_index=0,
+            event_index=0,
+            contract="currency",
+            event="Transfer",
+            signer="alice",
+            caller="alice",
+            data_indexed={"to": "carol"},
+            data={"amount": "3", "to": "carol"},
+            created="2026-03-23T12:00:22Z",
+            raw={},
+        )
+
+    try:
+        with patch.object(client._async_client, "watch_events", return_value=async_events()):
+            iterator = client.watch_events("currency", "Transfer", after_id=20)
+            first = next(iterator)
+            second = next(iterator)
+            iterator.close()
+    finally:
+        client.close()
+
+    assert first.id == 21
+    assert second.id == 22

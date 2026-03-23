@@ -61,6 +61,7 @@ from xian_py import (
     Xian,
     XianAsync,
     XianException,
+    NodeStatus,
     TransactionReceipt,
     TransactionSubmission,
     PerformanceStatus,
@@ -89,12 +90,62 @@ reuse the same nonce.
 
 ## Typed Queries
 
-The SDK exposes newer indexed and operational surfaces directly:
+`xian-py` now exposes node status, node perf, and indexed BDS reads directly:
 
 ```python
+status = client.get_node_status()
 perf = client.get_perf_status()
 blocks = client.list_blocks(limit=20)
 tx = client.get_indexed_tx("ABC123...")
 events = client.list_events("currency", "Transfer", limit=50)
 history = client.get_state_history("currency.balances:alice")
 ```
+
+These methods return typed models instead of loose dictionaries:
+
+- `NodeStatus`
+- `PerformanceStatus`
+- `BdsStatus`
+- `IndexedBlock`
+- `IndexedTransaction`
+- `IndexedEvent`
+- `StateEntry`
+
+## Watchers
+
+The SDK now includes polling-based watcher helpers for long-running Python
+services.
+
+Block watching uses raw node RPC and does not require BDS:
+
+```python
+async for block in client.watch_blocks(start_height=101):
+    print(block.height, block.tx_count)
+```
+
+If `start_height` is omitted, block watching starts at the next block after the
+current node head.
+
+Event watching uses the indexed BDS query surface and a stable `after_id`
+cursor:
+
+```python
+async for event in client.watch_events("currency", "Transfer", after_id=500):
+    print(event.id, event.tx_hash, event.data)
+```
+
+Use the last seen event `id` as your resume cursor after restarts. Event
+watching requires BDS to be enabled on the node.
+
+## Structured Errors
+
+The SDK now distinguishes the main error classes:
+
+- `TransportError`
+- `RpcError`
+- `AbciError`
+- `SimulationError`
+- `TransactionError`
+- `TxTimeoutError`
+
+They all inherit from `XianException`.

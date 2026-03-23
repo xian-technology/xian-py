@@ -1,13 +1,14 @@
 import asyncio
 import threading
 from concurrent.futures import Future
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from xian_py.models import (
     BdsStatus,
     IndexedBlock,
     IndexedEvent,
     IndexedTransaction,
+    NodeStatus,
     PerformanceStatus,
     StateEntry,
     TransactionReceipt,
@@ -15,6 +16,35 @@ from xian_py.models import (
 )
 from xian_py.wallet import Wallet
 from xian_py.xian_async import XianAsync
+
+_T = TypeVar("_T")
+
+
+class _SyncAsyncIterator(Generic[_T]):
+    def __init__(self, owner: "Xian", async_iterator: Any):
+        self._owner = owner
+        self._async_iterator = async_iterator
+        self._closed = False
+
+    def __iter__(self) -> "_SyncAsyncIterator[_T]":
+        return self
+
+    def __next__(self) -> _T:
+        if self._closed:
+            raise StopIteration
+
+        future = self._owner._schedule(self._async_iterator.__anext__())
+        try:
+            return future.result()
+        except StopAsyncIteration as exc:
+            self.close()
+            raise StopIteration from exc
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._owner._run_async(self._async_iterator.aclose())
+        self._closed = True
 
 
 class Xian:
@@ -317,6 +347,9 @@ class Xian:
     def get_chain_id(self):
         return self._run_async(self._async_client.get_chain_id())
 
+    def get_node_status(self) -> NodeStatus:
+        return self._run_async(self._async_client.get_node_status())
+
     def get_perf_status(self) -> PerformanceStatus:
         return self._run_async(self._async_client.get_perf_status())
 
@@ -388,6 +421,7 @@ class Xian:
         *,
         limit: int = 100,
         offset: int = 0,
+        after_id: int | None = None,
     ) -> list[IndexedEvent]:
         return self._run_async(
             self._async_client.list_events(
@@ -395,6 +429,7 @@ class Xian:
                 event,
                 limit=limit,
                 offset=offset,
+                after_id=after_id,
             )
         )
 
@@ -422,4 +457,38 @@ class Xian:
     ) -> list[StateEntry]:
         return self._run_async(
             self._async_client.get_state_for_block(block_ref)
+        )
+
+    def watch_blocks(
+        self,
+        *,
+        start_height: int | None = None,
+        poll_interval_seconds: float = 1.0,
+    ) -> _SyncAsyncIterator[IndexedBlock]:
+        return _SyncAsyncIterator(
+            self,
+            self._async_client.watch_blocks(
+                start_height=start_height,
+                poll_interval_seconds=poll_interval_seconds,
+            ),
+        )
+
+    def watch_events(
+        self,
+        contract: str,
+        event: str,
+        *,
+        after_id: int | None = None,
+        limit: int = 100,
+        poll_interval_seconds: float = 1.0,
+    ) -> _SyncAsyncIterator[IndexedEvent]:
+        return _SyncAsyncIterator(
+            self,
+            self._async_client.watch_events(
+                contract,
+                event,
+                after_id=after_id,
+                limit=limit,
+                poll_interval_seconds=poll_interval_seconds,
+            ),
         )
