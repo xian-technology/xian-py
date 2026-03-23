@@ -8,8 +8,12 @@ from xian_runtime_types.decimal import ContractingDecimal
 from xian_runtime_types.encoding import decode
 
 import xian_py.transaction as tr
+from xian_py.config import (
+    SubmissionConfig,
+    XianClientConfig,
+)
 from xian_py.decompiler import ContractDecompiler
-from xian_py.exception import XianException
+from xian_py.exception import RpcError, TransportError, XianException
 from xian_py.models import (
     BdsStatus,
     IndexedBlock,
@@ -27,8 +31,8 @@ from xian_py.wallet import Wallet
 class XianAsync:
     """Async version of the Xian class for non-blocking operations."""
 
-    DEFAULT_STAMP_MARGIN = 0.10
-    DEFAULT_MIN_STAMP_HEADROOM = 10
+    DEFAULT_STAMP_MARGIN = SubmissionConfig().stamp_margin
+    DEFAULT_MIN_STAMP_HEADROOM = SubmissionConfig().min_stamp_headroom
 
     def __init__(
         self,
@@ -36,6 +40,7 @@ class XianAsync:
         chain_id: str = None,
         wallet: Wallet = None,
         *,
+        config: XianClientConfig | None = None,
         session: Optional[aiohttp.ClientSession] = None,
         timeout: Optional[aiohttp.ClientTimeout] = None,
         connector: Optional[aiohttp.TCPConnector] = None,
@@ -43,12 +48,16 @@ class XianAsync:
         self.node_url = node_url.rstrip("/")
         self.chain_id = chain_id
         self.wallet = wallet if wallet else Wallet()
+        self.config = config or XianClientConfig()
         self._chain_id_set = chain_id is not None
         self._external_session = session
+        transport = self.config.transport
         self._timeout = timeout or aiohttp.ClientTimeout(
-            total=15, sock_connect=3, sock_read=10
+            total=transport.total_timeout_seconds,
+            sock_connect=transport.connect_timeout_seconds,
+            sock_read=transport.read_timeout_seconds,
         )
-        self._connector_params = connector
+        self._connector = connector
         self._session: Optional[aiohttp.ClientSession] = session
         self._nonce_lock: asyncio.Lock | None = None
         self._next_nonce: int | None = None
@@ -61,8 +70,10 @@ class XianAsync:
 
     async def __aenter__(self) -> "XianAsync":
         if self._session is None:
-            connector = self._connector_params or aiohttp.TCPConnector(
-                limit=100, ttl_dns_cache=300
+            transport = self.config.transport
+            connector = self._connector or aiohttp.TCPConnector(
+                limit=transport.connection_limit,
+                ttl_dns_cache=transport.dns_cache_ttl_seconds,
             )
             self._session = aiohttp.ClientSession(
                 timeout=self._timeout,
@@ -76,8 +87,10 @@ class XianAsync:
     @property
     def session(self) -> aiohttp.ClientSession:
         if self._session is None:
-            connector = self._connector_params or aiohttp.TCPConnector(
-                limit=100, ttl_dns_cache=300
+            transport = self.config.transport
+            connector = self._connector or aiohttp.TCPConnector(
+                limit=transport.connection_limit,
+                ttl_dns_cache=transport.dns_cache_ttl_seconds,
             )
             self._session = aiohttp.ClientSession(
                 timeout=self._timeout,
@@ -95,11 +108,39 @@ class XianAsync:
             self.chain_id = await self.get_chain_id()
             self._chain_id_set = True
 
+    async def _retry_read(self, operation):
+        retry = self.config.retry
+        attempts = max(retry.max_attempts, 1)
+        delay = max(retry.initial_delay_seconds, 0.0)
+
+        for attempt in range(1, attempts + 1):
+            try:
+                return await operation()
+            except Exception as exc:
+                if not self._is_retryable_read_error(exc) or attempt >= attempts:
+                    raise
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                delay = min(
+                    max(delay * retry.backoff_multiplier, delay),
+                    retry.max_delay_seconds,
+                )
+
+    def _is_retryable_read_error(self, exc: Exception) -> bool:
+        retry = self.config.retry
+        if retry.retry_transport_errors and isinstance(exc, TransportError):
+            return True
+        if retry.retry_rpc_errors and isinstance(exc, RpcError):
+            return True
+        return False
+
     async def _abci_query_value(self, path: str) -> Any:
-        data = await tr.abci_query_async(
-            self.node_url,
-            path,
-            session=self.session,
+        data = await self._retry_read(
+            lambda: tr.abci_query_async(
+                self.node_url,
+                path,
+                session=self.session,
+            )
         )
         response = data["result"]["response"]
         byte_string = response["value"]
@@ -126,10 +167,12 @@ class XianAsync:
 
     async def get_tx(self, tx_hash: str) -> TransactionReceipt:
         """Return a decoded transaction receipt."""
-        data = await tr.get_tx_async(
-            self.node_url,
-            tx_hash,
-            session=self.session,
+        data = await self._retry_read(
+            lambda: tr.get_tx_async(
+                self.node_url,
+                tx_hash,
+                session=self.session,
+            )
         )
         return self._normalize_tx_lookup(data)
 
@@ -224,16 +267,28 @@ class XianAsync:
         self,
         tx_hash: str,
         *,
-        timeout_seconds: float = 30.0,
-        poll_interval_seconds: float = 0.25,
+        timeout_seconds: float | None = None,
+        poll_interval_seconds: float | None = None,
     ) -> TransactionReceipt:
         """Wait until a transaction can be retrieved from the node."""
-        data = await tr.wait_for_tx_async(
-            self.node_url,
-            tx_hash,
-            timeout_seconds=timeout_seconds,
-            poll_interval_seconds=poll_interval_seconds,
-            session=self.session,
+        timeout_seconds = (
+            self.config.submission.timeout_seconds
+            if timeout_seconds is None
+            else timeout_seconds
+        )
+        poll_interval_seconds = (
+            self.config.submission.poll_interval_seconds
+            if poll_interval_seconds is None
+            else poll_interval_seconds
+        )
+        data = await self._retry_read(
+            lambda: tr.wait_for_tx_async(
+                self.node_url,
+                tx_hash,
+                timeout_seconds=timeout_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+                session=self.session,
+            )
         )
         return self._normalize_tx_lookup(data)
 
@@ -243,19 +298,31 @@ class XianAsync:
         function: str,
         kwargs: dict,
         *,
-        stamp_margin: float = DEFAULT_STAMP_MARGIN,
-        min_stamp_headroom: int = DEFAULT_MIN_STAMP_HEADROOM,
+        stamp_margin: float | None = None,
+        min_stamp_headroom: int | None = None,
     ) -> dict[str, Any]:
+        stamp_margin = (
+            self.config.submission.stamp_margin
+            if stamp_margin is None
+            else stamp_margin
+        )
+        min_stamp_headroom = (
+            self.config.submission.min_stamp_headroom
+            if min_stamp_headroom is None
+            else min_stamp_headroom
+        )
         payload = {
             "contract": contract,
             "function": function,
             "kwargs": kwargs,
             "sender": self.wallet.public_key,
         }
-        simulation = await tr.simulate_tx_async(
-            self.node_url,
-            payload,
-            session=self.session,
+        simulation = await self._retry_read(
+            lambda: tr.simulate_tx_async(
+                self.node_url,
+                payload,
+                session=self.session,
+            )
         )
         estimated = int(simulation["stamps_used"])
         suggested = self._apply_stamp_headroom(
@@ -320,14 +387,41 @@ class XianAsync:
         stamps: int | None = None,
         nonce: int = None,
         chain_id: str = None,
-        mode: Literal["async", "checktx", "commit"] = "checktx",
-        wait_for_tx: bool = False,
-        timeout_seconds: float = 30.0,
-        poll_interval_seconds: float = 0.25,
-        stamp_margin: float = DEFAULT_STAMP_MARGIN,
-        min_stamp_headroom: int = DEFAULT_MIN_STAMP_HEADROOM,
+        mode: Literal["async", "checktx", "commit"] | None = None,
+        wait_for_tx: bool | None = None,
+        timeout_seconds: float | None = None,
+        poll_interval_seconds: float | None = None,
+        stamp_margin: float | None = None,
+        min_stamp_headroom: int | None = None,
     ) -> TransactionSubmission:
         """Send a transaction using an explicit broadcast mode."""
+        mode = mode or self.config.submission.mode
+        wait_for_tx = (
+            self.config.submission.wait_for_tx
+            if wait_for_tx is None
+            else wait_for_tx
+        )
+        timeout_seconds = (
+            self.config.submission.timeout_seconds
+            if timeout_seconds is None
+            else timeout_seconds
+        )
+        poll_interval_seconds = (
+            self.config.submission.poll_interval_seconds
+            if poll_interval_seconds is None
+            else poll_interval_seconds
+        )
+        stamp_margin = (
+            self.config.submission.stamp_margin
+            if stamp_margin is None
+            else stamp_margin
+        )
+        min_stamp_headroom = (
+            self.config.submission.min_stamp_headroom
+            if min_stamp_headroom is None
+            else min_stamp_headroom
+        )
+
         if mode not in {"async", "checktx", "commit"}:
             raise ValueError(
                 "mode must be one of: 'async', 'checktx', 'commit'"
@@ -464,12 +558,12 @@ class XianAsync:
         to_address: str,
         token: str = "currency",
         stamps: int | None = None,
-        mode: Literal["async", "checktx", "commit"] = "checktx",
-        wait_for_tx: bool = False,
-        timeout_seconds: float = 30.0,
-        poll_interval_seconds: float = 0.25,
-        stamp_margin: float = DEFAULT_STAMP_MARGIN,
-        min_stamp_headroom: int = DEFAULT_MIN_STAMP_HEADROOM,
+        mode: Literal["async", "checktx", "commit"] | None = None,
+        wait_for_tx: bool | None = None,
+        timeout_seconds: float | None = None,
+        poll_interval_seconds: float | None = None,
+        stamp_margin: float | None = None,
+        min_stamp_headroom: int | None = None,
     ) -> TransactionSubmission:
         """Send a token to a given address."""
         return await self.send_tx(
@@ -552,12 +646,12 @@ class XianAsync:
         token: str = "currency",
         amount: int | float | str | Decimal | ContractingDecimal = 999999999999,
         stamps: int | None = None,
-        mode: Literal["async", "checktx", "commit"] = "checktx",
-        wait_for_tx: bool = False,
-        timeout_seconds: float = 30.0,
-        poll_interval_seconds: float = 0.25,
-        stamp_margin: float = DEFAULT_STAMP_MARGIN,
-        min_stamp_headroom: int = DEFAULT_MIN_STAMP_HEADROOM,
+        mode: Literal["async", "checktx", "commit"] | None = None,
+        wait_for_tx: bool | None = None,
+        timeout_seconds: float | None = None,
+        poll_interval_seconds: float | None = None,
+        stamp_margin: float | None = None,
+        min_stamp_headroom: int | None = None,
     ) -> TransactionSubmission:
         """Approve a contract to spend a token amount."""
         return await self.send_tx(
@@ -579,12 +673,12 @@ class XianAsync:
         code: str,
         args: dict = None,
         stamps: int | None = None,
-        mode: Literal["async", "checktx", "commit"] = "checktx",
-        wait_for_tx: bool = False,
-        timeout_seconds: float = 30.0,
-        poll_interval_seconds: float = 0.25,
-        stamp_margin: float = DEFAULT_STAMP_MARGIN,
-        min_stamp_headroom: int = DEFAULT_MIN_STAMP_HEADROOM,
+        mode: Literal["async", "checktx", "commit"] | None = None,
+        wait_for_tx: bool | None = None,
+        timeout_seconds: float | None = None,
+        poll_interval_seconds: float | None = None,
+        stamp_margin: float | None = None,
+        min_stamp_headroom: int | None = None,
     ) -> TransactionSubmission:
         """Submit a contract to the network."""
         kwargs: dict[str, Any] = {"name": name, "code": code}
@@ -606,22 +700,26 @@ class XianAsync:
 
     async def get_nodes(self) -> list[str]:
         """Retrieve the peer IPs from the network."""
-        response = await tr.request_json_async(
-            "POST",
-            f"{self.node_url}/net_info",
-            session=self.session,
-            raise_for_status=True,
+        response = await self._retry_read(
+            lambda: tr.request_json_async(
+                "POST",
+                f"{self.node_url}/net_info",
+                session=self.session,
+                raise_for_status=True,
+            )
         )
         peers = response["result"]["peers"]
         return [peer["remote_ip"] for peer in peers]
 
     async def get_genesis(self) -> dict[str, Any]:
         """Retrieve genesis info from the network."""
-        return await tr.request_json_async(
-            "POST",
-            f"{self.node_url}/genesis",
-            session=self.session,
-            raise_for_status=True,
+        return await self._retry_read(
+            lambda: tr.request_json_async(
+                "POST",
+                f"{self.node_url}/genesis",
+                session=self.session,
+                raise_for_status=True,
+            )
         )
 
     async def get_chain_id(self) -> str:
@@ -630,11 +728,13 @@ class XianAsync:
         return genesis["result"]["genesis"]["chain_id"]
 
     async def get_node_status(self) -> NodeStatus:
-        payload = await tr.request_json_async(
-            "GET",
-            f"{self.node_url}/status",
-            session=self.session,
-            raise_for_status=True,
+        payload = await self._retry_read(
+            lambda: tr.request_json_async(
+                "GET",
+                f"{self.node_url}/status",
+                session=self.session,
+                raise_for_status=True,
+            )
         )
         if not isinstance(payload, dict):
             raise XianException("Unexpected node status payload")
@@ -787,11 +887,13 @@ class XianAsync:
         return status.latest_block_height
 
     async def _get_live_block(self, height: int) -> IndexedBlock | None:
-        payload = await tr.request_json_async(
-            "GET",
-            f"{self.node_url}/block?height={height}",
-            session=self.session,
-            raise_for_status=True,
+        payload = await self._retry_read(
+            lambda: tr.request_json_async(
+                "GET",
+                f"{self.node_url}/block?height={height}",
+                session=self.session,
+                raise_for_status=True,
+            )
         )
         if not isinstance(payload, dict):
             raise XianException("Unexpected live block payload")
@@ -823,8 +925,10 @@ class XianAsync:
         self,
         *,
         start_height: int | None = None,
-        poll_interval_seconds: float = 1.0,
+        poll_interval_seconds: float | None = None,
     ):
+        if poll_interval_seconds is None:
+            poll_interval_seconds = self.config.watcher.poll_interval_seconds
         if poll_interval_seconds <= 0:
             raise ValueError("poll_interval_seconds must be > 0")
 
@@ -852,9 +956,13 @@ class XianAsync:
         event: str,
         *,
         after_id: int | None = None,
-        limit: int = 100,
-        poll_interval_seconds: float = 1.0,
+        limit: int | None = None,
+        poll_interval_seconds: float | None = None,
     ):
+        if limit is None:
+            limit = self.config.watcher.batch_limit
+        if poll_interval_seconds is None:
+            poll_interval_seconds = self.config.watcher.poll_interval_seconds
         if limit <= 0:
             raise ValueError("limit must be > 0")
         if poll_interval_seconds <= 0:

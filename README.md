@@ -57,9 +57,14 @@ pip install "xian-py[hd]"
 
 ```python
 from xian_py import (
+    RetryPolicy,
+    SubmissionConfig,
+    TransportConfig,
     Wallet,
+    WatcherConfig,
     Xian,
     XianAsync,
+    XianClientConfig,
     XianException,
     NodeStatus,
     TransactionReceipt,
@@ -74,6 +79,36 @@ from xian_py import (
 of the client. Prefer using it as a context manager or calling `close()`
 explicitly when you are done.
 
+## Client Configuration
+
+The SDK now exposes explicit config objects for transport, retry, submission,
+and watcher defaults:
+
+```python
+from xian_py import (
+    RetryPolicy,
+    SubmissionConfig,
+    TransportConfig,
+    WatcherConfig,
+    Xian,
+    XianClientConfig,
+)
+
+config = XianClientConfig(
+    transport=TransportConfig(total_timeout_seconds=20.0),
+    retry=RetryPolicy(max_attempts=3, initial_delay_seconds=0.25),
+    submission=SubmissionConfig(wait_for_tx=True),
+    watcher=WatcherConfig(poll_interval_seconds=0.5, batch_limit=200),
+)
+
+with Xian("http://127.0.0.1:26657", config=config) as client:
+    status = client.get_node_status()
+```
+
+Retry policy applies only to read-side operations such as status reads,
+queries, tx lookup, and watcher polling. Transaction broadcasts are not retried
+automatically.
+
 ## Transaction Lifecycle
 
 `xian-py` uses explicit broadcast modes instead of the old
@@ -87,6 +122,9 @@ If `stamps` are omitted, the SDK simulates, estimates usage, and applies a
 small headroom before submission. The async client also keeps a local nonce
 reservation cache so concurrent submissions from one client instance do not
 reuse the same nonce.
+
+You can set default submission behavior once through
+`XianClientConfig.submission` instead of repeating the same per-call options.
 
 ## Typed Queries
 
@@ -126,6 +164,8 @@ async for block in client.watch_blocks(start_height=101):
 If `start_height` is omitted, block watching starts at the next block after the
 current node head.
 
+The default block watcher poll interval comes from `XianClientConfig.watcher`.
+
 Event watching uses the indexed BDS query surface and a stable `after_id`
 cursor:
 
@@ -136,6 +176,9 @@ async for event in client.watch_events("currency", "Transfer", after_id=500):
 
 Use the last seen event `id` as your resume cursor after restarts. Event
 watching requires BDS to be enabled on the node.
+
+The default event watcher batch size and poll interval come from
+`XianClientConfig.watcher`.
 
 ## Structured Errors
 

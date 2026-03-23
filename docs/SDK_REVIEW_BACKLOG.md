@@ -15,11 +15,11 @@
 - block watchers driven from node RPC with resume by height
 - event watchers driven from indexed BDS reads with stable `after_id` cursor
 - typed `NodeStatus` reads for application and operator workflows
+- explicit SDK config objects for transport, retry, submission, and watcher
+  defaults
 
 ## Still Worth Doing
 
-- add explicit config objects for transport, retry, submission, and watcher
-  policies instead of loose parameters
 - split `XianException` into transport, RPC, ABCI, simulation, and transaction
   error types
 - expose the newer stack surfaces directly in the SDK:

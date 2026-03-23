@@ -3,6 +3,7 @@ import threading
 from concurrent.futures import Future
 from typing import Any, Generic, TypeVar
 
+from xian_py.config import XianClientConfig
 from xian_py.models import (
     BdsStatus,
     IndexedBlock,
@@ -55,10 +56,17 @@ class Xian:
         node_url: str,
         chain_id: str = None,
         wallet: Wallet = None,
+        *,
+        config: XianClientConfig | None = None,
     ):
         self.node_url = node_url
         self.wallet = wallet if wallet else Wallet()
-        self._async_client = XianAsync(node_url, chain_id, self.wallet)
+        self._async_client = XianAsync(
+            node_url,
+            chain_id,
+            self.wallet,
+            config=config,
+        )
         self._runtime_lock = threading.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
@@ -165,12 +173,12 @@ class Xian:
         stamps: int | None = None,
         nonce: int = None,
         chain_id: str = None,
-        mode: str = "checktx",
-        wait_for_tx: bool = False,
-        timeout_seconds: float = 30.0,
-        poll_interval_seconds: float = 0.25,
-        stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
-        min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
+        mode: str | None = None,
+        wait_for_tx: bool | None = None,
+        timeout_seconds: float | None = None,
+        poll_interval_seconds: float | None = None,
+        stamp_margin: float | None = None,
+        min_stamp_headroom: int | None = None,
     ) -> TransactionSubmission:
         return self._run_async(
             self._async_client.send_tx(
@@ -195,12 +203,12 @@ class Xian:
         to_address: str,
         token: str = "currency",
         stamps: int | None = None,
-        mode: str = "checktx",
-        wait_for_tx: bool = False,
-        timeout_seconds: float = 30.0,
-        poll_interval_seconds: float = 0.25,
-        stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
-        min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
+        mode: str | None = None,
+        wait_for_tx: bool | None = None,
+        timeout_seconds: float | None = None,
+        poll_interval_seconds: float | None = None,
+        stamp_margin: float | None = None,
+        min_stamp_headroom: int | None = None,
     ) -> TransactionSubmission:
         return self._run_async(
             self._async_client.send(
@@ -228,8 +236,8 @@ class Xian:
         function: str,
         kwargs: dict,
         *,
-        stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
-        min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
+        stamp_margin: float | None = None,
+        min_stamp_headroom: int | None = None,
     ) -> dict:
         return self._run_async(
             self._async_client.estimate_stamps(
@@ -270,12 +278,12 @@ class Xian:
         token: str = "currency",
         amount: int | float | str = 999999999999,
         stamps: int | None = None,
-        mode: str = "checktx",
-        wait_for_tx: bool = False,
-        timeout_seconds: float = 30.0,
-        poll_interval_seconds: float = 0.25,
-        stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
-        min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
+        mode: str | None = None,
+        wait_for_tx: bool | None = None,
+        timeout_seconds: float | None = None,
+        poll_interval_seconds: float | None = None,
+        stamp_margin: float | None = None,
+        min_stamp_headroom: int | None = None,
     ) -> TransactionSubmission:
         return self._run_async(
             self._async_client.approve(
@@ -298,12 +306,12 @@ class Xian:
         code: str,
         args: dict = None,
         stamps: int | None = None,
-        mode: str = "checktx",
-        wait_for_tx: bool = False,
-        timeout_seconds: float = 30.0,
-        poll_interval_seconds: float = 0.25,
-        stamp_margin: float = XianAsync.DEFAULT_STAMP_MARGIN,
-        min_stamp_headroom: int = XianAsync.DEFAULT_MIN_STAMP_HEADROOM,
+        mode: str | None = None,
+        wait_for_tx: bool | None = None,
+        timeout_seconds: float | None = None,
+        poll_interval_seconds: float | None = None,
+        stamp_margin: float | None = None,
+        min_stamp_headroom: int | None = None,
     ) -> TransactionSubmission:
         return self._run_async(
             self._async_client.submit_contract(
@@ -324,8 +332,8 @@ class Xian:
         self,
         tx_hash: str,
         *,
-        timeout_seconds: float = 30.0,
-        poll_interval_seconds: float = 0.25,
+        timeout_seconds: float | None = None,
+        poll_interval_seconds: float | None = None,
     ) -> TransactionReceipt:
         return self._run_async(
             self._async_client.wait_for_tx(
@@ -463,7 +471,7 @@ class Xian:
         self,
         *,
         start_height: int | None = None,
-        poll_interval_seconds: float = 1.0,
+        poll_interval_seconds: float | None = None,
     ) -> _SyncAsyncIterator[IndexedBlock]:
         return _SyncAsyncIterator(
             self,
@@ -479,8 +487,8 @@ class Xian:
         event: str,
         *,
         after_id: int | None = None,
-        limit: int = 100,
-        poll_interval_seconds: float = 1.0,
+        limit: int | None = None,
+        poll_interval_seconds: float | None = None,
     ) -> _SyncAsyncIterator[IndexedEvent]:
         return _SyncAsyncIterator(
             self,

@@ -6,7 +6,14 @@ import pytest
 from xian_runtime_types.decimal import ContractingDecimal
 
 import xian_py.transaction as tr
+from xian_py.config import (
+    RetryPolicy,
+    SubmissionConfig,
+    WatcherConfig,
+    XianClientConfig,
+)
 from xian_py.decompiler import ContractDecompiler
+from xian_py.exception import TransportError
 from xian_py.models import (
     BdsStatus,
     IndexedBlock,
@@ -889,3 +896,171 @@ def test_sync_watch_events_wraps_async_iterator() -> None:
 
     assert first.id == 21
     assert second.id == 22
+
+
+def test_xian_async_get_node_status_retries_transport_errors() -> None:
+    wallet = Wallet()
+    config = XianClientConfig(
+        retry=RetryPolicy(
+            max_attempts=2,
+            initial_delay_seconds=0.0,
+            max_delay_seconds=0.0,
+        )
+    )
+    client = XianAsync("http://node", wallet=wallet, config=config)
+
+    async def run_status() -> NodeStatus:
+        try:
+            return await client.get_node_status()
+        finally:
+            await client.close()
+
+    payload = {
+        "result": {
+            "node_info": {
+                "id": "NODE-1",
+                "moniker": "validator-1",
+                "network": "xian-testnet",
+            },
+            "sync_info": {
+                "latest_block_height": "12",
+                "latest_block_hash": "BLOCK-12",
+                "latest_app_hash": "APP-12",
+                "latest_block_time": "2026-03-23T12:00:00Z",
+                "catching_up": False,
+            },
+        }
+    }
+
+    with patch.object(
+        tr,
+        "request_json_async",
+        AsyncMock(side_effect=[TransportError("offline"), payload]),
+    ) as request_json:
+        status = asyncio.run(run_status())
+
+    assert status.latest_block_height == 12
+    assert request_json.await_count == 2
+
+
+def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:
+    wallet = Wallet()
+    config = XianClientConfig(
+        submission=SubmissionConfig(
+            mode="async",
+            wait_for_tx=True,
+            timeout_seconds=1.0,
+            poll_interval_seconds=0.0,
+            stamp_margin=0.25,
+            min_stamp_headroom=5,
+        )
+    )
+    client = XianAsync(
+        "http://node",
+        chain_id="xian-1",
+        wallet=wallet,
+        config=config,
+    )
+
+    async def run_send() -> TransactionSubmission:
+        try:
+            return await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr, "get_nonce_async", AsyncMock(return_value=11)
+    ):
+        with patch.object(
+            tr,
+            "simulate_tx_async",
+            AsyncMock(return_value={"stamps_used": 80}),
+        ):
+            with patch.object(
+                tr,
+                "create_tx",
+                return_value={"signed": True},
+            ) as create_tx:
+                with patch.object(
+                    tr,
+                    "broadcast_tx_nowait_async",
+                    AsyncMock(return_value={"result": {"hash": "abc123"}}),
+                ):
+                    with patch.object(
+                        tr,
+                        "get_tx_async",
+                        AsyncMock(
+                            return_value={
+                                "result": {
+                                    "tx": {"payload": {"contract": "currency"}},
+                                    "tx_result": {
+                                        "code": 0,
+                                        "data": {"result": "ok"},
+                                    },
+                                }
+                            }
+                        ),
+                    ):
+                        result = asyncio.run(run_send())
+
+    create_payload = create_tx.call_args.args[0]
+    assert create_payload["stamps_supplied"] == 100
+    assert result.submitted is True
+    assert result.finalized is True
+    assert result.receipt is not None
+
+
+def test_xian_async_watch_events_uses_watcher_defaults_from_config() -> None:
+    wallet = Wallet()
+    config = XianClientConfig(
+        watcher=WatcherConfig(
+            poll_interval_seconds=0.01,
+            batch_limit=25,
+        )
+    )
+    client = XianAsync("http://node", wallet=wallet, config=config)
+
+    async def run_watch() -> IndexedEvent:
+        try:
+            async for event in client.watch_events(
+                "currency",
+                "Transfer",
+                after_id=10,
+            ):
+                return event
+        finally:
+            await client.close()
+
+    with patch.object(
+        client,
+        "list_events",
+        AsyncMock(
+            return_value=[
+                IndexedEvent(
+                    id=11,
+                    tx_hash="TX-11",
+                    block_height=12,
+                    tx_index=0,
+                    event_index=0,
+                    contract="currency",
+                    event="Transfer",
+                    signer="alice",
+                    caller="alice",
+                    data_indexed={"to": "bob"},
+                    data={"amount": "5", "to": "bob"},
+                    created="2026-03-23T12:00:12Z",
+                    raw={},
+                )
+            ]
+        ),
+    ) as list_events:
+        event = asyncio.run(run_watch())
+
+    assert event.id == 11
+    first_call = list_events.await_args_list[0]
+    assert first_call.kwargs["after_id"] == 10
+    assert first_call.kwargs["limit"] == 25

@@ -1,5 +1,12 @@
 from xian_runtime_types.time import to_contract_time
 
+from xian_py.config import (
+    RetryPolicy,
+    SubmissionConfig,
+    TransportConfig,
+    WatcherConfig,
+    XianClientConfig,
+)
 from xian_py.exception import (
     AbciError,
     RpcError,
@@ -34,15 +41,20 @@ __all__ = [
     "NodeStatus",
     "PerformanceStatus",
     "RpcError",
+    "RetryPolicy",
     "SimulationError",
     "StateEntry",
+    "SubmissionConfig",
     "TransactionError",
     "TransactionReceipt",
     "TransactionSubmission",
+    "TransportConfig",
     "TransportError",
     "TxTimeoutError",
+    "WatcherConfig",
     "Xian",
     "XianAsync",
+    "XianClientConfig",
     "Wallet",
     "XianException",
     "run_sync",
