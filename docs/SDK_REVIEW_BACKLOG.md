@@ -22,15 +22,15 @@
   - token clients
   - event clients
   - exact state-key clients
+- service integration examples:
+  - FastAPI service
+  - background event worker
+  - admin / automation job
 
 ## Still Worth Doing
 
 - split `XianException` into transport, RPC, ABCI, simulation, and transaction
   error types
-- add service integration examples:
-  - API service
-  - background event worker
-  - admin / automation job
 - expose the newer stack surfaces directly in the SDK:
   - BDS-backed block / tx / event queries
   - `/perf_status`

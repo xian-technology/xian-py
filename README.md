@@ -11,6 +11,7 @@ This repo owns:
 - public Python clients such as `Xian`, `XianAsync`, and `Wallet`
 - transaction construction, encoding, signing, and validation helpers
 - SDK-side typed models, error classes, and utility helpers
+- application integration examples for common service and automation patterns
 
 This repo does not own:
 
@@ -23,6 +24,7 @@ This repo does not own:
 - `src/xian_py/`: client implementations, transaction helpers, models, and wallet code
 - `tests/`: SDK behavior and transport coverage
 - `docs/`: repo-local notes such as compatibility and backlog items
+- `examples/`: service, worker, and automation integration examples built on top of the SDK
 
 ## Validation
 
@@ -229,6 +231,30 @@ Event client example:
 ```python
 transfers = client.events("currency", "Transfer")
 recent = transfers.list(after_id=500, limit=50)
+```
+
+## Integration Examples
+
+The repo now includes application-facing examples under
+[`examples/`](examples/README.md):
+
+- `fastapi_service.py`: a small API service that exposes health, balances,
+  transfers, and token submission through `XianAsync`
+- `event_worker.py`: a resumable background worker that watches indexed events
+  with a persisted `after_id` cursor
+- `admin_job.py`: a synchronous automation job that checks node, peer, perf,
+  and BDS health and exits nonzero on operator-facing problems
+
+FastAPI example dependencies are not part of the base package install. Use
+your normal app dependency management for `fastapi`, `uvicorn`, and related
+framework packages when running that example.
+
+Typical runs:
+
+```bash
+uv run uvicorn examples.fastapi_service:app --reload --app-dir .
+uv run python examples/event_worker.py
+uv run python examples/admin_job.py
 ```
 
 ## Structured Errors
