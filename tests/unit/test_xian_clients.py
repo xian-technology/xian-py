@@ -1064,3 +1064,143 @@ def test_xian_async_watch_events_uses_watcher_defaults_from_config() -> None:
     first_call = list_events.await_args_list[0]
     assert first_call.kwargs["after_id"] == 10
     assert first_call.kwargs["limit"] == 25
+
+
+def test_async_contract_client_send_merges_kwargs() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    contract = client.contract("currency")
+    client.send_tx = AsyncMock(return_value=TransactionSubmission.from_dict({
+        "submitted": True,
+        "accepted": True,
+        "finalized": False,
+        "tx_hash": "abc123",
+        "mode": "checktx",
+        "nonce": 1,
+        "stamps_supplied": 100,
+        "stamps_estimated": 90,
+        "message": None,
+        "response": {},
+        "receipt": None,
+    }))
+
+    result = asyncio.run(
+        contract.send(
+            "transfer",
+            kwargs={"amount": 1},
+            to="bob",
+            mode="checktx",
+        )
+    )
+
+    assert result.tx_hash == "abc123"
+    client.send_tx.assert_awaited_once_with(
+        contract="currency",
+        function="transfer",
+        kwargs={"amount": 1, "to": "bob"},
+        stamps=None,
+        nonce=None,
+        chain_id=None,
+        mode="checktx",
+        wait_for_tx=None,
+        timeout_seconds=None,
+        poll_interval_seconds=None,
+        stamp_margin=None,
+        min_stamp_headroom=None,
+    )
+
+
+def test_async_token_client_uses_token_helpers() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    token = client.token("currency")
+    client.get_balance = AsyncMock(return_value=ContractingDecimal("12.5"))
+    client.send = AsyncMock(return_value=TransactionSubmission.from_dict({
+        "submitted": True,
+        "accepted": True,
+        "finalized": False,
+        "tx_hash": "tx-transfer",
+        "mode": "checktx",
+        "nonce": 1,
+        "stamps_supplied": 100,
+        "stamps_estimated": 90,
+        "message": None,
+        "response": {},
+        "receipt": None,
+    }))
+    client.get_state = AsyncMock(return_value=ContractingDecimal("7.0"))
+
+    balance = asyncio.run(token.balance_of())
+    transfer = asyncio.run(token.transfer("bob", 5, mode="checktx"))
+    allowance = asyncio.run(token.allowance("con_dex"))
+
+    assert balance == ContractingDecimal("12.5")
+    assert transfer.tx_hash == "tx-transfer"
+    assert allowance == ContractingDecimal("7.0")
+    client.get_balance.assert_awaited_once_with(
+        address=None,
+        contract="currency",
+    )
+    client.send.assert_awaited_once_with(
+        amount=5,
+        to_address="bob",
+        token="currency",
+        stamps=None,
+        mode="checktx",
+        wait_for_tx=None,
+        timeout_seconds=None,
+        poll_interval_seconds=None,
+        stamp_margin=None,
+        min_stamp_headroom=None,
+    )
+
+
+def test_async_state_key_client_uses_exact_full_key() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    state_key = client.state_key("currency", "balances", "alice")
+    client.get_state = AsyncMock(return_value=10)
+    client.get_state_history = AsyncMock(return_value=[])
+
+    value = asyncio.run(state_key.get())
+    history = asyncio.run(state_key.history(limit=5, offset=2))
+
+    assert value == 10
+    assert history == []
+    assert state_key.full_key == "currency.balances:alice"
+    client.get_state.assert_awaited_once_with("currency", "balances", "alice")
+    client.get_state_history.assert_awaited_once_with(
+        "currency.balances:alice",
+        limit=5,
+        offset=2,
+    )
+
+
+def test_sync_contract_and_event_helpers_delegate_to_root_client() -> None:
+    wallet = Wallet()
+    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    contract = client.contract("ledger")
+    events = client.events("currency", "Transfer")
+    state_key = client.state_key("currency", "balances", "alice")
+    client.send_tx = lambda **kwargs: kwargs
+    client.list_events = lambda contract, event, **kwargs: [
+        {"contract": contract, "event": event, **kwargs}
+    ]
+    client.get_state = lambda contract, variable, *keys: (contract, variable, keys)
+    client.get_state_history = lambda key, **kwargs: [{"key": key, **kwargs}]
+
+    try:
+        send_payload = contract.send("set_value", value=3)
+        event_payload = events.list(after_id=10, limit=5)
+        state_value = state_key.get()
+        state_history = state_key.history(limit=2)
+    finally:
+        client.close()
+
+    assert send_payload["contract"] == "ledger"
+    assert send_payload["function"] == "set_value"
+    assert send_payload["kwargs"] == {"value": 3}
+    assert event_payload[0]["after_id"] == 10
+    assert event_payload[0]["limit"] == 5
+    assert state_value == ("currency", "balances", ("alice",))
+    assert state_history[0]["key"] == "currency.balances:alice"

@@ -3,6 +3,12 @@ import threading
 from concurrent.futures import Future
 from typing import Any, Generic, TypeVar
 
+from xian_py.application_clients import (
+    ContractClient,
+    EventClient,
+    StateKeyClient,
+    TokenClient,
+)
 from xian_py.config import XianClientConfig
 from xian_py.models import (
     BdsStatus,
@@ -466,6 +472,23 @@ class Xian:
         return self._run_async(
             self._async_client.get_state_for_block(block_ref)
         )
+
+    def contract(self, name: str) -> ContractClient:
+        return ContractClient(self, name)
+
+    def token(self, name: str = "currency") -> TokenClient:
+        return TokenClient(self, name)
+
+    def events(self, contract: str, event: str) -> EventClient:
+        return EventClient(self, contract, event)
+
+    def state_key(
+        self,
+        contract: str,
+        variable: str,
+        *keys: str,
+    ) -> StateKeyClient:
+        return StateKeyClient(self, contract, variable, tuple(keys))
 
     def watch_blocks(
         self,

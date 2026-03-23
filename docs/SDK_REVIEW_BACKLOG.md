@@ -17,11 +17,20 @@
 - typed `NodeStatus` reads for application and operator workflows
 - explicit SDK config objects for transport, retry, submission, and watcher
   defaults
+- higher-level application helper clients:
+  - contract clients
+  - token clients
+  - event clients
+  - exact state-key clients
 
 ## Still Worth Doing
 
 - split `XianException` into transport, RPC, ABCI, simulation, and transaction
   error types
+- add service integration examples:
+  - API service
+  - background event worker
+  - admin / automation job
 - expose the newer stack surfaces directly in the SDK:
   - BDS-backed block / tx / event queries
   - `/perf_status`

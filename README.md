@@ -57,8 +57,16 @@ pip install "xian-py[hd]"
 
 ```python
 from xian_py import (
+    AsyncContractClient,
+    AsyncEventClient,
+    AsyncStateKeyClient,
+    AsyncTokenClient,
+    ContractClient,
+    EventClient,
     RetryPolicy,
+    StateKeyClient,
     SubmissionConfig,
+    TokenClient,
     TransportConfig,
     Wallet,
     WatcherConfig,
@@ -179,6 +187,49 @@ watching requires BDS to be enabled on the node.
 
 The default event watcher batch size and poll interval come from
 `XianClientConfig.watcher`.
+
+## Application Helper Clients
+
+The SDK now includes thin higher-level helper clients for common application
+patterns:
+
+- `client.contract("name")`
+- `client.token("currency")`
+- `client.events("contract", "EventName")`
+- `client.state_key("contract", "variable", *keys)`
+
+These helpers remove repetitive contract names and key construction, but they
+still delegate directly to the underlying `Xian` / `XianAsync` primitives.
+
+Contract client example:
+
+```python
+ledger = client.contract("con_ledger")
+
+await ledger.send("add_entry", account="alice", amount=5)
+balance = await ledger.get_state("balances", "alice")
+history = await ledger.state_key("balances", "alice").history(limit=20)
+```
+
+Token client example:
+
+```python
+currency = client.token()
+
+balance = await currency.balance_of()
+await currency.transfer("bob", 10)
+await currency.approve("con_dex", amount=100)
+
+async for transfer in currency.transfers().watch(after_id=500):
+    print(transfer.data)
+```
+
+Event client example:
+
+```python
+transfers = client.events("currency", "Transfer")
+recent = transfers.list(after_id=500, limit=50)
+```
 
 ## Structured Errors
 

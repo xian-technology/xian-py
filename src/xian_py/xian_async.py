@@ -8,6 +8,12 @@ from xian_runtime_types.decimal import ContractingDecimal
 from xian_runtime_types.encoding import decode
 
 import xian_py.transaction as tr
+from xian_py.application_clients import (
+    AsyncContractClient,
+    AsyncEventClient,
+    AsyncStateKeyClient,
+    AsyncTokenClient,
+)
 from xian_py.config import (
     SubmissionConfig,
     XianClientConfig,
@@ -879,6 +885,23 @@ class XianAsync:
         if not isinstance(payload, list):
             raise XianException("Unexpected state-for-block payload")
         return [StateEntry.from_dict(item) for item in payload]
+
+    def contract(self, name: str) -> AsyncContractClient:
+        return AsyncContractClient(self, name)
+
+    def token(self, name: str = "currency") -> AsyncTokenClient:
+        return AsyncTokenClient(self, name)
+
+    def events(self, contract: str, event: str) -> AsyncEventClient:
+        return AsyncEventClient(self, contract, event)
+
+    def state_key(
+        self,
+        contract: str,
+        variable: str,
+        *keys: str,
+    ) -> AsyncStateKeyClient:
+        return AsyncStateKeyClient(self, contract, variable, tuple(keys))
 
     async def _get_latest_block_height(self) -> int:
         status = await self.get_node_status()

@@ -1,5 +1,15 @@
 from xian_runtime_types.time import to_contract_time
 
+from xian_py.application_clients import (
+    AsyncContractClient,
+    AsyncEventClient,
+    AsyncStateKeyClient,
+    AsyncTokenClient,
+    ContractClient,
+    EventClient,
+    StateKeyClient,
+    TokenClient,
+)
 from xian_py.config import (
     RetryPolicy,
     SubmissionConfig,
@@ -34,7 +44,13 @@ from xian_py.xian_async import XianAsync
 
 __all__ = [
     "AbciError",
+    "AsyncContractClient",
+    "AsyncEventClient",
+    "AsyncStateKeyClient",
+    "AsyncTokenClient",
     "BdsStatus",
+    "ContractClient",
+    "EventClient",
     "IndexedBlock",
     "IndexedEvent",
     "IndexedTransaction",
@@ -55,6 +71,8 @@ __all__ = [
     "Xian",
     "XianAsync",
     "XianClientConfig",
+    "StateKeyClient",
+    "TokenClient",
     "Wallet",
     "XianException",
     "run_sync",
