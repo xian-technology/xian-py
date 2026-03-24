@@ -26,7 +26,9 @@ def workflow_contract_name() -> str:
 def require_wallet() -> Wallet:
     private_key = os.environ.get("XIAN_WALLET_PRIVATE_KEY")
     if not private_key:
-        raise RuntimeError("XIAN_WALLET_PRIVATE_KEY is required for this example.")
+        raise RuntimeError(
+            "XIAN_WALLET_PRIVATE_KEY is required for this example."
+        )
     return Wallet(private_key=private_key)
 
 

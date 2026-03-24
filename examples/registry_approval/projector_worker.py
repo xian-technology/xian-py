@@ -126,9 +126,10 @@ async def sync_projection(
         hydration_failed = False
         for event in pending:
             try:
-                proposal_snapshot, record_snapshot = (
-                    await hydrate_projection_state(client, event)
-                )
+                (
+                    proposal_snapshot,
+                    record_snapshot,
+                ) = await hydrate_projection_state(client, event)
             except Exception as exc:
                 print(
                     json.dumps(

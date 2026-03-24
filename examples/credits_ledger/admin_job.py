@@ -74,8 +74,12 @@ def main() -> None:
                 mode="commit",
                 wait_for_tx=True,
             )
-            print(f"Issued {issue_amount} credits to {issue_to}: {result.tx_hash}")
-            print(f"Recipient balance: {ledger.get_state('balances', issue_to)}")
+            print(
+                f"Issued {issue_amount} credits to {issue_to}: {result.tx_hash}"
+            )
+            print(
+                f"Recipient balance: {ledger.get_state('balances', issue_to)}"
+            )
 
 
 if __name__ == "__main__":

@@ -229,7 +229,9 @@ class CreditsLedgerProjection:
                     account_from,
                     account_to,
                     actor,
-                    _decimal_to_string(amount) if data.get("amount") is not None else None,
+                    _decimal_to_string(amount)
+                    if data.get("amount") is not None
+                    else None,
                     event.created,
                     json.dumps(event.raw, sort_keys=True, default=str),
                 ),
@@ -376,9 +378,7 @@ class CreditsLedgerProjection:
         params: list[Any] = []
         clauses: list[str] = []
         if address is not None:
-            clauses.append(
-                "(account_from = ? OR account_to = ? OR actor = ?)"
-            )
+            clauses.append("(account_from = ? OR account_to = ? OR actor = ?)")
             params.extend([address, address, address])
         if before_id is not None:
             clauses.append("event_id < ?")
@@ -442,9 +442,13 @@ class CreditsLedgerProjection:
             """,
             (address,),
         ).fetchone()
-        balance = _to_decimal(current["balance"]) if current is not None else ZERO
+        balance = (
+            _to_decimal(current["balance"]) if current is not None else ZERO
+        )
         issued = _to_decimal(current["issued"]) if current is not None else ZERO
-        received = _to_decimal(current["received"]) if current is not None else ZERO
+        received = (
+            _to_decimal(current["received"]) if current is not None else ZERO
+        )
         sent = _to_decimal(current["sent"]) if current is not None else ZERO
         burned = _to_decimal(current["burned"]) if current is not None else ZERO
 

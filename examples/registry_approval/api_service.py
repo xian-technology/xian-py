@@ -172,7 +172,9 @@ async def list_pending_proposals(limit: int = 50) -> dict[str, Any]:
 
 @app.get("/proposals/{proposal_id}")
 async def get_proposal(proposal_id: int) -> dict[str, Any]:
-    proposal = await approval().simulate("get_proposal", proposal_id=proposal_id)
+    proposal = await approval().simulate(
+        "get_proposal", proposal_id=proposal_id
+    )
     projected = projection().get_proposal(proposal_id)
     approvals = projection().list_approvals(proposal_id)
     activity = projection().list_activity(proposal_id=proposal_id, limit=20)

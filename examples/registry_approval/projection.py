@@ -96,7 +96,9 @@ class RegistryActivityEntry:
 
 
 class RegistryApprovalProjection:
-    def __init__(self, path: Path, *, registry_contract: str, approval_contract: str):
+    def __init__(
+        self, path: Path, *, registry_contract: str, approval_contract: str
+    ):
         self.path = path
         self.registry_contract = registry_contract
         self.approval_contract = approval_contract
@@ -649,7 +651,9 @@ class RegistryApprovalProjection:
             ),
         )
 
-    def _set_cursor(self, contract: str, event_name: str, event_id: int) -> None:
+    def _set_cursor(
+        self, contract: str, event_name: str, event_id: int
+    ) -> None:
         self.connection.execute(
             """
             INSERT INTO projection_state (name, value)

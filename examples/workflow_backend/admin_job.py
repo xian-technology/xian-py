@@ -48,7 +48,9 @@ def main() -> None:
                 name=contract_name,
                 code=code,
                 args={
-                    "name": os.environ.get("XIAN_WORKFLOW_NAME", "Job Workflow"),
+                    "name": os.environ.get(
+                        "XIAN_WORKFLOW_NAME", "Job Workflow"
+                    ),
                     "operator": os.environ.get(
                         "XIAN_WORKFLOW_OPERATOR",
                         wallet.public_key,

@@ -105,9 +105,13 @@ async def list_transfers(
     after_id: int | None = None,
     limit: int = 50,
 ) -> dict[str, Any]:
-    transfers = await ledger().events("Transfer").list(
-        after_id=after_id,
-        limit=limit,
+    transfers = (
+        await ledger()
+        .events("Transfer")
+        .list(
+            after_id=after_id,
+            limit=limit,
+        )
     )
     return {
         "contract": contract_name(),

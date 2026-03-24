@@ -218,7 +218,9 @@ def test_registry_approval_projection_tracks_proposals_records_and_activity(
         proposal_activity = projection.list_activity(proposal_id=1, limit=10)
         assert [entry.event_id for entry in proposal_activity] == [3, 2, 1]
 
-        record_activity = projection.list_activity(record_id="record-1", limit=10)
+        record_activity = projection.list_activity(
+            record_id="record-1", limit=10
+        )
         assert [entry.event_id for entry in record_activity] == [5, 4, 3, 1]
 
         health = projection.get_health()
@@ -231,28 +233,31 @@ def test_registry_approval_projection_tracks_proposals_records_and_activity(
             "con_registry_records:RecordUpserted": 4,
         }
 
-        assert projection.apply_event(
-            _event(
-                5,
-                "RecordRevoked",
-                contract="con_registry_records",
-                data={
+        assert (
+            projection.apply_event(
+                _event(
+                    5,
+                    "RecordRevoked",
+                    contract="con_registry_records",
+                    data={
+                        "record_id": "record-1",
+                        "reason": "expired",
+                        "actor": "con_registry_approval",
+                    },
+                ),
+                record_snapshot={
                     "record_id": "record-1",
-                    "reason": "expired",
-                    "actor": "con_registry_approval",
+                    "owner": "alice",
+                    "uri": "https://example.invalid/record-1",
+                    "checksum": "abc123",
+                    "description": "First record",
+                    "status": "revoked",
+                    "revoked_reason": "expired",
+                    "version": 1,
+                    "updated_at": "2026-03-24T00:02:00Z",
                 },
-            ),
-            record_snapshot={
-                "record_id": "record-1",
-                "owner": "alice",
-                "uri": "https://example.invalid/record-1",
-                "checksum": "abc123",
-                "description": "First record",
-                "status": "revoked",
-                "revoked_reason": "expired",
-                "version": 1,
-                "updated_at": "2026-03-24T00:02:00Z",
-            },
-        ) is False
+            )
+            is False
+        )
     finally:
         projection.close()

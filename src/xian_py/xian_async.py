@@ -123,7 +123,10 @@ class XianAsync:
             try:
                 return await operation()
             except Exception as exc:
-                if not self._is_retryable_read_error(exc) or attempt >= attempts:
+                if (
+                    not self._is_retryable_read_error(exc)
+                    or attempt >= attempts
+                ):
                     raise
                 if delay > 0:
                     await asyncio.sleep(delay)
@@ -906,7 +909,9 @@ class XianAsync:
     async def _get_latest_block_height(self) -> int:
         status = await self.get_node_status()
         if status.latest_block_height is None:
-            raise XianException("Node status did not include latest_block_height")
+            raise XianException(
+                "Node status did not include latest_block_height"
+            )
         return status.latest_block_height
 
     async def _get_live_block(self, height: int) -> IndexedBlock | None:

@@ -166,7 +166,9 @@ async def submit_item(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.post("/items/{item_id}/cancel")
-async def cancel_item(item_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+async def cancel_item(
+    item_id: str, payload: dict[str, Any] | None = None
+) -> dict[str, Any]:
     if optional_wallet() is None:
         raise HTTPException(
             status_code=500,

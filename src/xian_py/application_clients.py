@@ -109,7 +109,9 @@ class AsyncStateKeyClient:
         return f"{self.contract}.{self.variable}{suffix}"
 
     async def get(self) -> Any:
-        return await self.client.get_state(self.contract, self.variable, *self.keys)
+        return await self.client.get_state(
+            self.contract, self.variable, *self.keys
+        )
 
     async def history(
         self,
@@ -161,7 +163,9 @@ class AsyncContractClient:
         return await self.client.get_state(self.name, variable, *keys)
 
     def state_key(self, variable: str, *keys: str) -> AsyncStateKeyClient:
-        return AsyncStateKeyClient(self.client, self.name, variable, tuple(keys))
+        return AsyncStateKeyClient(
+            self.client, self.name, variable, tuple(keys)
+        )
 
     async def simulate(
         self,
@@ -282,7 +286,9 @@ class AsyncTokenClient(AsyncContractClient):
         self,
         address: str | None = None,
     ) -> int | ContractingDecimal:
-        return await self.client.get_balance(address=address, contract=self.name)
+        return await self.client.get_balance(
+            address=address, contract=self.name
+        )
 
     async def transfer(
         self,

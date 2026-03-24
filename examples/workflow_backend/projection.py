@@ -153,11 +153,7 @@ class WorkflowProjection:
             return False
 
         data = event.data or {}
-        actor = (
-            data.get("worker")
-            or data.get("requester")
-            or data.get("actor")
-        )
+        actor = data.get("worker") or data.get("requester") or data.get("actor")
         item_id = data.get("item_id")
 
         with self.connection:
@@ -196,7 +192,9 @@ class WorkflowProjection:
 
     def get_summary(self) -> WorkflowProjectionSummary:
         item_count = int(
-            self.connection.execute("SELECT COUNT(*) FROM workflow_items").fetchone()[0]
+            self.connection.execute(
+                "SELECT COUNT(*) FROM workflow_items"
+            ).fetchone()[0]
         )
         submitted_count = self._status_count("submitted")
         processing_count = self._status_count("processing")

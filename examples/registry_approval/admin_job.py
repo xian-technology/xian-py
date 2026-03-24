@@ -129,15 +129,21 @@ def main() -> None:
             )
             print(f"Updated threshold to {desired_threshold}: {result.tx_hash}")
 
-        print(f"Registry approval contract: {configured_approval or approval_name}")
-        print(f"Approval threshold: {approval.state_key('metadata', 'threshold').get()}")
+        print(
+            f"Registry approval contract: {configured_approval or approval_name}"
+        )
+        print(
+            f"Approval threshold: {approval.state_key('metadata', 'threshold').get()}"
+        )
 
         record_id = os.environ.get("XIAN_REGISTRY_RECORD_ID")
         if record_id:
             result = approval.send(
                 "propose_upsert",
                 record_id=record_id,
-                owner=os.environ.get("XIAN_REGISTRY_RECORD_OWNER", wallet.public_key),
+                owner=os.environ.get(
+                    "XIAN_REGISTRY_RECORD_OWNER", wallet.public_key
+                ),
                 uri=os.environ.get(
                     "XIAN_REGISTRY_RECORD_URI",
                     f"https://example.invalid/records/{record_id}",
@@ -153,7 +159,9 @@ def main() -> None:
                 mode="commit",
                 wait_for_tx=True,
             )
-            print(f"Submitted upsert proposal for {record_id}: {result.tx_hash}")
+            print(
+                f"Submitted upsert proposal for {record_id}: {result.tx_hash}"
+            )
 
 
 if __name__ == "__main__":

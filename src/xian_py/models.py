@@ -129,9 +129,7 @@ class NodeStatus:
             latest_app_hash=sync_info.get("latest_app_hash"),
             latest_block_time_iso=sync_info.get("latest_block_time"),
             catching_up=(
-                bool(catching_up)
-                if isinstance(catching_up, bool)
-                else None
+                bool(catching_up) if isinstance(catching_up, bool) else None
             ),
             raw=raw_dict,
         )

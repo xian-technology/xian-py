@@ -12,9 +12,7 @@ NODE_URL = os.getenv("XIAN_NODE_URL", "http://127.0.0.1:26657")
 CHAIN_ID = os.getenv("XIAN_CHAIN_ID")
 TOKEN_CONTRACT = os.getenv("XIAN_TOKEN_CONTRACT", "currency")
 EVENT_NAME = os.getenv("XIAN_EVENT_NAME", "Transfer")
-CURSOR_PATH = Path(
-    os.getenv("XIAN_EVENT_CURSOR_PATH", ".xian-transfer-cursor")
-)
+CURSOR_PATH = Path(os.getenv("XIAN_EVENT_CURSOR_PATH", ".xian-transfer-cursor"))
 
 
 def read_cursor() -> int | None:

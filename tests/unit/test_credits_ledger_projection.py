@@ -100,13 +100,16 @@ def test_credits_ledger_projection_tracks_balances_and_summary(
         assert [entry.event_id for entry in alice_activity] == [2, 1]
 
         # Re-applying the same event should be idempotent.
-        assert projection.apply_event(
-            _event(
-                3,
-                "Burn",
-                data={"from": "bob", "amount": "1", "actor": "bob"},
+        assert (
+            projection.apply_event(
+                _event(
+                    3,
+                    "Burn",
+                    data={"from": "bob", "amount": "1", "actor": "bob"},
+                )
             )
-        ) is False
+            is False
+        )
         assert projection.get_summary().activity_count == 3
     finally:
         projection.close()

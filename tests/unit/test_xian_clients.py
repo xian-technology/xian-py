@@ -886,7 +886,9 @@ def test_sync_watch_events_wraps_async_iterator() -> None:
         )
 
     try:
-        with patch.object(client._async_client, "watch_events", return_value=async_events()):
+        with patch.object(
+            client._async_client, "watch_events", return_value=async_events()
+        ):
             iterator = client.watch_events("currency", "Transfer", after_id=20)
             first = next(iterator)
             second = next(iterator)
@@ -972,9 +974,7 @@ def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:
         finally:
             await client.close()
 
-    with patch.object(
-        tr, "get_nonce_async", AsyncMock(return_value=11)
-    ):
+    with patch.object(tr, "get_nonce_async", AsyncMock(return_value=11)):
         with patch.object(
             tr,
             "simulate_tx_async",
@@ -1070,19 +1070,23 @@ def test_async_contract_client_send_merges_kwargs() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
     contract = client.contract("currency")
-    client.send_tx = AsyncMock(return_value=TransactionSubmission.from_dict({
-        "submitted": True,
-        "accepted": True,
-        "finalized": False,
-        "tx_hash": "abc123",
-        "mode": "checktx",
-        "nonce": 1,
-        "stamps_supplied": 100,
-        "stamps_estimated": 90,
-        "message": None,
-        "response": {},
-        "receipt": None,
-    }))
+    client.send_tx = AsyncMock(
+        return_value=TransactionSubmission.from_dict(
+            {
+                "submitted": True,
+                "accepted": True,
+                "finalized": False,
+                "tx_hash": "abc123",
+                "mode": "checktx",
+                "nonce": 1,
+                "stamps_supplied": 100,
+                "stamps_estimated": 90,
+                "message": None,
+                "response": {},
+                "receipt": None,
+            }
+        )
+    )
 
     result = asyncio.run(
         contract.send(
@@ -1115,19 +1119,23 @@ def test_async_token_client_uses_token_helpers() -> None:
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
     token = client.token("currency")
     client.get_balance = AsyncMock(return_value=ContractingDecimal("12.5"))
-    client.send = AsyncMock(return_value=TransactionSubmission.from_dict({
-        "submitted": True,
-        "accepted": True,
-        "finalized": False,
-        "tx_hash": "tx-transfer",
-        "mode": "checktx",
-        "nonce": 1,
-        "stamps_supplied": 100,
-        "stamps_estimated": 90,
-        "message": None,
-        "response": {},
-        "receipt": None,
-    }))
+    client.send = AsyncMock(
+        return_value=TransactionSubmission.from_dict(
+            {
+                "submitted": True,
+                "accepted": True,
+                "finalized": False,
+                "tx_hash": "tx-transfer",
+                "mode": "checktx",
+                "nonce": 1,
+                "stamps_supplied": 100,
+                "stamps_estimated": 90,
+                "message": None,
+                "response": {},
+                "receipt": None,
+            }
+        )
+    )
     client.get_state = AsyncMock(return_value=ContractingDecimal("7.0"))
 
     balance = asyncio.run(token.balance_of())
@@ -1186,7 +1194,11 @@ def test_sync_contract_and_event_helpers_delegate_to_root_client() -> None:
     client.list_events = lambda contract, event, **kwargs: [
         {"contract": contract, "event": event, **kwargs}
     ]
-    client.get_state = lambda contract, variable, *keys: (contract, variable, keys)
+    client.get_state = lambda contract, variable, *keys: (
+        contract,
+        variable,
+        keys,
+    )
     client.get_state_history = lambda key, **kwargs: [{"key": key, **kwargs}]
 
     try:

@@ -33,7 +33,9 @@ def _event(event_id: int, event_name: str, *, data: dict) -> IndexedEvent:
 
 
 def test_workflow_projection_tracks_items_and_activity(tmp_path: Path) -> None:
-    projection = WorkflowProjection(tmp_path / "workflow.sqlite3", "con_job_workflow")
+    projection = WorkflowProjection(
+        tmp_path / "workflow.sqlite3", "con_job_workflow"
+    )
     try:
         assert projection.apply_event(
             _event(
@@ -189,29 +191,32 @@ def test_workflow_projection_tracks_items_and_activity(tmp_path: Path) -> None:
             "ItemSubmitted": 4,
         }
 
-        assert projection.apply_event(
-            _event(
-                5,
-                "ItemCancelled",
-                data={
+        assert (
+            projection.apply_event(
+                _event(
+                    5,
+                    "ItemCancelled",
+                    data={
+                        "item_id": "job-2",
+                        "actor": "bob",
+                        "reason": "user cancelled",
+                    },
+                ),
+                item_snapshot={
                     "item_id": "job-2",
-                    "actor": "bob",
-                    "reason": "user cancelled",
+                    "requester": "bob",
+                    "kind": "job",
+                    "payload_uri": "https://example.invalid/jobs/job-2",
+                    "metadata_ref": "meta-2",
+                    "status": "cancelled",
+                    "worker": "",
+                    "result_uri": "",
+                    "failure_reason": "user cancelled",
+                    "created_at": "2026-03-24T00:03:00Z",
+                    "updated_at": "2026-03-24T00:04:00Z",
                 },
-            ),
-            item_snapshot={
-                "item_id": "job-2",
-                "requester": "bob",
-                "kind": "job",
-                "payload_uri": "https://example.invalid/jobs/job-2",
-                "metadata_ref": "meta-2",
-                "status": "cancelled",
-                "worker": "",
-                "result_uri": "",
-                "failure_reason": "user cancelled",
-                "created_at": "2026-03-24T00:03:00Z",
-                "updated_at": "2026-03-24T00:04:00Z",
-            },
-        ) is False
+            )
+            is False
+        )
     finally:
         projection.close()

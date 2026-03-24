@@ -25,7 +25,12 @@ except ImportError:
         workflow_contract_name,
     )
 
-MONITOR_EVENT_NAMES = ("ItemClaimed", "ItemCompleted", "ItemFailed", "ItemCancelled")
+MONITOR_EVENT_NAMES = (
+    "ItemClaimed",
+    "ItemCompleted",
+    "ItemFailed",
+    "ItemCancelled",
+)
 
 
 def load_cursors() -> dict[str, int]:
@@ -65,7 +70,9 @@ async def follow_event(
             save_cursors(cursors)
 
 
-async def process_submitted_items(client: XianAsync, cursors: dict[str, int]) -> None:
+async def process_submitted_items(
+    client: XianAsync, cursors: dict[str, int]
+) -> None:
     workflow = client.contract(workflow_contract_name())
     async for event in workflow.events("ItemSubmitted").watch(
         after_id=cursors.get("processor:ItemSubmitted")
@@ -128,7 +135,10 @@ async def main() -> None:
     ) as client:
         await asyncio.gather(
             process_submitted_items(client, cursors),
-            *(follow_event(client, event_name, cursors) for event_name in MONITOR_EVENT_NAMES),
+            *(
+                follow_event(client, event_name, cursors)
+                for event_name in MONITOR_EVENT_NAMES
+            ),
         )
 
 
