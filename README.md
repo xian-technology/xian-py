@@ -248,7 +248,8 @@ The repo now includes application-facing examples under
   service, projection, and worker patterns for an application-controlled
   credits ledger
 - `registry_approval/`: the second solution-pack example set, showing
-  bootstrap, proposal, approval, and worker patterns for a shared registry
+  bootstrap, proposal, approval, projection, and worker patterns for a shared
+  registry
 - `workflow_backend/`: the third solution-pack example set, showing
   bootstrap, service, and worker patterns for a job-style workflow backend
 
@@ -268,6 +269,11 @@ The `credits_ledger/` example set now goes one step further than the basic
 pack walkthrough: it includes a local SQLite projection that can be rebuilt
 from indexed BDS events and queried by the example API service for recent
 activity and summary views.
+
+The `registry_approval/` example set now follows the same deeper pattern for
+approval workflows: indexed events trigger a local SQLite projection, and the
+projector hydrates rich proposal and record views from authoritative contract
+reads before the example API serves those projected workflow views.
 
 ## Structured Errors
 

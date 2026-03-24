@@ -12,8 +12,9 @@ into ordinary software workflows.
 - `admin_job.py`: a simple automation / health-check style job
 - `credits_ledger/`: the first solution-pack example set and the first deeper
   reference-app slice, built around an application-controlled credits ledger
-- `registry_approval/`: the second solution-pack example set, built around a
-  shared registry with proposal and approval flow
+- `registry_approval/`: the second solution-pack example set and the second
+  deeper reference-app slice, built around a shared registry with proposal and
+  approval flow
 - `workflow_backend/`: the third solution-pack example set, built around a
   shared job-style workflow backend
 
@@ -58,7 +59,7 @@ Registry / Approval Pack examples:
 ```bash
 uv run python examples/registry_approval/admin_job.py
 uv run uvicorn examples.registry_approval.api_service:app --reload --app-dir .
-uv run python examples/registry_approval/event_worker.py
+uv run python examples/registry_approval/projector_worker.py
 ```
 
 Workflow Backend Pack examples:

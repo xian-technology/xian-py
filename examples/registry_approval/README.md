@@ -3,16 +3,18 @@
 ## Purpose
 
 This folder contains the SDK-side integration examples for the Registry /
-Approval solution pack.
+Approval solution pack and the deeper reference-app slice built on top of it.
 
 ## Files
 
 - `admin_job.py`: bootstrap the registry and approval contracts and manage
   signer setup
-- `api_service.py`: read records and proposals and submit proposal/approval
-  transactions
-- `event_worker.py`: consume proposal and registry events with resumable
-  cursors
+- `api_service.py`: read authoritative proposals and records, plus projected
+  workflow views for pending approvals and activity
+- `projector_worker.py`: rebuild a local SQLite projection from proposal and
+  registry events, hydrating rich state from authoritative contract reads
+- `event_worker.py`: compatibility wrapper for `projector_worker.py`
+- `projection.py`: SQLite-backed proposal, record, and activity projection
 - `common.py`: shared environment/config helpers used by these examples
 
 ## Environment
@@ -41,7 +43,7 @@ Optional admin/bootstrap variables:
 
 Optional worker variable:
 
-- `XIAN_REGISTRY_CURSOR_PATH`
+- `XIAN_REGISTRY_PROJECTION_PATH`
 
 ## Typical Runs
 
@@ -60,5 +62,9 @@ uv run uvicorn examples.registry_approval.api_service:app --reload --app-dir .
 Run the event worker:
 
 ```bash
-uv run python examples/registry_approval/event_worker.py
+uv run python examples/registry_approval/projector_worker.py
 ```
+
+The projector backfills from indexed BDS events and uses authoritative
+contract reads to hydrate richer proposal and record views into a local SQLite
+database.

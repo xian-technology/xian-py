@@ -75,10 +75,8 @@ def approval_source_path() -> Path:
         / "contracts"
         / "registry_approval.s.py"
     )
-
-
-def cursor_path() -> Path:
-    env_path = os.environ.get("XIAN_REGISTRY_CURSOR_PATH")
+def projection_path() -> Path:
+    env_path = os.environ.get("XIAN_REGISTRY_PROJECTION_PATH")
     if env_path:
         return Path(env_path).expanduser().resolve()
-    return Path(".registry-approval-cursors.json").resolve()
+    return Path(".registry-approval-projection.sqlite3").resolve()
