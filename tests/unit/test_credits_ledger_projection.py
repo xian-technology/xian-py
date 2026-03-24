@@ -19,6 +19,7 @@ def _event(
     event_name: str,
     *,
     data: dict,
+    data_indexed: dict | None = None,
     tx_hash: str | None = None,
 ) -> IndexedEvent:
     return IndexedEvent(
@@ -31,10 +32,15 @@ def _event(
         event=event_name,
         signer=None,
         caller=None,
-        data_indexed=None,
+        data_indexed=data_indexed,
         data=data,
         created="2026-03-24T00:00:00Z",
-        raw={"id": event_id, "event": event_name, "data": data},
+        raw={
+            "id": event_id,
+            "event": event_name,
+            "data": data,
+            "data_indexed": data_indexed,
+        },
     )
 
 
@@ -111,5 +117,71 @@ def test_credits_ledger_projection_tracks_balances_and_summary(
             is False
         )
         assert projection.get_summary().activity_count == 3
+    finally:
+        projection.close()
+
+
+def test_credits_ledger_projection_accepts_split_bds_event_payloads(
+    tmp_path: Path,
+) -> None:
+    projection = CreditsLedgerProjection(
+        tmp_path / "credits-split.sqlite3",
+        "con_credits_ledger",
+    )
+    try:
+        assert projection.apply_event(
+            _event(
+                1,
+                "Issue",
+                data={"amount": "10"},
+                data_indexed={"to": "alice", "issuer": "operator"},
+            )
+        )
+        assert projection.apply_event(
+            _event(
+                2,
+                "Transfer",
+                data={"amount": "4"},
+                data_indexed={"from": "alice", "to": "bob"},
+            )
+        )
+        assert projection.apply_event(
+            _event(
+                3,
+                "Burn",
+                data={"amount": "1"},
+                data_indexed={"from": "bob", "actor": "operator"},
+            )
+        )
+
+        assert projection.get_account("alice").projected_balance == "6"
+        assert projection.get_account("bob").projected_balance == "3"
+        assert projection.get_summary().projected_supply == "9"
+    finally:
+        projection.close()
+
+
+def test_credits_ledger_projection_accepts_runtime_fixed_amounts(
+    tmp_path: Path,
+) -> None:
+    projection = CreditsLedgerProjection(
+        tmp_path / "credits-fixed.sqlite3",
+        "con_credits_ledger",
+    )
+    try:
+        assert projection.apply_event(
+            _event(
+                1,
+                "Burn",
+                data={"amount": {"__fixed__": "50.5"}},
+                data_indexed={"from": "alice", "actor": "operator"},
+            )
+        )
+
+        account = projection.get_account("alice")
+        assert account.projected_balance == "-50.5"
+        assert account.total_burned == "50.5"
+        assert projection.get_summary().total_burned == "50.5"
+        assert projection.get_summary().projected_supply == "-50.5"
     finally:
         projection.close()

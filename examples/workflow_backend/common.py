@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from xian_py import Wallet
+from xian_py.models import TransactionSubmission
 
 DEFAULT_WORKFLOW_CONTRACT = "con_job_workflow"
 
@@ -67,3 +68,17 @@ def projection_path() -> Path:
     if env_path:
         return Path(env_path).expanduser().resolve()
     return Path(".workflow-backend-projection.sqlite3").resolve()
+
+
+def ensure_submission_succeeded(
+    submission: TransactionSubmission, action: str
+) -> TransactionSubmission:
+    if not submission.submitted:
+        raise RuntimeError(f"{action} was not submitted: {submission.message}")
+    if submission.accepted is False:
+        raise RuntimeError(f"{action} was rejected: {submission.message}")
+    if not submission.finalized:
+        raise RuntimeError(f"{action} was not finalized: {submission.message}")
+    if submission.receipt is not None and not submission.receipt.success:
+        raise RuntimeError(f"{action} failed: {submission.receipt.message}")
+    return submission

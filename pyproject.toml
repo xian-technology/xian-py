@@ -25,6 +25,10 @@ eth = [
     "eth-account>=0.13.4,<0.14",
     "eth-utils>=5.2.0,<6",
 ]
+app = [
+    "fastapi>=0.116.0,<0.117",
+    "uvicorn>=0.35.0,<0.36",
+]
 
 [dependency-groups]
 dev = [

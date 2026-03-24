@@ -322,6 +322,57 @@ def test_xian_async_send_tx_async_mode_reports_submission_without_checktx() -> (
     assert result.tx_hash == "abc123"
 
 
+def test_xian_async_send_tx_commit_mode_does_not_report_finalized_when_checktx_fails() -> (
+    None
+):
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+
+    async def run_send() -> TransactionSubmission:
+        try:
+            return await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+                stamps=100,
+                mode="commit",
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr,
+        "get_nonce_async",
+        AsyncMock(return_value=11),
+    ):
+        with patch.object(
+            tr,
+            "broadcast_tx_commit_async",
+            AsyncMock(
+                return_value={
+                    "result": {
+                        "hash": "abc123",
+                        "height": "0",
+                        "check_tx": {
+                            "code": 7,
+                            "log": "bad nonce",
+                        },
+                        "tx_result": {
+                            "code": 0,
+                            "log": "",
+                        },
+                    }
+                }
+            ),
+        ):
+            result = asyncio.run(run_send())
+
+    assert result.submitted is True
+    assert result.accepted is False
+    assert result.finalized is False
+    assert result.message == "bad nonce"
+
+
 def test_xian_async_get_balance_falls_back_to_abci_query() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)

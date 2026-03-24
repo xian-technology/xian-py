@@ -1,10 +1,12 @@
 import asyncio
 import base64
 import json
+from decimal import Decimal
 from unittest.mock import patch
 
 import aiohttp
 import pytest
+from xian_runtime_types.encoding import decode, encode
 
 from xian_py.exception import XianException
 from xian_py.formating import format_dictionary
@@ -125,6 +127,39 @@ def test_simulate_tx_async_decodes_successful_response() -> None:
     assert result == expected
 
 
+def test_simulate_tx_async_encodes_runtime_numeric_values() -> None:
+    payload = {
+        "contract": "currency",
+        "function": "transfer",
+        "kwargs": {"amount": Decimal("12.5")},
+    }
+    fake_session = _FakeClientSession(
+        post_responses=[
+            _FakeResponse(
+                {
+                    "result": {
+                        "response": {
+                            "code": 0,
+                            "value": _b64(json.dumps({"stamps_used": 1})),
+                        }
+                    }
+                }
+            )
+        ]
+    )
+
+    with patch(
+        "xian_py.transaction.aiohttp.ClientSession", return_value=fake_session
+    ):
+        asyncio.run(simulate_tx_async("http://node", payload))
+
+    method, url = fake_session.calls[0]
+    assert method == "post"
+    encoded_payload = url.split("/simulate_tx/", 1)[1].split('"', 1)[0]
+    decoded_payload = json.loads(bytes.fromhex(encoded_payload).decode("utf-8"))
+    assert decoded_payload["kwargs"]["amount"] == {"__fixed__": "12.5"}
+
+
 def test_simulate_tx_async_wraps_error_response() -> None:
     fake_session = _FakeClientSession(
         post_responses=[
@@ -186,10 +221,12 @@ def test_create_tx_formats_payload_and_signs_it() -> None:
     tx = create_tx(payload, wallet)
 
     expected_payload = format_dictionary(payload)
+    canonical_payload = encode(decode(encode(expected_payload)))
     signature = tx["metadata"]["signature"]
 
     assert tx["payload"] == expected_payload
-    assert wallet.verify_msg(json.dumps(expected_payload), signature) is True
+    assert wallet.verify_msg(canonical_payload, signature) is True
+    assert wallet.verify_msg(json.dumps(expected_payload), signature) is False
 
 
 def test_create_tx_rejects_invalid_payload() -> None:

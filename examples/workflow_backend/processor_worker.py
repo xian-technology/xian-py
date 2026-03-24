@@ -12,6 +12,7 @@ try:
     from .common import (
         chain_id,
         cursor_path,
+        ensure_submission_succeeded,
         node_url,
         require_wallet,
         workflow_contract_name,
@@ -20,6 +21,7 @@ except ImportError:
     from common import (  # type: ignore
         chain_id,
         cursor_path,
+        ensure_submission_succeeded,
         node_url,
         require_wallet,
         workflow_contract_name,
@@ -91,32 +93,41 @@ async def process_submitted_items(
             )
         )
         try:
-            await workflow.send(
-                "claim_item",
-                item_id=item_id,
-                mode="commit",
-                wait_for_tx=True,
+            ensure_submission_succeeded(
+                await workflow.send(
+                    "claim_item",
+                    item_id=item_id,
+                    mode="checktx",
+                    wait_for_tx=True,
+                ),
+                f"claim workflow item {item_id}",
             )
             fail_reason = os.environ.get("XIAN_WORKFLOW_FAIL_REASON")
             if fail_reason:
-                await workflow.send(
-                    "fail_item",
-                    item_id=item_id,
-                    reason=fail_reason,
-                    mode="commit",
-                    wait_for_tx=True,
+                ensure_submission_succeeded(
+                    await workflow.send(
+                        "fail_item",
+                        item_id=item_id,
+                        reason=fail_reason,
+                        mode="checktx",
+                        wait_for_tx=True,
+                    ),
+                    f"fail workflow item {item_id}",
                 )
             else:
                 result_prefix = os.environ.get(
                     "XIAN_WORKFLOW_RESULT_PREFIX",
                     "https://example.invalid/results/",
                 )
-                await workflow.send(
-                    "complete_item",
-                    item_id=item_id,
-                    result_uri=f"{result_prefix}{item_id}",
-                    mode="commit",
-                    wait_for_tx=True,
+                ensure_submission_succeeded(
+                    await workflow.send(
+                        "complete_item",
+                        item_id=item_id,
+                        result_uri=f"{result_prefix}{item_id}",
+                        mode="checktx",
+                        wait_for_tx=True,
+                    ),
+                    f"complete workflow item {item_id}",
                 )
         except Exception as exc:
             print(json.dumps({"item_id": item_id, "error": str(exc)}))

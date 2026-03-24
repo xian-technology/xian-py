@@ -1,7 +1,23 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any, Mapping
+
+
+def _decode_json_mapping(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if isinstance(value, Mapping):
+        return dict(value)
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(decoded, Mapping):
+            return dict(decoded)
+    return None
 
 
 @dataclass(frozen=True)
@@ -214,7 +230,7 @@ class IndexedTransaction:
             function=raw_dict.get("function"),
             success=raw_dict.get("success"),
             stamps_used=raw_dict.get("stamps_used"),
-            created=raw_dict.get("created"),
+            created=raw_dict.get("created") or raw_dict.get("created_at"),
             raw=raw_dict,
         )
 
@@ -248,9 +264,9 @@ class IndexedEvent:
             event=raw_dict.get("event"),
             signer=raw_dict.get("signer"),
             caller=raw_dict.get("caller"),
-            data_indexed=raw_dict.get("data_indexed"),
-            data=raw_dict.get("data"),
-            created=raw_dict.get("created"),
+            data_indexed=_decode_json_mapping(raw_dict.get("data_indexed")),
+            data=_decode_json_mapping(raw_dict.get("data")),
+            created=raw_dict.get("created") or raw_dict.get("created_at"),
             raw=raw_dict,
         )
 
@@ -272,6 +288,6 @@ class StateEntry:
             value=raw_dict.get("value"),
             tx_hash=raw_dict.get("tx_hash"),
             block_height=raw_dict.get("block_height"),
-            created=raw_dict.get("created"),
+            created=raw_dict.get("created") or raw_dict.get("created_at"),
             raw=raw_dict,
         )

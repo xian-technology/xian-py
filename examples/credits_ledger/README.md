@@ -42,6 +42,13 @@ Optional worker variable:
 
 ## Typical Runs
 
+Install the optional app dependencies first if you want to run the API
+service:
+
+```bash
+uv sync --group dev --extra app
+```
+
 Bootstrap or administer the contract:
 
 ```bash

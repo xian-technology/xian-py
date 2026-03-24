@@ -520,14 +520,21 @@ class XianAsync:
                 or commit_result.get("tx_result")
                 or {}
             )
+            commit_height = str(commit_result.get("height") or "0")
             result["tx_hash"] = commit_result.get("hash")
             result["accepted"] = check_tx.get("code", 1) == 0
-            result["finalized"] = deliver_tx.get("code", 1) == 0
+            result["finalized"] = (
+                result["accepted"]
+                and deliver_tx.get("code", 1) == 0
+                and commit_height != "0"
+            )
             if not result["accepted"]:
                 await self._invalidate_reserved_nonce(reserved_nonce)
                 result["message"] = check_tx.get("log") or "CheckTx failed"
             elif not result["finalized"]:
-                result["message"] = deliver_tx.get("log") or "DeliverTx failed"
+                result["message"] = deliver_tx.get("log") or (
+                    "Transaction was not finalized"
+                )
             return TransactionSubmission.from_dict(result)
 
         checktx_result = data.get("result", {})

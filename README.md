@@ -51,9 +51,12 @@ pip install xian-py
 Optional extras:
 
 ```bash
+pip install "xian-py[app]"
 pip install "xian-py[eth]"
 pip install "xian-py[hd]"
 ```
+
+Use the `app` extra when running the included FastAPI-based service examples.
 
 ## Public API
 

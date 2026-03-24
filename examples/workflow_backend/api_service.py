@@ -11,6 +11,7 @@ from xian_py import XianAsync
 try:
     from .common import (
         chain_id,
+        ensure_submission_succeeded,
         node_url,
         optional_wallet,
         projection_path,
@@ -20,6 +21,7 @@ try:
 except ImportError:
     from common import (  # type: ignore
         chain_id,
+        ensure_submission_succeeded,
         node_url,
         optional_wallet,
         projection_path,
@@ -153,15 +155,21 @@ async def submit_item(payload: dict[str, Any]) -> dict[str, Any]:
             status_code=500,
             detail="XIAN_WALLET_PRIVATE_KEY is required for write operations.",
         )
-    submission = await workflow().send(
-        "submit_item",
-        item_id=str(payload["item_id"]),
-        payload_uri=str(payload["payload_uri"]),
-        kind=str(payload.get("kind", "job")),
-        metadata_ref=str(payload.get("metadata_ref", "")),
-        mode="commit",
-        wait_for_tx=True,
-    )
+    try:
+        submission = ensure_submission_succeeded(
+            await workflow().send(
+                "submit_item",
+                item_id=str(payload["item_id"]),
+                payload_uri=str(payload["payload_uri"]),
+                kind=str(payload.get("kind", "job")),
+                metadata_ref=str(payload.get("metadata_ref", "")),
+                mode="checktx",
+                wait_for_tx=True,
+            ),
+            "submit workflow item",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"tx_hash": submission.tx_hash, "finalized": submission.finalized}
 
 
@@ -175,11 +183,17 @@ async def cancel_item(
             detail="XIAN_WALLET_PRIVATE_KEY is required for write operations.",
         )
     payload = payload or {}
-    submission = await workflow().send(
-        "cancel_item",
-        item_id=item_id,
-        reason=str(payload.get("reason", "")),
-        mode="commit",
-        wait_for_tx=True,
-    )
+    try:
+        submission = ensure_submission_succeeded(
+            await workflow().send(
+                "cancel_item",
+                item_id=item_id,
+                reason=str(payload.get("reason", "")),
+                mode="checktx",
+                wait_for_tx=True,
+            ),
+            f"cancel workflow item {item_id}",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"tx_hash": submission.tx_hash, "finalized": submission.finalized}

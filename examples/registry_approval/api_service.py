@@ -12,6 +12,7 @@ try:
     from .common import (
         approval_contract_name,
         chain_id,
+        ensure_submission_succeeded,
         node_url,
         optional_wallet,
         projection_path,
@@ -22,6 +23,7 @@ except ImportError:
     from common import (  # type: ignore
         approval_contract_name,
         chain_id,
+        ensure_submission_succeeded,
         node_url,
         optional_wallet,
         projection_path,
@@ -215,16 +217,22 @@ async def propose_upsert(payload: dict[str, Any]) -> dict[str, Any]:
             status_code=500,
             detail="XIAN_WALLET_PRIVATE_KEY is required for write operations.",
         )
-    submission = await approval().send(
-        "propose_upsert",
-        record_id=str(payload["record_id"]),
-        owner=str(payload["owner"]),
-        uri=str(payload["uri"]),
-        checksum=str(payload["checksum"]),
-        description=str(payload.get("description", "")),
-        mode="commit",
-        wait_for_tx=True,
-    )
+    try:
+        submission = ensure_submission_succeeded(
+            await approval().send(
+                "propose_upsert",
+                record_id=str(payload["record_id"]),
+                owner=str(payload["owner"]),
+                uri=str(payload["uri"]),
+                checksum=str(payload["checksum"]),
+                description=str(payload.get("description", "")),
+                mode="checktx",
+                wait_for_tx=True,
+            ),
+            "submit upsert proposal",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"tx_hash": submission.tx_hash, "finalized": submission.finalized}
 
 
@@ -235,13 +243,19 @@ async def propose_revoke(payload: dict[str, Any]) -> dict[str, Any]:
             status_code=500,
             detail="XIAN_WALLET_PRIVATE_KEY is required for write operations.",
         )
-    submission = await approval().send(
-        "propose_revoke",
-        record_id=str(payload["record_id"]),
-        reason=str(payload.get("reason", "")),
-        mode="commit",
-        wait_for_tx=True,
-    )
+    try:
+        submission = ensure_submission_succeeded(
+            await approval().send(
+                "propose_revoke",
+                record_id=str(payload["record_id"]),
+                reason=str(payload.get("reason", "")),
+                mode="checktx",
+                wait_for_tx=True,
+            ),
+            "submit revoke proposal",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"tx_hash": submission.tx_hash, "finalized": submission.finalized}
 
 
@@ -252,10 +266,16 @@ async def approve_proposal(proposal_id: int) -> dict[str, Any]:
             status_code=500,
             detail="XIAN_WALLET_PRIVATE_KEY is required for write operations.",
         )
-    submission = await approval().send(
-        "approve",
-        proposal_id=proposal_id,
-        mode="commit",
-        wait_for_tx=True,
-    )
+    try:
+        submission = ensure_submission_succeeded(
+            await approval().send(
+                "approve",
+                proposal_id=proposal_id,
+                mode="checktx",
+                wait_for_tx=True,
+            ),
+            f"approve proposal {proposal_id}",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"tx_hash": submission.tx_hash, "finalized": submission.finalized}

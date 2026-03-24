@@ -21,8 +21,8 @@ into ordinary software workflows.
 ## Notes
 
 - These examples are intentionally thin and build on the public SDK surface.
-- `fastapi_service.py` requires additional packages such as `fastapi` and
-  `uvicorn`; the other examples use only the SDK and the standard library.
+- Install the optional app extra before running FastAPI-based examples:
+  `uv sync --group dev --extra app`.
 - All examples use environment variables for node URL, chain ID, and optional
   wallet keys so they can be adapted without editing the files.
 
@@ -31,6 +31,7 @@ into ordinary software workflows.
 FastAPI service:
 
 ```bash
+uv sync --group dev --extra app
 uv run uvicorn examples.fastapi_service:app --reload --app-dir .
 ```
 
@@ -49,6 +50,7 @@ uv run python examples/admin_job.py
 Credits Ledger Pack examples:
 
 ```bash
+uv sync --group dev --extra app
 uv run python examples/credits_ledger/admin_job.py
 uv run uvicorn examples.credits_ledger.api_service:app --reload --app-dir .
 uv run python examples/credits_ledger/projector_worker.py
@@ -57,6 +59,7 @@ uv run python examples/credits_ledger/projector_worker.py
 Registry / Approval Pack examples:
 
 ```bash
+uv sync --group dev --extra app
 uv run python examples/registry_approval/admin_job.py
 uv run uvicorn examples.registry_approval.api_service:app --reload --app-dir .
 uv run python examples/registry_approval/projector_worker.py
@@ -65,6 +68,7 @@ uv run python examples/registry_approval/projector_worker.py
 Workflow Backend Pack examples:
 
 ```bash
+uv sync --group dev --extra app
 uv run python examples/workflow_backend/admin_job.py
 uv run uvicorn examples.workflow_backend.api_service:app --reload --app-dir .
 uv run python examples/workflow_backend/processor_worker.py

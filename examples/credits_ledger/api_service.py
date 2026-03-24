@@ -13,7 +13,9 @@ try:
     from .common import (
         chain_id,
         contract_name,
+        ensure_submission_succeeded,
         optional_wallet,
+        parse_amount,
         node_url,
         projection_path,
     )
@@ -22,7 +24,9 @@ except ImportError:
     from common import (  # type: ignore
         chain_id,
         contract_name,
+        ensure_submission_succeeded,
         optional_wallet,
+        parse_amount,
         node_url,
         projection_path,
     )
@@ -198,14 +202,20 @@ async def issue_credits(payload: dict[str, Any]) -> dict[str, Any]:
             detail="XIAN_WALLET_PRIVATE_KEY is required for write operations.",
         )
     to = str(payload["to"])
-    amount = payload["amount"]
-    submission = await ledger().send(
-        "issue",
-        to=to,
-        amount=amount,
-        mode="commit",
-        wait_for_tx=True,
-    )
+    amount = parse_amount(payload["amount"])
+    try:
+        submission = ensure_submission_succeeded(
+            await ledger().send(
+                "issue",
+                to=to,
+                amount=amount,
+                mode="checktx",
+                wait_for_tx=True,
+            ),
+            "issue credits",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {
         "tx_hash": submission.tx_hash,
         "to": to,
@@ -221,13 +231,19 @@ async def burn_credits(payload: dict[str, Any]) -> dict[str, Any]:
             status_code=500,
             detail="XIAN_WALLET_PRIVATE_KEY is required for write operations.",
         )
-    amount = payload["amount"]
-    submission = await ledger().send(
-        "burn",
-        amount=amount,
-        mode="commit",
-        wait_for_tx=True,
-    )
+    amount = parse_amount(payload["amount"])
+    try:
+        submission = ensure_submission_succeeded(
+            await ledger().send(
+                "burn",
+                amount=amount,
+                mode="checktx",
+                wait_for_tx=True,
+            ),
+            "burn credits",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {
         "tx_hash": submission.tx_hash,
         "amount": amount,
@@ -244,14 +260,20 @@ async def transfer_credits(payload: dict[str, Any]) -> dict[str, Any]:
             detail="XIAN_WALLET_PRIVATE_KEY is required for write operations.",
         )
     to = str(payload["to"])
-    amount = payload["amount"]
-    submission = await ledger().send(
-        "transfer",
-        to=to,
-        amount=amount,
-        mode="commit",
-        wait_for_tx=True,
-    )
+    amount = parse_amount(payload["amount"])
+    try:
+        submission = ensure_submission_succeeded(
+            await ledger().send(
+                "transfer",
+                to=to,
+                amount=amount,
+                mode="checktx",
+                wait_for_tx=True,
+            ),
+            "transfer credits",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {
         "tx_hash": submission.tx_hash,
         "from": wallet.public_key,

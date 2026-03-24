@@ -17,6 +17,8 @@ def _to_decimal(value: Any) -> Decimal:
         return ZERO
     if isinstance(value, Decimal):
         return value
+    if isinstance(value, dict) and "__fixed__" in value:
+        value = value["__fixed__"]
     try:
         return Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError) as exc:
@@ -28,6 +30,15 @@ def _decimal_to_string(value: Decimal) -> str:
     if "." in normalized:
         normalized = normalized.rstrip("0").rstrip(".")
     return normalized or "0"
+
+
+def _event_payload(event: IndexedEvent) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if event.data_indexed:
+        payload.update(event.data_indexed)
+    if event.data:
+        payload.update(event.data)
+    return payload
 
 
 @dataclass(frozen=True)
@@ -194,7 +205,7 @@ class CreditsLedgerProjection:
             self._set_cursor(event.event or "", event.id)
             return False
 
-        data = event.data or {}
+        data = _event_payload(event)
         amount = _to_decimal(data.get("amount"))
         account_from = data.get("from")
         account_to = data.get("to")

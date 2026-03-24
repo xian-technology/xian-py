@@ -14,7 +14,7 @@ from base64 import b64decode
 from typing import Any
 
 import aiohttp
-from xian_runtime_types.encoding import encode
+from xian_runtime_types.encoding import decode, encode
 
 from xian_py.async_utils import sync_wrapper
 from xian_py.exception import (
@@ -187,7 +187,7 @@ async def simulate_tx_async(
     session: aiohttp.ClientSession | None = None,
 ) -> dict:
     """Estimate the amount of stamps a tx will cost"""
-    encoded = json.dumps(payload).encode().hex()
+    encoded = encode(payload).encode().hex()
 
     try:
         data = await abci_query_async(
@@ -231,10 +231,11 @@ def create_tx(payload: dict, wallet: Wallet) -> dict:
     payload = format_dictionary(payload)
     if not check_format_of_payload(payload):
         raise TransactionError("Invalid payload provided")
+    canonical_payload = encode(decode(encode(payload)))
 
     tx = {
         "payload": payload,
-        "metadata": {"signature": wallet.sign_msg(json.dumps(payload))},
+        "metadata": {"signature": wallet.sign_msg(canonical_payload)},
     }
 
     tx = encode(format_dictionary(tx))

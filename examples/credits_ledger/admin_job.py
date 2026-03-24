@@ -11,7 +11,9 @@ try:
         chain_id,
         contract_name,
         contract_source_path,
+        ensure_submission_succeeded,
         require_wallet,
+        parse_amount,
         node_url,
     )
 except ImportError:
@@ -19,7 +21,9 @@ except ImportError:
         chain_id,
         contract_name,
         contract_source_path,
+        ensure_submission_succeeded,
         require_wallet,
+        parse_amount,
         node_url,
     )
 
@@ -47,12 +51,15 @@ def main() -> None:
                     wallet.public_key,
                 ),
             }
-            result = client.submit_contract(
-                name=ledger_name,
-                code=code,
-                args=args,
-                mode="commit",
-                wait_for_tx=True,
+            result = ensure_submission_succeeded(
+                client.submit_contract(
+                    name=ledger_name,
+                    code=code,
+                    args=args,
+                    mode="checktx",
+                    wait_for_tx=True,
+                ),
+                f"deploy {ledger_name}",
             )
             print(f"Deployed {ledger_name}: {result.tx_hash}")
         else:
@@ -67,15 +74,19 @@ def main() -> None:
         issue_to = os.environ.get("XIAN_CREDITS_ISSUE_TO")
         issue_amount = os.environ.get("XIAN_CREDITS_ISSUE_AMOUNT")
         if issue_to and issue_amount:
-            result = ledger.send(
-                "issue",
-                to=issue_to,
-                amount=issue_amount,
-                mode="commit",
-                wait_for_tx=True,
+            parsed_amount = parse_amount(issue_amount)
+            result = ensure_submission_succeeded(
+                ledger.send(
+                    "issue",
+                    to=issue_to,
+                    amount=parsed_amount,
+                    mode="checktx",
+                    wait_for_tx=True,
+                ),
+                f"issue {parsed_amount} credits",
             )
             print(
-                f"Issued {issue_amount} credits to {issue_to}: {result.tx_hash}"
+                f"Issued {parsed_amount} credits to {issue_to}: {result.tx_hash}"
             )
             print(
                 f"Recipient balance: {ledger.get_state('balances', issue_to)}"

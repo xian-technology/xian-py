@@ -9,6 +9,7 @@ from xian_py import Xian
 try:
     from .common import (
         chain_id,
+        ensure_submission_succeeded,
         node_url,
         require_wallet,
         workflow_contract_name,
@@ -17,6 +18,7 @@ try:
 except ImportError:
     from common import (  # type: ignore
         chain_id,
+        ensure_submission_succeeded,
         node_url,
         require_wallet,
         workflow_contract_name,
@@ -44,20 +46,23 @@ def main() -> None:
         existing_source = client.get_contract(contract_name)
         if existing_source is None:
             code = workflow_source_path().read_text(encoding="utf-8")
-            result = client.submit_contract(
-                name=contract_name,
-                code=code,
-                args={
-                    "name": os.environ.get(
-                        "XIAN_WORKFLOW_NAME", "Job Workflow"
-                    ),
-                    "operator": os.environ.get(
-                        "XIAN_WORKFLOW_OPERATOR",
-                        wallet.public_key,
-                    ),
-                },
-                mode="commit",
-                wait_for_tx=True,
+            result = ensure_submission_succeeded(
+                client.submit_contract(
+                    name=contract_name,
+                    code=code,
+                    args={
+                        "name": os.environ.get(
+                            "XIAN_WORKFLOW_NAME", "Job Workflow"
+                        ),
+                        "operator": os.environ.get(
+                            "XIAN_WORKFLOW_OPERATOR",
+                            wallet.public_key,
+                        ),
+                    },
+                    mode="checktx",
+                    wait_for_tx=True,
+                ),
+                f"deploy {contract_name}",
             )
             print(f"Deployed {contract_name}: {result.tx_hash}")
         else:
@@ -67,27 +72,35 @@ def main() -> None:
 
         for worker in _split_workers(os.environ.get("XIAN_WORKFLOW_WORKERS")):
             if not workflow.get_state("workers", worker):
-                result = workflow.send(
-                    "add_worker",
-                    account=worker,
-                    mode="commit",
-                    wait_for_tx=True,
+                result = ensure_submission_succeeded(
+                    workflow.send(
+                        "add_worker",
+                        account=worker,
+                        mode="checktx",
+                        wait_for_tx=True,
+                    ),
+                    f"add worker {worker}",
                 )
                 print(f"Added worker {worker}: {result.tx_hash}")
 
         item_id = os.environ.get("XIAN_WORKFLOW_ITEM_ID")
         if item_id:
-            result = workflow.send(
-                "submit_item",
-                item_id=item_id,
-                kind=os.environ.get("XIAN_WORKFLOW_ITEM_KIND", "job"),
-                payload_uri=os.environ.get(
-                    "XIAN_WORKFLOW_PAYLOAD_URI",
-                    f"https://example.invalid/jobs/{item_id}",
+            result = ensure_submission_succeeded(
+                workflow.send(
+                    "submit_item",
+                    item_id=item_id,
+                    kind=os.environ.get("XIAN_WORKFLOW_ITEM_KIND", "job"),
+                    payload_uri=os.environ.get(
+                        "XIAN_WORKFLOW_PAYLOAD_URI",
+                        f"https://example.invalid/jobs/{item_id}",
+                    ),
+                    metadata_ref=os.environ.get(
+                        "XIAN_WORKFLOW_METADATA_REF", ""
+                    ),
+                    mode="checktx",
+                    wait_for_tx=True,
                 ),
-                metadata_ref=os.environ.get("XIAN_WORKFLOW_METADATA_REF", ""),
-                mode="commit",
-                wait_for_tx=True,
+                f"submit workflow item {item_id}",
             )
             print(f"Submitted workflow item {item_id}: {result.tx_hash}")
 
