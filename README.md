@@ -229,6 +229,13 @@ async for transfer in currency.transfers().watch(after_id=500):
     print(transfer.data)
 ```
 
+Readonly hydration example:
+
+```python
+registry = client.contract("con_registry_approval")
+proposal = await registry.call("get_proposal", proposal_id=1)
+```
+
 Event client example:
 
 ```python
@@ -276,8 +283,11 @@ activity and summary views.
 
 The `registry_approval/` example set now follows the same deeper pattern for
 approval workflows: indexed events trigger a local SQLite projection, and the
-projector hydrates rich proposal and record views from authoritative contract
-reads before the example API serves those projected workflow views.
+projector hydrates rich proposal and record views from authoritative decoded
+readonly contract calls before the example API serves those projected workflow
+views. The admin bootstrap also tops up configured approvers with native
+balance by default so the documented multi-signer reference flow works out of
+the box.
 
 The `workflow_backend/` example set now follows the same deeper pattern for
 workflow coordination: a processor worker handles submitted items, a separate

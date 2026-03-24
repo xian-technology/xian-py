@@ -236,6 +236,11 @@ class Xian:
             self._async_client.simulate(contract, function, kwargs)
         )
 
+    def call(self, contract: str, function: str, kwargs: dict) -> Any:
+        return self._run_async(
+            self._async_client.call(contract, function, kwargs)
+        )
+
     def estimate_stamps(
         self,
         contract: str,

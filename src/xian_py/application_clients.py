@@ -180,6 +180,19 @@ class AsyncContractClient:
             _merge_call_kwargs(kwargs, contract_kwargs),
         )
 
+    async def call(
+        self,
+        function: str,
+        *,
+        kwargs: dict[str, Any] | None = None,
+        **contract_kwargs: Any,
+    ) -> Any:
+        return await self.client.call(
+            self.name,
+            function,
+            _merge_call_kwargs(kwargs, contract_kwargs),
+        )
+
     async def send(
         self,
         function: str,
@@ -237,6 +250,19 @@ class ContractClient:
         **contract_kwargs: Any,
     ) -> dict[str, Any]:
         return self.client.simulate(
+            self.name,
+            function,
+            _merge_call_kwargs(kwargs, contract_kwargs),
+        )
+
+    def call(
+        self,
+        function: str,
+        *,
+        kwargs: dict[str, Any] | None = None,
+        **contract_kwargs: Any,
+    ) -> Any:
+        return self.client.call(
             self.name,
             function,
             _merge_call_kwargs(kwargs, contract_kwargs),

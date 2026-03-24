@@ -45,6 +45,15 @@ RECORD_EVENTS = {
 }
 
 
+def _event_payload(event: IndexedEvent) -> dict:
+    payload: dict = {}
+    if event.data_indexed:
+        payload.update(event.data_indexed)
+    if event.data:
+        payload.update(event.data)
+    return payload
+
+
 def _event_sort_key(event: IndexedEvent) -> tuple[int, int, int]:
     if event.id is None:
         raise ValueError("Projection requires event IDs")
@@ -61,12 +70,12 @@ async def hydrate_projection_state(
 ) -> tuple[dict | None, dict | None]:
     proposal_snapshot = None
     record_snapshot = None
-    data = event.data or {}
+    data = _event_payload(event)
 
     if event.event in PROPOSAL_EVENTS and data.get("proposal_id") is not None:
         proposal_snapshot = await client.contract(
             approval_contract_name()
-        ).simulate(
+        ).call(
             "get_proposal",
             proposal_id=int(data["proposal_id"]),
         )
@@ -74,7 +83,7 @@ async def hydrate_projection_state(
     if event.event in RECORD_EVENTS and data.get("record_id") is not None:
         record_snapshot = await client.contract(
             registry_contract_name()
-        ).simulate(
+        ).call(
             "get_record",
             record_id=str(data["record_id"]),
         )

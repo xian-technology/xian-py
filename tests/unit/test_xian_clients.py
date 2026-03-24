@@ -13,7 +13,7 @@ from xian_py.config import (
     XianClientConfig,
 )
 from xian_py.decompiler import ContractDecompiler
-from xian_py.exception import TransportError
+from xian_py.exception import SimulationError, TransportError
 from xian_py.models import (
     BdsStatus,
     IndexedBlock,
@@ -494,6 +494,26 @@ def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
                     }
                 },
             ),
+            _FakeResponse(
+                {
+                    "result": {
+                        "response": {
+                            "value": _b64("True"),
+                            "info": "bool",
+                        }
+                    }
+                },
+            ),
+            _FakeResponse(
+                {
+                    "result": {
+                        "response": {
+                            "value": _b64("True"),
+                            "info": "int",
+                        }
+                    }
+                },
+            ),
         ]
     )
 
@@ -507,6 +527,51 @@ def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
     assert asyncio.run(client.get_state("currency", "balances", "alice")) == {
         "owner": "alice",
     }
+    assert asyncio.run(client.get_state("currency", "balances", "alice")) is True
+    assert asyncio.run(client.get_state("currency", "balances", "alice")) is True
+
+
+def test_xian_async_call_decodes_structured_return_value() -> None:
+    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+
+    with patch.object(
+        client,
+        "simulate",
+        AsyncMock(
+            return_value={
+                "status": 0,
+                "result": "{'owner': 'alice', 'count': 2}",
+            }
+        ),
+    ):
+        result = asyncio.run(
+            client.call("con_example", "get_record", {"record_id": "alice"})
+        )
+
+    assert result == {"owner": "alice", "count": 2}
+
+
+def test_xian_async_call_raises_on_failed_simulated_execution() -> None:
+    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+
+    with patch.object(
+        client,
+        "simulate",
+        AsyncMock(
+            return_value={
+                "status": 1,
+                "result": "record not found",
+            }
+        ),
+    ):
+        with pytest.raises(SimulationError, match="record not found"):
+            asyncio.run(
+                client.call(
+                    "con_example",
+                    "get_record",
+                    {"record_id": "missing"},
+                )
+            )
 
 
 def test_xian_async_send_preserves_decimal_precision() -> None:

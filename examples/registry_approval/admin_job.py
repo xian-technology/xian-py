@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from decimal import Decimal
 
 from xian_py import Xian
 
@@ -34,6 +35,19 @@ def _split_signers(raw: str | None) -> list[str]:
     if not raw:
         return []
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _as_decimal(value: object) -> Decimal:
+    if value is None:
+        return Decimal("0")
+    return Decimal(str(value))
+
+
+def _decimal_to_string(value: Decimal) -> str:
+    normalized = value.normalize()
+    if normalized == normalized.to_integral():
+        return format(normalized.quantize(Decimal("1")), "f")
+    return format(normalized, "f").rstrip("0").rstrip(".")
 
 
 def main() -> None:
@@ -131,6 +145,33 @@ def main() -> None:
                     f"add signer {signer}",
                 )
                 print(f"Added signer {signer}: {result.tx_hash}")
+
+        signer_fund_target = _as_decimal(
+            os.environ.get("XIAN_REGISTRY_SIGNER_FUND_AMOUNT", "250")
+        )
+        native_token = client.token("currency")
+        if signer_fund_target > 0:
+            for signer in _split_signers(
+                os.environ.get("XIAN_REGISTRY_SIGNERS")
+            ):
+                current_balance = _as_decimal(native_token.balance_of(signer))
+                if current_balance >= signer_fund_target:
+                    continue
+                amount_to_send = signer_fund_target - current_balance
+                result = ensure_submission_succeeded(
+                    native_token.transfer(
+                        signer,
+                        _decimal_to_string(amount_to_send),
+                        mode="checktx",
+                        wait_for_tx=True,
+                    ),
+                    f"fund signer {signer}",
+                )
+                print(
+                    "Funded signer "
+                    f"{signer} to {_decimal_to_string(signer_fund_target)}: "
+                    f"{result.tx_hash}"
+                )
 
         desired_threshold = int(os.environ.get("XIAN_REGISTRY_THRESHOLD", "1"))
         current_threshold = approval.state_key("metadata", "threshold").get()

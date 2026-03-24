@@ -116,7 +116,7 @@ async def list_records(
 
 @app.get("/records/{record_id}")
 async def get_record(record_id: str) -> dict[str, Any]:
-    record = await registry().simulate("get_record", record_id=record_id)
+    record = await registry().call("get_record", record_id=record_id)
     projected = projection().get_record(record_id)
     activity = projection().list_activity(record_id=record_id, limit=20)
     return {
@@ -174,7 +174,7 @@ async def list_pending_proposals(limit: int = 50) -> dict[str, Any]:
 
 @app.get("/proposals/{proposal_id}")
 async def get_proposal(proposal_id: int) -> dict[str, Any]:
-    proposal = await approval().simulate(
+    proposal = await approval().call(
         "get_proposal", proposal_id=proposal_id
     )
     projected = projection().get_proposal(proposal_id)

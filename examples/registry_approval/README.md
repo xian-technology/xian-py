@@ -34,6 +34,7 @@ Optional admin/bootstrap variables:
 - `XIAN_REGISTRY_NAME`
 - `XIAN_REGISTRY_OPERATOR`
 - `XIAN_REGISTRY_SIGNERS` (comma-separated)
+- `XIAN_REGISTRY_SIGNER_FUND_AMOUNT` (default: `250`, set `0` to disable)
 - `XIAN_REGISTRY_THRESHOLD`
 - `XIAN_REGISTRY_RECORD_ID`
 - `XIAN_REGISTRY_RECORD_OWNER`
@@ -52,6 +53,10 @@ Bootstrap or administer the contracts:
 ```bash
 uv run python examples/registry_approval/admin_job.py
 ```
+
+When additional signers are configured, the admin job also tops them up with
+native balance by default so they can actually approve proposals in local and
+reference-app flows.
 
 Run the API service:
 

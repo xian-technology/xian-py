@@ -1,3 +1,4 @@
+import ast
 import asyncio
 import math
 from decimal import Decimal
@@ -19,7 +20,12 @@ from xian_py.config import (
     XianClientConfig,
 )
 from xian_py.decompiler import ContractDecompiler
-from xian_py.exception import RpcError, TransportError, XianException
+from xian_py.exception import (
+    RpcError,
+    SimulationError,
+    TransportError,
+    XianException,
+)
 from xian_py.models import (
     BdsStatus,
     IndexedBlock,
@@ -610,6 +616,21 @@ class XianAsync:
             session=self.session,
         )
 
+    async def call(self, contract: str, function: str, kwargs: dict) -> Any:
+        simulation = await self.simulate(contract, function, kwargs)
+        if simulation.get("status") not in (None, 0):
+            raise SimulationError(
+                str(simulation.get("result") or "Simulation failed"),
+                details=simulation,
+            )
+        result = simulation.get("result")
+        if not isinstance(result, str):
+            return result
+        try:
+            return ast.literal_eval(result)
+        except (SyntaxError, ValueError):
+            return self._decode_abci_value(result, None)
+
     async def get_state(
         self,
         contract: str,
@@ -1048,15 +1069,27 @@ class XianAsync:
     def _decode_abci_value(
         data: str,
         type_of_data: str | None,
-    ) -> int | ContractingDecimal | dict | list | str:
+    ) -> bool | int | ContractingDecimal | dict | list | str | None:
         if type_of_data == "int":
-            return int(data)
+            try:
+                return int(data)
+            except (TypeError, ValueError):
+                return XianAsync._decode_abci_value(data, None)
+        if type_of_data == "bool":
+            return data == "True"
         if type_of_data == "decimal":
             return ContractingDecimal(data)
         if type_of_data in {"dict", "list"}:
             return decode(data)
         if type_of_data == "str":
             return data
+
+        if data == "True":
+            return True
+        if data == "False":
+            return False
+        if data == "None":
+            return None
 
         try:
             return decode(data)

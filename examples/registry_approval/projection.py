@@ -21,6 +21,15 @@ def _as_int(value: Any) -> int:
     return int(value) if value is not None else 0
 
 
+def _event_payload(event: IndexedEvent) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if event.data_indexed:
+        payload.update(event.data_indexed)
+    if event.data:
+        payload.update(event.data)
+    return payload
+
+
 @dataclass(frozen=True)
 class RegistryProjectionSummary:
     registry_contract: str
@@ -250,7 +259,7 @@ class RegistryApprovalProjection:
             self._set_cursor(event.contract or "", event.event, event.id)
             return False
 
-        data = event.data or {}
+        data = _event_payload(event)
         proposal_id = data.get("proposal_id")
         record_id = data.get("record_id")
         actor = (

@@ -20,6 +20,7 @@ def _event(
     *,
     contract: str,
     data: dict,
+    data_indexed: dict | None = None,
 ) -> IndexedEvent:
     return IndexedEvent(
         id=event_id,
@@ -31,7 +32,7 @@ def _event(
         event=event_name,
         signer=None,
         caller=None,
-        data_indexed=None,
+        data_indexed=data_indexed,
         data=data,
         created="2026-03-24T00:00:00Z",
         raw={
@@ -39,6 +40,7 @@ def _event(
             "contract": contract,
             "event": event_name,
             "data": data,
+            "data_indexed": data_indexed,
         },
     )
 
@@ -259,5 +261,58 @@ def test_registry_approval_projection_tracks_proposals_records_and_activity(
             )
             is False
         )
+    finally:
+        projection.close()
+
+
+def test_registry_approval_projection_accepts_split_bds_event_payloads(
+    tmp_path: Path,
+) -> None:
+    projection = RegistryApprovalProjection(
+        tmp_path / "registry-split.sqlite3",
+        registry_contract="con_registry_records",
+        approval_contract="con_registry_approval",
+    )
+    try:
+        assert projection.apply_event(
+            _event(
+                1,
+                "ProposalSubmitted",
+                contract="con_registry_approval",
+                data={"proposer": "alice"},
+                data_indexed={
+                    "proposal_id": 1,
+                    "action": "upsert",
+                    "record_id": "record-1",
+                },
+            ),
+            proposal_snapshot={
+                "proposal_id": 1,
+                "action": "upsert",
+                "record_id": "record-1",
+                "owner": "alice",
+                "uri": "https://example.invalid/record-1",
+                "checksum": "abc123",
+                "description": "First record",
+                "reason": "",
+                "proposer": "alice",
+                "approved_count": 1,
+                "threshold": 2,
+                "executed": False,
+                "created_at": "2026-03-24T00:00:00Z",
+                "executed_at": None,
+            },
+        )
+
+        proposal = projection.get_proposal(1)
+        assert proposal is not None
+        assert proposal.record_id == "record-1"
+        assert proposal.status == "pending"
+
+        activity = projection.list_activity(limit=10)
+        assert len(activity) == 1
+        assert activity[0].proposal_id == 1
+        assert activity[0].record_id == "record-1"
+        assert activity[0].actor == "alice"
     finally:
         projection.close()

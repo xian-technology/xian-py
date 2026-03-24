@@ -53,7 +53,7 @@ async def hydrate_item_snapshot(
     item_id = data.get("item_id")
     if item_id is None:
         return None
-    return await client.contract(workflow_contract_name()).simulate(
+    return await client.contract(workflow_contract_name()).call(
         "get_item",
         item_id=str(item_id),
     )

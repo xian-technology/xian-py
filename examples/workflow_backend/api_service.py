@@ -108,7 +108,7 @@ async def list_items(
 
 @app.get("/items/{item_id}")
 async def get_item(item_id: str) -> dict[str, Any]:
-    item = await workflow().simulate("get_item", item_id=item_id)
+    item = await workflow().call("get_item", item_id=item_id)
     projected = projection().get_item(item_id)
     activity = projection().list_activity(item_id=item_id, limit=20)
     return {
