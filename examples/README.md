@@ -14,6 +14,8 @@ into ordinary software workflows.
   application-controlled credits ledger
 - `registry_approval/`: the second solution-pack example set, built around a
   shared registry with proposal and approval flow
+- `workflow_backend/`: the third solution-pack example set, built around a
+  shared job-style workflow backend
 
 ## Notes
 
@@ -57,4 +59,12 @@ Registry / Approval Pack examples:
 uv run python examples/registry_approval/admin_job.py
 uv run uvicorn examples.registry_approval.api_service:app --reload --app-dir .
 uv run python examples/registry_approval/event_worker.py
+```
+
+Workflow Backend Pack examples:
+
+```bash
+uv run python examples/workflow_backend/admin_job.py
+uv run uvicorn examples.workflow_backend.api_service:app --reload --app-dir .
+uv run python examples/workflow_backend/event_worker.py
 ```

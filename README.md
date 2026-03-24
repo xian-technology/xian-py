@@ -248,6 +248,8 @@ The repo now includes application-facing examples under
   service, and worker patterns for an application-controlled credits ledger
 - `registry_approval/`: the second solution-pack example set, showing
   bootstrap, proposal, approval, and worker patterns for a shared registry
+- `workflow_backend/`: the third solution-pack example set, showing
+  bootstrap, service, and worker patterns for a job-style workflow backend
 
 FastAPI example dependencies are not part of the base package install. Use
 your normal app dependency management for `fastapi`, `uvicorn`, and related
