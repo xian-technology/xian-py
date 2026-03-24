@@ -58,3 +58,10 @@ def cursor_path() -> Path:
     if env_path:
         return Path(env_path).expanduser().resolve()
     return Path(".workflow-backend-cursors.json").resolve()
+
+
+def projection_path() -> Path:
+    env_path = os.environ.get("XIAN_WORKFLOW_PROJECTION_PATH")
+    if env_path:
+        return Path(env_path).expanduser().resolve()
+    return Path(".workflow-backend-projection.sqlite3").resolve()

@@ -251,7 +251,8 @@ The repo now includes application-facing examples under
   bootstrap, proposal, approval, projection, and worker patterns for a shared
   registry
 - `workflow_backend/`: the third solution-pack example set, showing
-  bootstrap, service, and worker patterns for a job-style workflow backend
+  bootstrap, service, processor, projection, and worker patterns for a
+  job-style workflow backend
 
 FastAPI example dependencies are not part of the base package install. Use
 your normal app dependency management for `fastapi`, `uvicorn`, and related
@@ -274,6 +275,12 @@ The `registry_approval/` example set now follows the same deeper pattern for
 approval workflows: indexed events trigger a local SQLite projection, and the
 projector hydrates rich proposal and record views from authoritative contract
 reads before the example API serves those projected workflow views.
+
+The `workflow_backend/` example set now follows the same deeper pattern for
+workflow coordination: a processor worker handles submitted items, a separate
+projector rebuilds queue and activity views from indexed events plus
+authoritative `get_item` reads, and the example API serves both on-chain and
+projected workflow views.
 
 ## Structured Errors
 
