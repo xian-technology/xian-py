@@ -9,6 +9,15 @@ from typing import Any
 from xian_py.models import IndexedEvent
 
 
+def _event_payload(event: IndexedEvent) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if event.data_indexed:
+        payload.update(event.data_indexed)
+    if event.data:
+        payload.update(event.data)
+    return payload
+
+
 @dataclass(frozen=True)
 class WorkflowProjectionSummary:
     workflow_contract: str
@@ -152,7 +161,7 @@ class WorkflowProjection:
             self._set_cursor(event.event, event.id)
             return False
 
-        data = event.data or {}
+        data = _event_payload(event)
         actor = data.get("worker") or data.get("requester") or data.get("actor")
         item_id = data.get("item_id")
 

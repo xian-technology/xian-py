@@ -35,6 +35,15 @@ EVENT_NAMES = (
 )
 
 
+def _event_payload(event: IndexedEvent) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if event.data_indexed:
+        payload.update(event.data_indexed)
+    if event.data:
+        payload.update(event.data)
+    return payload
+
+
 def _event_sort_key(event: IndexedEvent) -> tuple[int, int, int]:
     if event.id is None:
         raise ValueError("Projection requires event IDs")
@@ -49,7 +58,7 @@ async def hydrate_item_snapshot(
     client: XianAsync,
     event: IndexedEvent,
 ) -> dict[str, Any] | None:
-    data = event.data or {}
+    data = _event_payload(event)
     item_id = data.get("item_id")
     if item_id is None:
         return None
@@ -124,6 +133,7 @@ async def sync_projection(
                         "event": event.event,
                         "id": event.id,
                         "tx_hash": event.tx_hash,
+                        "data": _event_payload(event),
                     },
                     sort_keys=True,
                 )

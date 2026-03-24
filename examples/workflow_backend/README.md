@@ -32,6 +32,7 @@ Optional admin/bootstrap variables:
 - `XIAN_WORKFLOW_NAME`
 - `XIAN_WORKFLOW_OPERATOR`
 - `XIAN_WORKFLOW_WORKERS` (comma-separated)
+- `XIAN_WORKFLOW_WORKER_FUND_AMOUNT` (default: `250`, set `0` to disable)
 - `XIAN_WORKFLOW_ITEM_ID`
 - `XIAN_WORKFLOW_ITEM_KIND`
 - `XIAN_WORKFLOW_PAYLOAD_URI`
@@ -51,6 +52,10 @@ Bootstrap or administer the contract:
 ```bash
 uv run python examples/workflow_backend/admin_job.py
 ```
+
+When additional workers are configured, the admin job also tops them up with
+native balance by default so they can claim and complete items in local and
+reference-app flows.
 
 Run the API service:
 

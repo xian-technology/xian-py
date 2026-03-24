@@ -35,6 +35,15 @@ MONITOR_EVENT_NAMES = (
 )
 
 
+def _event_payload(event) -> dict:
+    payload: dict = {}
+    if event.data_indexed:
+        payload.update(event.data_indexed)
+    if event.data:
+        payload.update(event.data)
+    return payload
+
+
 def load_cursors() -> dict[str, int]:
     path = cursor_path()
     if not path.exists():
@@ -56,13 +65,14 @@ async def follow_event(
 ) -> None:
     event_client = client.contract(workflow_contract_name()).events(event_name)
     async for event in event_client.watch(after_id=cursors.get(event_name)):
+        payload = _event_payload(event)
         print(
             json.dumps(
                 {
                     "event": event_name,
                     "id": event.id,
                     "tx_hash": event.tx_hash,
-                    "data": event.data,
+                    "data": payload,
                 },
                 sort_keys=True,
             )
@@ -79,7 +89,7 @@ async def process_submitted_items(
     async for event in workflow.events("ItemSubmitted").watch(
         after_id=cursors.get("processor:ItemSubmitted")
     ):
-        data = event.data or {}
+        data = _event_payload(event)
         item_id = str(data["item_id"])
         print(
             json.dumps(

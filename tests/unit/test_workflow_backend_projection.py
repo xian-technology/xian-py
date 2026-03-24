@@ -14,7 +14,13 @@ SPEC.loader.exec_module(PROJECTION_MODULE)
 WorkflowProjection = PROJECTION_MODULE.WorkflowProjection
 
 
-def _event(event_id: int, event_name: str, *, data: dict) -> IndexedEvent:
+def _event(
+    event_id: int,
+    event_name: str,
+    *,
+    data: dict,
+    data_indexed: dict | None = None,
+) -> IndexedEvent:
     return IndexedEvent(
         id=event_id,
         tx_hash=f"tx-{event_id}",
@@ -25,10 +31,15 @@ def _event(event_id: int, event_name: str, *, data: dict) -> IndexedEvent:
         event=event_name,
         signer=None,
         caller=None,
-        data_indexed=None,
+        data_indexed=data_indexed,
         data=data,
         created="2026-03-24T00:00:00Z",
-        raw={"id": event_id, "event": event_name, "data": data},
+        raw={
+            "id": event_id,
+            "event": event_name,
+            "data": data,
+            "data_indexed": data_indexed,
+        },
     )
 
 
@@ -218,5 +229,47 @@ def test_workflow_projection_tracks_items_and_activity(tmp_path: Path) -> None:
             )
             is False
         )
+    finally:
+        projection.close()
+
+
+def test_workflow_projection_accepts_split_bds_event_payloads(
+    tmp_path: Path,
+) -> None:
+    projection = WorkflowProjection(
+        tmp_path / "workflow-split.sqlite3", "con_job_workflow"
+    )
+    try:
+        assert projection.apply_event(
+            _event(
+                1,
+                "ItemSubmitted",
+                data={"requester": "alice"},
+                data_indexed={"item_id": "job-1", "kind": "job"},
+            ),
+            item_snapshot={
+                "item_id": "job-1",
+                "requester": "alice",
+                "kind": "job",
+                "payload_uri": "https://example.invalid/jobs/job-1",
+                "metadata_ref": "",
+                "status": "submitted",
+                "worker": "",
+                "result_uri": "",
+                "failure_reason": "",
+                "created_at": "2026-03-24T00:00:00Z",
+                "updated_at": "2026-03-24T00:00:00Z",
+            },
+        )
+
+        item = projection.get_item("job-1")
+        assert item is not None
+        assert item.status == "submitted"
+        assert item.requester == "alice"
+
+        activity = projection.list_activity(limit=10)
+        assert len(activity) == 1
+        assert activity[0].item_id == "job-1"
+        assert activity[0].actor == "alice"
     finally:
         projection.close()

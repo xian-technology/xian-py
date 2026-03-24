@@ -292,8 +292,10 @@ the box.
 The `workflow_backend/` example set now follows the same deeper pattern for
 workflow coordination: a processor worker handles submitted items, a separate
 projector rebuilds queue and activity views from indexed events plus
-authoritative `get_item` reads, and the example API serves both on-chain and
-projected workflow views.
+authoritative decoded `get_item` reads, and the example API serves both
+on-chain and projected workflow views. The admin bootstrap also tops up
+configured workers with native balance by default so the documented processor
+flow can actually claim and complete items in local/reference networks.
 
 ## Structured Errors
 

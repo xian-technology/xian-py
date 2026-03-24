@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from decimal import Decimal
 
 from xian_py import Xian
 
@@ -30,6 +31,19 @@ def _split_workers(raw: str | None) -> list[str]:
     if not raw:
         return []
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _as_decimal(value: object) -> Decimal:
+    if value is None:
+        return Decimal("0")
+    return Decimal(str(value))
+
+
+def _decimal_to_string(value: Decimal) -> str:
+    normalized = value.normalize()
+    if normalized == normalized.to_integral():
+        return format(normalized.quantize(Decimal("1")), "f")
+    return format(normalized, "f").rstrip("0").rstrip(".")
 
 
 def main() -> None:
@@ -82,6 +96,33 @@ def main() -> None:
                     f"add worker {worker}",
                 )
                 print(f"Added worker {worker}: {result.tx_hash}")
+
+        worker_fund_target = _as_decimal(
+            os.environ.get("XIAN_WORKFLOW_WORKER_FUND_AMOUNT", "250")
+        )
+        native_token = client.token("currency")
+        if worker_fund_target > 0:
+            for worker in _split_workers(
+                os.environ.get("XIAN_WORKFLOW_WORKERS")
+            ):
+                current_balance = _as_decimal(native_token.balance_of(worker))
+                if current_balance >= worker_fund_target:
+                    continue
+                amount_to_send = worker_fund_target - current_balance
+                result = ensure_submission_succeeded(
+                    native_token.transfer(
+                        worker,
+                        _decimal_to_string(amount_to_send),
+                        mode="checktx",
+                        wait_for_tx=True,
+                    ),
+                    f"fund worker {worker}",
+                )
+                print(
+                    "Funded worker "
+                    f"{worker} to {_decimal_to_string(worker_fund_target)}: "
+                    f"{result.tx_hash}"
+                )
 
         item_id = os.environ.get("XIAN_WORKFLOW_ITEM_ID")
         if item_id:
