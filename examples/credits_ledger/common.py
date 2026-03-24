@@ -55,3 +55,10 @@ def cursor_path() -> Path:
     if env_path:
         return Path(env_path).expanduser().resolve()
     return Path(".credits-ledger-cursors.json").resolve()
+
+
+def projection_path() -> Path:
+    env_path = os.environ.get("XIAN_CREDITS_PROJECTION_PATH")
+    if env_path:
+        return Path(env_path).expanduser().resolve()
+    return Path(".credits-ledger-projection.sqlite3").resolve()

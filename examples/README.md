@@ -10,8 +10,8 @@ into ordinary software workflows.
 - `fastapi_service.py`: an API-service style integration around `XianAsync`
 - `event_worker.py`: a resumable background event consumer
 - `admin_job.py`: a simple automation / health-check style job
-- `credits_ledger/`: the first solution-pack example set, built around an
-  application-controlled credits ledger
+- `credits_ledger/`: the first solution-pack example set and the first deeper
+  reference-app slice, built around an application-controlled credits ledger
 - `registry_approval/`: the second solution-pack example set, built around a
   shared registry with proposal and approval flow
 - `workflow_backend/`: the third solution-pack example set, built around a
@@ -50,7 +50,7 @@ Credits Ledger Pack examples:
 ```bash
 uv run python examples/credits_ledger/admin_job.py
 uv run uvicorn examples.credits_ledger.api_service:app --reload --app-dir .
-uv run python examples/credits_ledger/event_worker.py
+uv run python examples/credits_ledger/projector_worker.py
 ```
 
 Registry / Approval Pack examples:

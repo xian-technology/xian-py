@@ -245,7 +245,8 @@ The repo now includes application-facing examples under
 - `admin_job.py`: a synchronous automation job that checks node, peer, perf,
   and BDS health and exits nonzero on operator-facing problems
 - `credits_ledger/`: the first solution-pack example set, showing bootstrap,
-  service, and worker patterns for an application-controlled credits ledger
+  service, projection, and worker patterns for an application-controlled
+  credits ledger
 - `registry_approval/`: the second solution-pack example set, showing
   bootstrap, proposal, approval, and worker patterns for a shared registry
 - `workflow_backend/`: the third solution-pack example set, showing
@@ -262,6 +263,11 @@ uv run uvicorn examples.fastapi_service:app --reload --app-dir .
 uv run python examples/event_worker.py
 uv run python examples/admin_job.py
 ```
+
+The `credits_ledger/` example set now goes one step further than the basic
+pack walkthrough: it includes a local SQLite projection that can be rebuilt
+from indexed BDS events and queried by the example API service for recent
+activity and summary views.
 
 ## Structured Errors
 
