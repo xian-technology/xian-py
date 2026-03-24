@@ -246,6 +246,8 @@ The repo now includes application-facing examples under
   and BDS health and exits nonzero on operator-facing problems
 - `credits_ledger/`: the first solution-pack example set, showing bootstrap,
   service, and worker patterns for an application-controlled credits ledger
+- `registry_approval/`: the second solution-pack example set, showing
+  bootstrap, proposal, approval, and worker patterns for a shared registry
 
 FastAPI example dependencies are not part of the base package install. Use
 your normal app dependency management for `fastapi`, `uvicorn`, and related
