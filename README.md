@@ -244,6 +244,8 @@ The repo now includes application-facing examples under
   with a persisted `after_id` cursor
 - `admin_job.py`: a synchronous automation job that checks node, peer, perf,
   and BDS health and exits nonzero on operator-facing problems
+- `credits_ledger/`: the first solution-pack example set, showing bootstrap,
+  service, and worker patterns for an application-controlled credits ledger
 
 FastAPI example dependencies are not part of the base package install. Use
 your normal app dependency management for `fastapi`, `uvicorn`, and related
