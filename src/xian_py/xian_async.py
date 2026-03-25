@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any, Literal, Optional
 
 import aiohttp
+from xian_contract_tools import ContractDecompiler
 from xian_runtime_types.decimal import ContractingDecimal
 from xian_runtime_types.encoding import decode
 
@@ -19,7 +20,6 @@ from xian_py.config import (
     SubmissionConfig,
     XianClientConfig,
 )
-from xian_py.decompiler import ContractDecompiler
 from xian_py.exception import (
     RpcError,
     SimulationError,

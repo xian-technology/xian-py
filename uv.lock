@@ -2033,13 +2033,24 @@ wheels = [
 ]
 
 [[package]]
+name = "xian-contract-tools"
+version = "0.1.0"
+source = { editable = "../xian-contracting/packages/xian-contract-tools" }
+dependencies = [
+    { name = "astor" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "astor", specifier = ">=0.8.1,<0.9" }]
+
+[[package]]
 name = "xian-py"
 version = "0.4.8"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
-    { name = "astor" },
     { name = "pynacl" },
+    { name = "xian-contract-tools" },
     { name = "xian-runtime-types" },
 ]
 
@@ -2066,13 +2077,13 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9.0,<4" },
-    { name = "astor", specifier = ">=0.8.1,<0.9" },
     { name = "bip-utils", marker = "extra == 'hd'", specifier = ">=2.9.3,<3" },
     { name = "eth-account", marker = "extra == 'eth'", specifier = ">=0.13.4,<0.14" },
     { name = "eth-utils", marker = "extra == 'eth'", specifier = ">=5.2.0,<6" },
     { name = "fastapi", marker = "extra == 'app'", specifier = ">=0.116.0,<0.117" },
     { name = "pynacl", specifier = ">=1.5.0,<2" },
     { name = "uvicorn", marker = "extra == 'app'", specifier = ">=0.35.0,<0.36" },
+    { name = "xian-contract-tools", editable = "../xian-contracting/packages/xian-contract-tools" },
     { name = "xian-runtime-types", editable = "../xian-contracting/packages/xian-runtime-types" },
 ]
 provides-extras = ["hd", "eth", "app"]

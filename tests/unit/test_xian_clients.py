@@ -3,6 +3,7 @@ import base64
 from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
+from xian_contract_tools import ContractDecompiler
 from xian_runtime_types.decimal import ContractingDecimal
 
 import xian_py.transaction as tr
@@ -12,7 +13,6 @@ from xian_py.config import (
     WatcherConfig,
     XianClientConfig,
 )
-from xian_py.decompiler import ContractDecompiler
 from xian_py.exception import SimulationError, TransportError
 from xian_py.models import (
     BdsStatus,
