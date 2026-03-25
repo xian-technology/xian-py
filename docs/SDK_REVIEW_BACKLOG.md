@@ -22,6 +22,10 @@
   - token clients
   - event clients
   - exact state-key clients
+- reusable projector / projection primitives:
+  - merged indexed-event payload helper
+  - shared SQLite cursor state
+  - reusable polling projector runner
 - service integration examples:
   - FastAPI service
   - background event worker

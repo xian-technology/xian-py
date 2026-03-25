@@ -3,8 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from xian_py import XianAsync
-from xian_py.models import IndexedEvent
+from xian_py import EventProjector, EventProjectorError, EventSource, XianAsync
 
 try:
     from .common import (
@@ -28,16 +27,6 @@ except ImportError:
 EVENT_NAMES = ("Issue", "Transfer", "Burn")
 
 
-def _event_sort_key(event: IndexedEvent) -> tuple[int, int, int]:
-    if event.id is None:
-        raise ValueError("Projection requires event IDs")
-    return (
-        event.id,
-        event.tx_index or 0,
-        event.event_index or 0,
-    )
-
-
 async def sync_projection(
     client: XianAsync,
     projection: CreditsLedgerProjection,
@@ -45,50 +34,53 @@ async def sync_projection(
     batch_limit: int | None = None,
     poll_interval_seconds: float | None = None,
 ) -> None:
-    watcher_config = client.config.watcher
-    batch_limit = batch_limit or watcher_config.batch_limit
-    poll_interval_seconds = (
-        poll_interval_seconds or watcher_config.poll_interval_seconds
+    projector = EventProjector[None](
+        client=client,
+        event_sources=[
+            EventSource(
+                contract_name(),
+                event_name,
+                cursor_key=event_name,
+            )
+            for event_name in EVENT_NAMES
+        ],
+        get_cursor=lambda event_source: projection.get_cursor(event_source.key),
+        apply_event=lambda event, _hydrated: projection.apply_event(event),
+        batch_limit=batch_limit,
+        poll_interval_seconds=poll_interval_seconds,
     )
 
-    if batch_limit <= 0:
-        raise ValueError("batch_limit must be > 0")
-    if poll_interval_seconds <= 0:
-        raise ValueError("poll_interval_seconds must be > 0")
-
-    while True:
-        batches = await asyncio.gather(
-            *(
-                client.list_events(
-                    contract_name(),
-                    event_name,
-                    limit=batch_limit,
-                    after_id=projection.get_cursor(event_name),
-                )
-                for event_name in EVENT_NAMES
+    async def on_applied(event, applied: bool) -> None:
+        print(
+            json.dumps(
+                {
+                    "applied": applied,
+                    "event": event.event,
+                    "id": event.id,
+                    "tx_hash": event.tx_hash,
+                },
+                sort_keys=True,
             )
         )
-        pending = sorted(
-            [event for batch in batches for event in batch],
-            key=_event_sort_key,
-        )
-        if not pending:
-            await asyncio.sleep(poll_interval_seconds)
-            continue
 
-        for event in pending:
-            applied = projection.apply_event(event)
-            print(
-                json.dumps(
-                    {
-                        "applied": applied,
-                        "event": event.event,
-                        "id": event.id,
-                        "tx_hash": event.tx_hash,
-                    },
-                    sort_keys=True,
-                )
+    async def on_error(exc: EventProjectorError) -> None:
+        print(
+            json.dumps(
+                {
+                    "error": str(exc.cause),
+                    "phase": exc.phase,
+                    "event": exc.event.event,
+                    "id": exc.event.id,
+                    "tx_hash": exc.event.tx_hash,
+                },
+                sort_keys=True,
             )
+        )
+
+    await projector.run_forever(
+        on_applied=on_applied,
+        on_error=on_error,
+    )
 
 
 async def main() -> None:

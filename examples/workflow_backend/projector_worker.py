@@ -4,8 +4,13 @@ import asyncio
 import json
 from typing import Any
 
-from xian_py import XianAsync
-from xian_py.models import IndexedEvent
+from xian_py import (
+    EventProjector,
+    EventProjectorError,
+    EventSource,
+    XianAsync,
+    merged_event_payload,
+)
 
 try:
     from .common import (
@@ -35,30 +40,11 @@ EVENT_NAMES = (
 )
 
 
-def _event_payload(event: IndexedEvent) -> dict[str, Any]:
-    payload: dict[str, Any] = {}
-    if event.data_indexed:
-        payload.update(event.data_indexed)
-    if event.data:
-        payload.update(event.data)
-    return payload
-
-
-def _event_sort_key(event: IndexedEvent) -> tuple[int, int, int]:
-    if event.id is None:
-        raise ValueError("Projection requires event IDs")
-    return (
-        event.id,
-        event.tx_index or 0,
-        event.event_index or 0,
-    )
-
-
 async def hydrate_item_snapshot(
     client: XianAsync,
-    event: IndexedEvent,
+    event,
 ) -> dict[str, Any] | None:
-    data = _event_payload(event)
+    data = merged_event_payload(event)
     item_id = data.get("item_id")
     if item_id is None:
         return None
@@ -75,72 +61,59 @@ async def sync_projection(
     batch_limit: int | None = None,
     poll_interval_seconds: float | None = None,
 ) -> None:
-    watcher_config = client.config.watcher
-    batch_limit = batch_limit or watcher_config.batch_limit
-    poll_interval_seconds = (
-        poll_interval_seconds or watcher_config.poll_interval_seconds
+    projector = EventProjector[dict[str, Any] | None](
+        client=client,
+        event_sources=[
+            EventSource(
+                workflow_contract_name(),
+                event_name,
+                cursor_key=event_name,
+            )
+            for event_name in EVENT_NAMES
+        ],
+        get_cursor=lambda event_source: projection.get_cursor(event_source.key),
+        hydrate_event=lambda event: hydrate_item_snapshot(client, event),
+        apply_event=lambda event, item_snapshot: projection.apply_event(
+            event,
+            item_snapshot=item_snapshot,
+        ),
+        batch_limit=batch_limit,
+        poll_interval_seconds=poll_interval_seconds,
     )
 
-    if batch_limit <= 0:
-        raise ValueError("batch_limit must be > 0")
-    if poll_interval_seconds <= 0:
-        raise ValueError("poll_interval_seconds must be > 0")
-
-    while True:
-        batches = await asyncio.gather(
-            *(
-                client.list_events(
-                    workflow_contract_name(),
-                    event_name,
-                    limit=batch_limit,
-                    after_id=projection.get_cursor(event_name),
-                )
-                for event_name in EVENT_NAMES
+    async def on_applied(event, applied: bool) -> None:
+        data = merged_event_payload(event)
+        print(
+            json.dumps(
+                {
+                    "applied": applied,
+                    "event": event.event,
+                    "id": event.id,
+                    "tx_hash": event.tx_hash,
+                    "data": data,
+                },
+                sort_keys=True,
             )
         )
-        pending = sorted(
-            [event for batch in batches for event in batch],
-            key=_event_sort_key,
-        )
-        if not pending:
-            await asyncio.sleep(poll_interval_seconds)
-            continue
 
-        hydration_failed = False
-        for event in pending:
-            try:
-                item_snapshot = await hydrate_item_snapshot(client, event)
-            except Exception as exc:
-                print(
-                    json.dumps(
-                        {
-                            "hydration_error": str(exc),
-                            "event": event.event,
-                            "id": event.id,
-                            "tx_hash": event.tx_hash,
-                        },
-                        sort_keys=True,
-                    )
-                )
-                hydration_failed = True
-                break
-
-            applied = projection.apply_event(event, item_snapshot=item_snapshot)
-            print(
-                json.dumps(
-                    {
-                        "applied": applied,
-                        "event": event.event,
-                        "id": event.id,
-                        "tx_hash": event.tx_hash,
-                        "data": _event_payload(event),
-                    },
-                    sort_keys=True,
-                )
+    async def on_error(exc: EventProjectorError) -> None:
+        print(
+            json.dumps(
+                {
+                    "error": str(exc.cause),
+                    "phase": exc.phase,
+                    "event": exc.event.event,
+                    "id": exc.event.id,
+                    "tx_hash": exc.event.tx_hash,
+                },
+                sort_keys=True,
             )
+        )
 
-        if hydration_failed:
-            await asyncio.sleep(poll_interval_seconds)
+    await projector.run_forever(
+        on_applied=on_applied,
+        on_error=on_error,
+    )
 
 
 async def main() -> None:

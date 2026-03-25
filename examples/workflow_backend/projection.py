@@ -7,15 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from xian_py.models import IndexedEvent
-
-
-def _event_payload(event: IndexedEvent) -> dict[str, Any]:
-    payload: dict[str, Any] = {}
-    if event.data_indexed:
-        payload.update(event.data_indexed)
-    if event.data:
-        payload.update(event.data)
-    return payload
+from xian_py.projectors import SQLiteProjectionState, merged_event_payload
 
 
 @dataclass(frozen=True)
@@ -66,6 +58,7 @@ class WorkflowProjection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.path)
         self.connection.row_factory = sqlite3.Row
+        self.state = SQLiteProjectionState(self.connection)
         self._init_schema()
 
     def close(self) -> None:
@@ -74,14 +67,7 @@ class WorkflowProjection:
     def _init_schema(self) -> None:
         with self.connection:
             self.connection.execute("PRAGMA journal_mode=WAL")
-            self.connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS projection_state (
-                    name TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                )
-                """
-            )
+            self.state.init_schema()
             self.connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS workflow_items (
@@ -128,19 +114,13 @@ class WorkflowProjection:
             )
 
     def get_cursor(self, event_name: str) -> int:
-        row = self.connection.execute(
-            "SELECT value FROM projection_state WHERE name = ?",
-            (f"cursor:{event_name}",),
-        ).fetchone()
-        return int(row["value"]) if row is not None else 0
+        return self.state.get_int(f"cursor:{event_name}")
 
     def get_cursors(self) -> dict[str, int]:
-        rows = self.connection.execute(
-            "SELECT name, value FROM projection_state WHERE name LIKE 'cursor:%'"
-        ).fetchall()
-        return {
-            str(row["name"]).split(":", 1)[1]: int(row["value"]) for row in rows
-        }
+        return self.state.list_ints(
+            prefix="cursor:",
+            strip_prefix="cursor:",
+        )
 
     def apply_event(
         self,
@@ -161,7 +141,7 @@ class WorkflowProjection:
             self._set_cursor(event.event, event.id)
             return False
 
-        data = _event_payload(event)
+        data = merged_event_payload(event)
         actor = data.get("worker") or data.get("requester") or data.get("actor")
         item_id = data.get("item_id")
 
@@ -363,14 +343,7 @@ class WorkflowProjection:
         )
 
     def _set_cursor(self, event_name: str, event_id: int) -> None:
-        self.connection.execute(
-            """
-            INSERT INTO projection_state (name, value)
-            VALUES (?, ?)
-            ON CONFLICT(name) DO UPDATE SET value = excluded.value
-            """,
-            (f"cursor:{event_name}", str(event_id)),
-        )
+        self.state.set_int(f"cursor:{event_name}", event_id)
 
     def _status_count(self, status: str) -> int:
         return int(

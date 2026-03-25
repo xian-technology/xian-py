@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from xian_py.models import IndexedEvent
+from xian_py.projectors import SQLiteProjectionState, merged_event_payload
 
 ZERO = Decimal("0")
 
@@ -30,15 +31,6 @@ def _decimal_to_string(value: Decimal) -> str:
     if "." in normalized:
         normalized = normalized.rstrip("0").rstrip(".")
     return normalized or "0"
-
-
-def _event_payload(event: IndexedEvent) -> dict[str, Any]:
-    payload: dict[str, Any] = {}
-    if event.data_indexed:
-        payload.update(event.data_indexed)
-    if event.data:
-        payload.update(event.data)
-    return payload
 
 
 @dataclass(frozen=True)
@@ -85,6 +77,7 @@ class CreditsLedgerProjection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.path)
         self.connection.row_factory = sqlite3.Row
+        self.state = SQLiteProjectionState(self.connection)
         self._init_schema()
 
     def close(self) -> None:
@@ -93,14 +86,7 @@ class CreditsLedgerProjection:
     def _init_schema(self) -> None:
         with self.connection:
             self.connection.execute("PRAGMA journal_mode=WAL")
-            self.connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS projection_state (
-                    name TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                )
-                """
-            )
+            self.state.init_schema()
             self.connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS ledger_summary (
@@ -179,19 +165,13 @@ class CreditsLedgerProjection:
             )
 
     def get_cursor(self, event_name: str) -> int:
-        row = self.connection.execute(
-            "SELECT value FROM projection_state WHERE name = ?",
-            (f"cursor:{event_name}",),
-        ).fetchone()
-        return int(row["value"]) if row is not None else 0
+        return self.state.get_int(f"cursor:{event_name}")
 
     def get_cursors(self) -> dict[str, int]:
-        rows = self.connection.execute(
-            "SELECT name, value FROM projection_state WHERE name LIKE 'cursor:%'"
-        ).fetchall()
-        return {
-            str(row["name"]).split(":", 1)[1]: int(row["value"]) for row in rows
-        }
+        return self.state.list_ints(
+            prefix="cursor:",
+            strip_prefix="cursor:",
+        )
 
     def apply_event(self, event: IndexedEvent) -> bool:
         if event.id is None:
@@ -205,7 +185,7 @@ class CreditsLedgerProjection:
             self._set_cursor(event.event or "", event.id)
             return False
 
-        data = _event_payload(event)
+        data = merged_event_payload(event)
         amount = _to_decimal(data.get("amount"))
         account_from = data.get("from")
         account_to = data.get("to")
@@ -540,11 +520,4 @@ class CreditsLedgerProjection:
     def _set_cursor(self, event_name: str, event_id: int) -> None:
         if not event_name:
             return
-        self.connection.execute(
-            """
-            INSERT INTO projection_state (name, value)
-            VALUES (?, ?)
-            ON CONFLICT(name) DO UPDATE SET value = excluded.value
-            """,
-            (f"cursor:{event_name}", str(event_id)),
-        )
+        self.state.set_int(f"cursor:{event_name}", event_id)

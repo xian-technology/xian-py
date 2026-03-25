@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from xian_py.models import IndexedEvent
+from xian_py.projectors import SQLiteProjectionState, merged_event_payload
 
 
 def _bool_to_int(value: bool) -> int:
@@ -19,15 +20,6 @@ def _int_to_bool(value: Any) -> bool:
 
 def _as_int(value: Any) -> int:
     return int(value) if value is not None else 0
-
-
-def _event_payload(event: IndexedEvent) -> dict[str, Any]:
-    payload: dict[str, Any] = {}
-    if event.data_indexed:
-        payload.update(event.data_indexed)
-    if event.data:
-        payload.update(event.data)
-    return payload
 
 
 @dataclass(frozen=True)
@@ -114,6 +106,7 @@ class RegistryApprovalProjection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.path)
         self.connection.row_factory = sqlite3.Row
+        self.state = SQLiteProjectionState(self.connection)
         self._init_schema()
 
     def close(self) -> None:
@@ -122,14 +115,7 @@ class RegistryApprovalProjection:
     def _init_schema(self) -> None:
         with self.connection:
             self.connection.execute("PRAGMA journal_mode=WAL")
-            self.connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS projection_state (
-                    name TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                )
-                """
-            )
+            self.state.init_schema()
             self.connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS proposal_projection (
@@ -224,20 +210,13 @@ class RegistryApprovalProjection:
             )
 
     def get_cursor(self, contract: str, event_name: str) -> int:
-        row = self.connection.execute(
-            "SELECT value FROM projection_state WHERE name = ?",
-            (f"cursor:{contract}:{event_name}",),
-        ).fetchone()
-        return int(row["value"]) if row is not None else 0
+        return self.state.get_int(f"cursor:{contract}:{event_name}")
 
     def get_cursors(self) -> dict[str, int]:
-        rows = self.connection.execute(
-            "SELECT name, value FROM projection_state WHERE name LIKE 'cursor:%'"
-        ).fetchall()
-        return {
-            str(row["name"]).split("cursor:", 1)[1]: int(row["value"])
-            for row in rows
-        }
+        return self.state.list_ints(
+            prefix="cursor:",
+            strip_prefix="cursor:",
+        )
 
     def apply_event(
         self,
@@ -259,7 +238,7 @@ class RegistryApprovalProjection:
             self._set_cursor(event.contract or "", event.event, event.id)
             return False
 
-        data = _event_payload(event)
+        data = merged_event_payload(event)
         proposal_id = data.get("proposal_id")
         record_id = data.get("record_id")
         actor = (
@@ -663,14 +642,7 @@ class RegistryApprovalProjection:
     def _set_cursor(
         self, contract: str, event_name: str, event_id: int
     ) -> None:
-        self.connection.execute(
-            """
-            INSERT INTO projection_state (name, value)
-            VALUES (?, ?)
-            ON CONFLICT(name) DO UPDATE SET value = excluded.value
-            """,
-            (f"cursor:{contract}:{event_name}", str(event_id)),
-        )
+        self.state.set_int(f"cursor:{contract}:{event_name}", event_id)
 
     @staticmethod
     def _proposal_from_row(row: sqlite3.Row) -> ProjectedProposal:

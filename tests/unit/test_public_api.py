@@ -1,12 +1,16 @@
 from xian_py import (
     BdsStatus,
+    EventProjector,
+    EventSource,
     PerformanceStatus,
+    SQLiteProjectionState,
     TransactionReceipt,
     TransactionSubmission,
     Wallet,
     Xian,
     XianAsync,
     XianException,
+    merged_event_payload,
     run_sync,
     to_contract_time,
 )
@@ -17,10 +21,14 @@ def test_public_exports_are_available() -> None:
     assert Xian is not None
     assert XianAsync is not None
     assert BdsStatus is not None
+    assert EventProjector is not None
+    assert EventSource is not None
     assert PerformanceStatus is not None
+    assert SQLiteProjectionState is not None
     assert TransactionReceipt is not None
     assert TransactionSubmission is not None
     assert XianException is not None
+    assert merged_event_payload is not None
     assert run_sync is not None
     assert to_contract_time is not None
 

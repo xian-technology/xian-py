@@ -243,6 +243,26 @@ transfers = client.events("currency", "Transfer")
 recent = transfers.list(after_id=500, limit=50)
 ```
 
+## Reusable Projector Primitives
+
+The SDK now includes a thin reusable layer for event-driven read models and
+projector workers:
+
+- `merged_event_payload(event)`: merges BDS `data_indexed` and `data`
+- `SQLiteProjectionState`: persists integer projection cursors in SQLite
+- `EventSource`: describes one indexed event stream
+- `EventProjector`: polls one or more event streams, orders them
+  deterministically, optionally hydrates state, and calls your apply handler
+- `EventProjectorError`: wraps hydration or apply failures with the failing
+  event context
+
+These primitives are intentionally small. They own the repetitive plumbing,
+while application code still owns the domain-specific tables, snapshots, and
+apply logic.
+
+The three deeper reference apps now build on this shared layer instead of each
+carrying their own event-loop and cursor implementation.
+
 ## Integration Examples
 
 The repo now includes application-facing examples under

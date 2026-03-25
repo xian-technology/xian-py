@@ -37,6 +37,14 @@ from xian_py.models import (
     TransactionReceipt,
     TransactionSubmission,
 )
+from xian_py.projectors import (
+    EventProjector,
+    EventProjectorError,
+    EventSource,
+    SQLiteProjectionState,
+    indexed_event_sort_key,
+    merged_event_payload,
+)
 from xian_py.run_sync import run_sync
 from xian_py.wallet import Wallet
 from xian_py.xian import Xian
@@ -51,6 +59,9 @@ __all__ = [
     "BdsStatus",
     "ContractClient",
     "EventClient",
+    "EventProjector",
+    "EventProjectorError",
+    "EventSource",
     "IndexedBlock",
     "IndexedEvent",
     "IndexedTransaction",
@@ -59,6 +70,7 @@ __all__ = [
     "RpcError",
     "RetryPolicy",
     "SimulationError",
+    "SQLiteProjectionState",
     "StateEntry",
     "SubmissionConfig",
     "TransactionError",
@@ -75,6 +87,8 @@ __all__ = [
     "TokenClient",
     "Wallet",
     "XianException",
+    "indexed_event_sort_key",
+    "merged_event_payload",
     "run_sync",
     "to_contract_time",
 ]
