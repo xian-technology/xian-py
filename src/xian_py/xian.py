@@ -270,8 +270,11 @@ class Xian:
             self._async_client.get_state(contract, variable, *keys)
         )
 
-    def get_contract(self, contract: str, clean: bool = False) -> None | str:
-        return self._run_async(self._async_client.get_contract(contract, clean))
+    def get_contract(self, contract: str) -> None | str:
+        return self._run_async(self._async_client.get_contract(contract))
+
+    def get_contract_code(self, contract: str) -> None | str:
+        return self._run_async(self._async_client.get_contract_code(contract))
 
     def get_approved_amount(
         self,

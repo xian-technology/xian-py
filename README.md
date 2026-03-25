@@ -63,6 +63,7 @@ asyncio.run(main())
 ## What It Can Do
 
 - read current state from ABCI query paths and simulate readonly contract calls
+- retrieve the preferred contract source and the canonical runtime code separately
 - create, sign, and broadcast transactions with explicit `async`, `checktx`,
   and `commit` modes
 - wait for final receipts and work with typed transaction, event, block, and

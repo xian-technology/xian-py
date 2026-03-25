@@ -45,7 +45,6 @@
   each call
 - revisit the validator helper in `validator.py`; it should either consume the
   authoritative `xian-contracting` standard rules or move out of the SDK
-- replace the remaining `astor` dependency in the decompiler with a stdlib
   `ast.unparse` based path if possible
 - clean up naming and ergonomics in wallet helpers, especially the Ethereum
   helper where `public_key` is currently an address

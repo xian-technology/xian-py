@@ -5,7 +5,6 @@ from decimal import Decimal
 from typing import Any, Literal, Optional
 
 import aiohttp
-from xian_contract_tools import ContractDecompiler
 from xian_runtime_types.decimal import ContractingDecimal
 from xian_runtime_types.encoding import decode
 
@@ -643,10 +642,8 @@ class XianAsync:
             path = f"{path}:{':'.join(keys)}"
         return await self._abci_query_value(path)
 
-    async def get_contract(
-        self, contract: str, clean: bool = False
-    ) -> None | str:
-        """Retrieve contract source and decode it."""
+    async def get_contract(self, contract: str) -> None | str:
+        """Retrieve the preferred contract source for a contract."""
         response = await tr.abci_query_async(
             self.node_url,
             f"/contract/{contract}",
@@ -657,10 +654,21 @@ class XianAsync:
         if byte_string is None or byte_string == "AA==":
             return None
 
-        code = tr.decode_str(byte_string)
-        if clean:
-            return ContractDecompiler().decompile(code)
-        return code
+        return tr.decode_str(byte_string)
+
+    async def get_contract_code(self, contract: str) -> None | str:
+        """Retrieve the canonical runtime code for a contract."""
+        response = await tr.abci_query_async(
+            self.node_url,
+            f"/contract_code/{contract}",
+            session=self.session,
+        )
+        byte_string = response["result"]["response"]["value"]
+
+        if byte_string is None or byte_string == "AA==":
+            return None
+
+        return tr.decode_str(byte_string)
 
     async def get_approved_amount(
         self,

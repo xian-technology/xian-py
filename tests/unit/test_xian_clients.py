@@ -3,7 +3,6 @@ import base64
 from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
-from xian_contract_tools import ContractDecompiler
 from xian_runtime_types.decimal import ContractingDecimal
 
 import xian_py.transaction as tr
@@ -622,42 +621,36 @@ def test_xian_async_approve_preserves_decimal_precision() -> None:
     )
 
 
-def test_contract_decompiler_supports_python_314_ast() -> None:
-    source = """
-balances = Hash(default_value=0, contract='con_test', name='balances')
-
-@__export('con_test')
-def foo() -> str:
-    return decimal('1.25')
-"""
-
-    output = ContractDecompiler().decompile(source)
-
-    assert "def foo() ->str:" in output or "def foo() -> str:" in output
-    assert (
-        'return decimal("1.25")' in output or "return decimal('1.25')" in output
-    )
-
-
-def test_xian_async_get_contract_clean_uses_decompiler() -> None:
+def test_xian_async_get_contract_returns_display_source() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse(
-                {"result": {"response": {"value": _b64("compiled-code")}}},
+                {"result": {"response": {"value": _b64("display-code")}}},
             )
         ]
     )
 
-    with patch(
-        "xian_py.xian_async.ContractDecompiler.decompile",
-        return_value="clean-code",
-    ) as decompile:
-        contract = asyncio.run(client.get_contract("currency", clean=True))
+    contract = asyncio.run(client.get_contract("currency"))
 
-    decompile.assert_called_once_with("compiled-code")
-    assert contract == "clean-code"
+    assert contract == "display-code"
+
+
+def test_xian_async_get_contract_code_returns_runtime_code() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client._session = _FakeSession(
+        post_responses=[
+            _FakeResponse(
+                {"result": {"response": {"value": _b64("runtime-code")}}},
+            )
+        ]
+    )
+
+    contract = asyncio.run(client.get_contract_code("currency"))
+
+    assert contract == "runtime-code"
 
 
 def test_xian_async_get_approved_amount_falls_back_to_balances() -> None:

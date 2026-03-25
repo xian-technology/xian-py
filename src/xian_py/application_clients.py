@@ -224,8 +224,11 @@ class AsyncContractClient:
             min_stamp_headroom=min_stamp_headroom,
         )
 
-    async def get_source(self, *, clean: bool = False) -> str | None:
-        return await self.client.get_contract(self.name, clean=clean)
+    async def get_source(self) -> str | None:
+        return await self.client.get_contract(self.name)
+
+    async def get_code(self) -> str | None:
+        return await self.client.get_contract_code(self.name)
 
     def events(self, event: str) -> AsyncEventClient:
         return AsyncEventClient(self.client, self.name, event)
@@ -299,8 +302,11 @@ class ContractClient:
             min_stamp_headroom=min_stamp_headroom,
         )
 
-    def get_source(self, *, clean: bool = False) -> str | None:
-        return self.client.get_contract(self.name, clean=clean)
+    def get_source(self) -> str | None:
+        return self.client.get_contract(self.name)
+
+    def get_code(self) -> str | None:
+        return self.client.get_contract_code(self.name)
 
     def events(self, event: str) -> EventClient:
         return EventClient(self.client, self.name, event)
