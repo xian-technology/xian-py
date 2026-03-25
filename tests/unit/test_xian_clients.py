@@ -527,8 +527,12 @@ def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
     assert asyncio.run(client.get_state("currency", "balances", "alice")) == {
         "owner": "alice",
     }
-    assert asyncio.run(client.get_state("currency", "balances", "alice")) is True
-    assert asyncio.run(client.get_state("currency", "balances", "alice")) is True
+    assert (
+        asyncio.run(client.get_state("currency", "balances", "alice")) is True
+    )
+    assert (
+        asyncio.run(client.get_state("currency", "balances", "alice")) is True
+    )
 
 
 def test_xian_async_call_decodes_structured_return_value() -> None:

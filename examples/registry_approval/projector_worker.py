@@ -67,9 +67,7 @@ async def hydrate_projection_state(
         )
 
     if event.event in RECORD_EVENTS and data.get("record_id") is not None:
-        record_snapshot = await client.contract(
-            registry_contract_name()
-        ).call(
+        record_snapshot = await client.contract(registry_contract_name()).call(
             "get_record",
             record_id=str(data["record_id"]),
         )
@@ -101,12 +99,8 @@ async def sync_projection(
         hydrate_event=lambda event: hydrate_projection_state(client, event),
         apply_event=lambda event, hydrated: projection.apply_event(
             event,
-            proposal_snapshot=(
-                hydrated[0] if hydrated is not None else None
-            ),
-            record_snapshot=(
-                hydrated[1] if hydrated is not None else None
-            ),
+            proposal_snapshot=(hydrated[0] if hydrated is not None else None),
+            record_snapshot=(hydrated[1] if hydrated is not None else None),
         ),
         batch_limit=batch_limit,
         poll_interval_seconds=poll_interval_seconds,

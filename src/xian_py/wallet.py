@@ -1,8 +1,11 @@
 import secrets
 from functools import lru_cache
 
-from nacl.exceptions import BadSignatureError
-from nacl.signing import SigningKey, VerifyKey
+from xian_accounts import (
+    Ed25519Account,
+    is_valid_ed25519_key,
+    verify_message,
+)
 
 try:
     from eth_account import Account
@@ -48,61 +51,37 @@ def _load_bip_utils() -> dict[str, object]:
 
 # TODO: Unify this function with the method with the same name from 'Wallet' class
 def verify_msg(public_key: str, msg: str, signature: str) -> bool:
-    """Verify signed message by public key"""
-    signature = bytes.fromhex(signature)
-    pk = bytes.fromhex(public_key)
-    msg = msg.encode()
-
-    try:
-        VerifyKey(pk).verify(msg, signature)
-    except BadSignatureError:
-        return False
-    return True
+    """Verify signed message by public key."""
+    return verify_message(public_key, msg, signature)
 
 
 class Wallet:
     def __init__(self, private_key: str = None):
         if private_key:
-            private_key = bytes.fromhex(private_key)
+            self._account = Ed25519Account(private_key)
         else:
-            private_key = secrets.token_bytes(32)
-
-        self.sk = SigningKey(seed=private_key)
-        self.vk = self.sk.verify_key
+            self._account = Ed25519Account.generate()
 
     @property
     def private_key(self) -> str:
-        return str(self.sk.encode().hex())
+        return self._account.private_key
 
     @property
     def public_key(self) -> str:
-        return str(self.vk.encode().hex())
+        return self._account.public_key
 
     def sign_msg(self, msg: str):
-        """Sign message with private key"""
-        sig = self.sk.sign(msg.encode())
-        return sig.signature.hex()
+        """Sign message with private key."""
+        return self._account.sign_message(msg)
 
     def verify_msg(self, msg: str, signature: str) -> bool:
-        """Verify signed message"""
-        signature = bytes.fromhex(signature)
-        msg = msg.encode()
-        try:
-            self.vk.verify(msg, signature)
-        except BadSignatureError:
-            return False
-        return True
+        """Verify signed message."""
+        return self._account.verify_message(msg, signature)
 
     @staticmethod
     def is_valid_key(key: str) -> bool:
-        """Check if the given key (public or private) is valid"""
-        if not len(key) == 64:
-            return False
-        try:
-            int(key, 16)
-        except Exception:
-            return False
-        return True
+        """Check if the given key (public or private) is valid."""
+        return is_valid_ed25519_key(key)
 
 
 class EthereumWallet:

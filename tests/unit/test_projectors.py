@@ -39,7 +39,9 @@ def _event(
 
 
 class FakeEventClient:
-    def __init__(self, batches: dict[tuple[str, str], list[IndexedEvent]]) -> None:
+    def __init__(
+        self, batches: dict[tuple[str, str], list[IndexedEvent]]
+    ) -> None:
         self.batches = batches
         self.calls: list[tuple[str, str, int, int]] = []
         self.config = SimpleNamespace(
@@ -62,7 +64,9 @@ class FakeEventClient:
 
 
 class TestProjectorHelpers(unittest.TestCase):
-    def test_merged_event_payload_prefers_unindexed_data_for_duplicates(self) -> None:
+    def test_merged_event_payload_prefers_unindexed_data_for_duplicates(
+        self,
+    ) -> None:
         event = _event(
             1,
             "Transfer",
@@ -122,7 +126,12 @@ class TestEventProjector(unittest.IsolatedAsyncioTestCase):
             event: IndexedEvent,
             hydrated: dict[str, str] | None,
         ) -> bool:
-            applied.append((int(event.id), None if hydrated is None else hydrated["hydrated"]))
+            applied.append(
+                (
+                    int(event.id),
+                    None if hydrated is None else hydrated["hydrated"],
+                )
+            )
             return True
 
         async def on_applied(event: IndexedEvent, applied_ok: bool) -> None:
