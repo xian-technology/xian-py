@@ -5,18 +5,26 @@
 This folder contains application-facing examples for integrating `xian-py`
 into ordinary software workflows.
 
-## Files
+## Example Groups
 
-- `fastapi_service.py`: an API-service style integration around `XianAsync`
-- `event_worker.py`: a resumable background event consumer
-- `admin_job.py`: a simple automation / health-check style job
-- `credits_ledger/`: the first solution-pack example set and the first deeper
-  reference-app slice, built around an application-controlled credits ledger
-- `registry_approval/`: the second solution-pack example set and the second
-  deeper reference-app slice, built around a shared registry with proposal and
-  approval flow
-- `workflow_backend/`: the third solution-pack example set and the third
-  deeper reference-app slice, built around a shared job-style workflow backend
+- Basic integration examples:
+  - `fastapi_service.py`: an API-service style integration around `XianAsync`
+  - `event_worker.py`: a resumable background event consumer
+  - `admin_job.py`: a simple automation / health-check style job
+- Reference apps:
+  - `credits_ledger/`: application-controlled credits ledger with indexed event
+    projection
+  - `registry_approval/`: shared registry with proposal/approval workflow and
+    projected read model
+  - `workflow_backend/`: shared workflow/state-machine backend with processor
+    and projector workers
+
+## What These Examples Demonstrate
+
+- how to structure a FastAPI service around `xian-py`
+- how to run resumable indexed-event workers
+- how to build a local SQLite projection from BDS-backed events
+- how to combine authoritative on-chain reads with projected application views
 
 ## Notes
 
@@ -25,6 +33,7 @@ into ordinary software workflows.
   `uv sync --group dev --extra app`.
 - All examples use environment variables for node URL, chain ID, and optional
   wallet keys so they can be adapted without editing the files.
+- The projector-based examples assume a BDS-enabled node.
 
 ## Typical Runs
 

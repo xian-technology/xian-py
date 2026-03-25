@@ -60,15 +60,42 @@ asyncio.run(main())
 - `tests/`: SDK transport, decoding, and integration-shape coverage
 - `docs/`: repo-local notes such as compatibility and backlog items
 
-## Core Capabilities
+## What It Can Do
 
-- sync and async clients: `Xian` and `XianAsync`
-- wallet and signing helpers
-- typed transaction submission and receipt models
-- readonly contract calls and state queries
-- block, event, and indexed-history watchers
-- thin helper clients for contracts, tokens, events, and state keys
-- reusable projector primitives for SQLite-backed read models
+- read current state from ABCI query paths and simulate readonly contract calls
+- create, sign, and broadcast transactions with explicit `async`, `checktx`,
+  and `commit` modes
+- wait for final receipts and work with typed transaction, event, block, and
+  status models
+- query indexed blocks, transactions, events, and state-history from BDS-backed
+  nodes
+- watch blocks and indexed events with resumable cursors
+- use thin helper clients for common patterns such as contract, token, event,
+  and state-key access
+- build SQLite-backed read models with the shared projector primitives
+
+Indexed event/history queries and projector loops require a BDS-enabled node.
+
+## Core API Layers
+
+- `Xian` and `XianAsync`: the primary sync and async clients
+- `client.contract(...)`, `client.token(...)`, `client.events(...)`,
+  `client.state_key(...)`: thin helper clients for common application patterns
+- typed models and error classes: predictable result handling instead of raw
+  dictionaries everywhere
+- `EventProjector`, `EventSource`, `SQLiteProjectionState`:
+  reusable polling/order/checkpoint primitives for local projections
+- `Wallet`: Ed25519 signing helper for Xian transactions
+
+## Typical Use Cases
+
+- backend APIs that read state and submit transactions
+- background workers that react to indexed events
+- automation jobs that reconcile or administer contracts
+- local projections that mirror chain activity into an application-owned SQLite
+  read model
+- operator or integration scripts that need a clean Python surface over node
+  RPCs and indexed queries
 
 Optional extras:
 
