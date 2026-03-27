@@ -16,6 +16,14 @@ except ImportError:
     ETHEREUM_SUPPORT = False
 
 
+def _require_ethereum_support() -> None:
+    if not ETHEREUM_SUPPORT:
+        raise ImportError(
+            "Ethereum wallet helpers require the optional 'eth' dependency "
+            "group; install with 'pip install xian-py[eth]'"
+        )
+
+
 @lru_cache(maxsize=1)
 def _load_bip_utils() -> dict[str, object]:
     try:
@@ -86,6 +94,7 @@ class Wallet:
 
 class EthereumWallet:
     def __init__(self, private_key: str = None):
+        _require_ethereum_support()
         if private_key:
             private_key = bytes.fromhex(private_key)
         else:
@@ -97,10 +106,15 @@ class EthereumWallet:
     def private_key(self) -> str:
         return str(self.account.key.hex())
 
-    # TODO: This isn't the public key. This actually is the address and address ≠ public key on Ethereum
+    @property
+    def address(self) -> str:
+        return str(self.account.address)
+
+    # Compatibility alias for older code paths that treated the Ethereum
+    # address as the account identifier.
     @property
     def public_key(self) -> str:
-        return str(self.account.address)
+        return self.address
 
     def sign_msg(self, msg: str):
         """Sign message with private key"""
@@ -115,7 +129,7 @@ class EthereumWallet:
             recovered_address = Account.recover_message(
                 message, signature=bytes.fromhex(signature)
             )
-            return recovered_address.lower() == self.public_key.lower()
+            return recovered_address.lower() == self.address.lower()
         except Exception:
             return False
 

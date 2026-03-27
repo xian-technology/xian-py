@@ -40,6 +40,20 @@ from xian_py.models import (
 from xian_py.wallet import Wallet
 
 
+def _validate_xian_wallet(wallet: Any) -> None:
+    public_key = getattr(wallet, "public_key", None)
+    sign_msg = getattr(wallet, "sign_msg", None)
+    if (
+        not callable(sign_msg)
+        or not isinstance(public_key, str)
+        or not Wallet.is_valid_key(public_key)
+    ):
+        raise TypeError(
+            "wallet must expose an Ed25519 Xian account; use xian_py.Wallet "
+            "or an equivalent signer with an Ed25519 public_key"
+        )
+
+
 class XianAsync:
     """Async version of the Xian class for non-blocking operations."""
 
@@ -60,6 +74,7 @@ class XianAsync:
         self.node_url = node_url.rstrip("/")
         self.chain_id = chain_id
         self.wallet = wallet if wallet else Wallet()
+        _validate_xian_wallet(self.wallet)
         self.config = config or XianClientConfig()
         self._chain_id_set = chain_id is not None
         self._external_session = session

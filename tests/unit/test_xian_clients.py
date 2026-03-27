@@ -70,6 +70,13 @@ class _FakeSession:
         self.closed = True
 
 
+class _InvalidWallet:
+    public_key = "not-an-ed25519-key"
+
+    def sign_msg(self, msg: str) -> str:
+        return "sig"
+
+
 def test_xian_async_send_tx_populates_chain_id_nonce_and_stamps() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", wallet=wallet)
@@ -128,6 +135,24 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_stamps() -> None:
     assert result.tx_hash == "abc123"
     assert result.stamps_estimated == 77
     assert result.stamps_supplied == 87
+
+
+def test_xian_async_rejects_non_ed25519_wallets() -> None:
+    with pytest.raises(TypeError, match="Ed25519 Xian account"):
+        XianAsync(
+            "http://node",
+            chain_id="xian-1",
+            wallet=_InvalidWallet(),
+        )
+
+
+def test_xian_rejects_non_ed25519_wallets() -> None:
+    with pytest.raises(TypeError, match="Ed25519 Xian account"):
+        Xian(
+            "http://node",
+            chain_id="xian-1",
+            wallet=_InvalidWallet(),
+        )
 
 
 def test_xian_async_send_tx_reserves_nonces_locally_for_concurrent_calls() -> (

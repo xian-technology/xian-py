@@ -32,3 +32,10 @@ def test_hd_wallet_requires_optional_dependency(monkeypatch) -> None:
 
     with pytest.raises(ImportError, match="missing bip_utils"):
         wallet_module.HDWallet()
+
+
+def test_ethereum_wallet_requires_optional_dependency(monkeypatch) -> None:
+    monkeypatch.setattr(wallet_module, "ETHEREUM_SUPPORT", False)
+
+    with pytest.raises(ImportError, match="xian-py\\[eth\\]"):
+        wallet_module.EthereumWallet()
