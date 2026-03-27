@@ -197,9 +197,7 @@ class DeveloperRewardSummary:
     raw: dict[str, Any]
 
     @classmethod
-    def from_dict(
-        cls, raw: Mapping[str, Any]
-    ) -> "DeveloperRewardSummary":
+    def from_dict(cls, raw: Mapping[str, Any]) -> "DeveloperRewardSummary":
         raw_dict = dict(raw)
         reward_count = raw_dict.get("reward_count", 0)
         tx_count = raw_dict.get("tx_count", 0)
