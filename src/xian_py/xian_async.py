@@ -1,6 +1,7 @@
 import ast
 import asyncio
 import math
+import re
 from decimal import Decimal
 from typing import Any, Literal, Optional
 
@@ -38,6 +39,10 @@ from xian_py.models import (
     TransactionSubmission,
 )
 from xian_py.wallet import Wallet
+
+_SIMULATION_DATETIME_RE = re.compile(
+    r"(?<=:\s)(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)(?=[,}])"
+)
 
 
 def _validate_xian_wallet(wallet: Any) -> None:
@@ -186,10 +191,12 @@ class XianAsync:
 
     async def refresh_nonce(self) -> int:
         """Refresh and return the next nonce from the node."""
-        nonce = await tr.get_nonce_async(
-            self.node_url,
-            self.wallet.public_key,
-            session=self.session,
+        nonce = await self._retry_read(
+            lambda: tr.get_nonce_async(
+                self.node_url,
+                self.wallet.public_key,
+                session=self.session,
+            )
         )
         async with self._nonce_reservation_lock:
             self._next_nonce = nonce
@@ -378,10 +385,12 @@ class XianAsync:
 
         async with self._nonce_reservation_lock:
             if self._next_nonce is None:
-                self._next_nonce = await tr.get_nonce_async(
-                    self.node_url,
-                    self.wallet.public_key,
-                    session=self.session,
+                self._next_nonce = await self._retry_read(
+                    lambda: tr.get_nonce_async(
+                        self.node_url,
+                        self.wallet.public_key,
+                        session=self.session,
+                    )
                 )
             nonce = self._next_nonce
             self._next_nonce += 1
@@ -625,10 +634,12 @@ class XianAsync:
             "kwargs": kwargs,
             "sender": self.wallet.public_key,
         }
-        return await tr.simulate_tx_async(
-            self.node_url,
-            payload,
-            session=self.session,
+        return await self._retry_read(
+            lambda: tr.simulate_tx_async(
+                self.node_url,
+                payload,
+                session=self.session,
+            )
         )
 
     async def call(self, contract: str, function: str, kwargs: dict) -> Any:
@@ -641,10 +652,18 @@ class XianAsync:
         result = simulation.get("result")
         if not isinstance(result, str):
             return result
+        if result.startswith("0x"):
+            return result
         try:
             return ast.literal_eval(result)
         except (SyntaxError, ValueError):
-            return self._decode_abci_value(result, None)
+            normalized = self._decode_simulation_result_string(result)
+            if normalized is not None:
+                return normalized
+            decoded = self._decode_abci_value(result, None)
+            if decoded is None and result != "None":
+                return result
+            return decoded
 
     async def get_state(
         self,
@@ -1098,6 +1117,20 @@ class XianAsync:
                 return int(amount)
             return ContractingDecimal(amount)
         raise TypeError(f"Unsupported amount type: {type(amount)}")
+
+    @staticmethod
+    def _decode_simulation_result_string(result: str) -> Any | None:
+        quoted_datetimes = _SIMULATION_DATETIME_RE.sub(
+            lambda match: repr(match.group(1)),
+            result,
+        )
+        if quoted_datetimes == result:
+            return None
+
+        try:
+            return ast.literal_eval(quoted_datetimes)
+        except (SyntaxError, ValueError):
+            return None
 
     @staticmethod
     def _decode_abci_value(

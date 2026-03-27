@@ -580,6 +580,71 @@ def test_xian_async_call_decodes_structured_return_value() -> None:
     assert result == {"owner": "alice", "count": 2}
 
 
+def test_xian_async_call_decodes_structured_return_value_with_datetime_strings() -> None:
+    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+
+    with patch.object(
+        client,
+        "simulate",
+        AsyncMock(
+            return_value={
+                "status": 0,
+                "result": (
+                    "{'account': 'alice', 'power': 15, "
+                    "'registered_at': 2026-03-27 21:57:00, 'left_at': None}"
+                ),
+            }
+        ),
+    ):
+        result = asyncio.run(
+            client.call("masternodes", "get_validator", {"account": "alice"})
+        )
+
+    assert result == {
+        "account": "alice",
+        "power": 15,
+        "registered_at": "2026-03-27 21:57:00",
+        "left_at": None,
+    }
+
+
+def test_xian_async_call_returns_plain_string_results() -> None:
+    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+
+    with patch.object(
+        client,
+        "simulate",
+        AsyncMock(
+            return_value={
+                "status": 0,
+                "result": "governance",
+            }
+        ),
+    ):
+        result = asyncio.run(client.call("zk_registry", "owner", {}))
+
+    assert result == "governance"
+
+
+def test_xian_async_call_preserves_hex_string_results() -> None:
+    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+
+    with patch.object(
+        client,
+        "simulate",
+        AsyncMock(
+            return_value={
+                "status": 0,
+                "result": "0x19b2c45b73b5f3b755f05f76320d13965fc6fb9898b3238ce501bbddc5898972",
+            }
+        ),
+    ):
+        result = asyncio.run(client.call("con_private_token", "asset_id", {}))
+
+    assert isinstance(result, str)
+    assert result == "0x19b2c45b73b5f3b755f05f76320d13965fc6fb9898b3238ce501bbddc5898972"
+
+
 def test_xian_async_call_raises_on_failed_simulated_execution() -> None:
     client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
 
@@ -1109,6 +1174,74 @@ def test_xian_async_get_node_status_retries_transport_errors() -> None:
 
     assert status.latest_block_height == 12
     assert request_json.await_count == 2
+
+
+def test_xian_async_reserve_nonce_retries_transport_errors() -> None:
+    wallet = Wallet()
+    config = XianClientConfig(
+        retry=RetryPolicy(
+            max_attempts=2,
+            initial_delay_seconds=0.0,
+            max_delay_seconds=0.0,
+        )
+    )
+    client = XianAsync(
+        "http://node",
+        chain_id="xian-1",
+        wallet=wallet,
+        config=config,
+    )
+
+    async def run_reserve() -> int:
+        try:
+            return await client._reserve_nonce(None)
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr,
+        "get_nonce_async",
+        AsyncMock(side_effect=[TransportError("offline"), 11]),
+    ) as get_nonce_async:
+        nonce = asyncio.run(run_reserve())
+
+    assert nonce == 11
+    assert get_nonce_async.await_count == 2
+
+
+def test_xian_async_simulate_retries_transport_errors() -> None:
+    wallet = Wallet()
+    config = XianClientConfig(
+        retry=RetryPolicy(
+            max_attempts=2,
+            initial_delay_seconds=0.0,
+            max_delay_seconds=0.0,
+        )
+    )
+    client = XianAsync(
+        "http://node",
+        chain_id="xian-1",
+        wallet=wallet,
+        config=config,
+    )
+
+    payload = {"status": 0, "result": "ok"}
+
+    async def run_simulate() -> dict:
+        try:
+            return await client.simulate("currency", "balance_of", {"address": wallet.public_key})
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr,
+        "simulate_tx_async",
+        AsyncMock(side_effect=[TransportError("offline"), payload]),
+    ) as simulate_tx_async:
+        result = asyncio.run(run_simulate())
+
+    assert result == payload
+    assert simulate_tx_async.await_count == 2
 
 
 def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:
