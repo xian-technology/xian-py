@@ -68,8 +68,8 @@ asyncio.run(main())
   and `commit` modes
 - wait for final receipts and work with typed transaction, event, block, and
   status models
-- query indexed blocks, transactions, events, and state-history from BDS-backed
-  nodes
+- query indexed blocks, transactions, events, state-history, and developer
+  reward aggregates from BDS-backed nodes
 - watch blocks and indexed events with resumable cursors
 - use thin helper clients for common patterns such as contract, token, event,
   and state-key access

@@ -1,5 +1,6 @@
 from xian_py import (
     BdsStatus,
+    DeveloperRewardSummary,
     EventProjector,
     EventSource,
     PerformanceStatus,
@@ -21,6 +22,7 @@ def test_public_exports_are_available() -> None:
     assert Xian is not None
     assert XianAsync is not None
     assert BdsStatus is not None
+    assert DeveloperRewardSummary is not None
     assert EventProjector is not None
     assert EventSource is not None
     assert PerformanceStatus is not None

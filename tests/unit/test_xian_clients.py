@@ -15,6 +15,7 @@ from xian_py.config import (
 from xian_py.exception import SimulationError, TransportError
 from xian_py.models import (
     BdsStatus,
+    DeveloperRewardSummary,
     IndexedBlock,
     IndexedEvent,
     NodeStatus,
@@ -745,6 +746,33 @@ def test_xian_async_exposes_bds_status_as_typed_model() -> None:
     assert isinstance(status, BdsStatus)
     assert status.worker_running is True
     assert status.indexed_height == 41
+
+
+def test_xian_async_exposes_developer_rewards_as_typed_model() -> None:
+    client = XianAsync("http://node", chain_id="xian-1")
+    client._session = _FakeSession(
+        post_responses=[
+            _FakeResponse(
+                {
+                    "result": {
+                        "response": {
+                            "value": _b64(
+                                '{"recipient_key":"alice","total_rewards":"42.5","reward_count":6,"tx_count":4,"contract_count":3,"first_block_height":7,"last_block_height":12,"first_reward_at":"2026-01-01T00:00:07+00:00","last_reward_at":"2026-01-01T00:00:12+00:00"}'
+                            ),
+                            "info": "dict",
+                        }
+                    }
+                }
+            )
+        ]
+    )
+
+    summary = asyncio.run(client.get_developer_rewards("alice"))
+
+    assert isinstance(summary, DeveloperRewardSummary)
+    assert summary.recipient_key == "alice"
+    assert summary.total_rewards == "42.5"
+    assert summary.tx_count == 4
 
 
 def test_sync_client_reuses_background_runtime_until_closed() -> None:

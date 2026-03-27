@@ -12,6 +12,7 @@ from xian_py.application_clients import (
 from xian_py.config import XianClientConfig
 from xian_py.models import (
     BdsStatus,
+    DeveloperRewardSummary,
     IndexedBlock,
     IndexedEvent,
     IndexedTransaction,
@@ -377,6 +378,13 @@ class Xian:
 
     def get_bds_status(self) -> BdsStatus:
         return self._run_async(self._async_client.get_bds_status())
+
+    def get_developer_rewards(
+        self, recipient_key: str
+    ) -> DeveloperRewardSummary:
+        return self._run_async(
+            self._async_client.get_developer_rewards(recipient_key)
+        )
 
     def list_blocks(
         self,

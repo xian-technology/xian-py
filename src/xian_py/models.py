@@ -184,6 +184,41 @@ class BdsStatus:
 
 
 @dataclass(frozen=True)
+class DeveloperRewardSummary:
+    recipient_key: str | None
+    total_rewards: str
+    reward_count: int
+    tx_count: int
+    contract_count: int
+    first_block_height: int | None
+    last_block_height: int | None
+    first_reward_at: str | None
+    last_reward_at: str | None
+    raw: dict[str, Any]
+
+    @classmethod
+    def from_dict(
+        cls, raw: Mapping[str, Any]
+    ) -> "DeveloperRewardSummary":
+        raw_dict = dict(raw)
+        reward_count = raw_dict.get("reward_count", 0)
+        tx_count = raw_dict.get("tx_count", 0)
+        contract_count = raw_dict.get("contract_count", 0)
+        return cls(
+            recipient_key=raw_dict.get("recipient_key"),
+            total_rewards=str(raw_dict.get("total_rewards", "0")),
+            reward_count=int(reward_count),
+            tx_count=int(tx_count),
+            contract_count=int(contract_count),
+            first_block_height=raw_dict.get("first_block_height"),
+            last_block_height=raw_dict.get("last_block_height"),
+            first_reward_at=raw_dict.get("first_reward_at"),
+            last_reward_at=raw_dict.get("last_reward_at"),
+            raw=raw_dict,
+        )
+
+
+@dataclass(frozen=True)
 class IndexedBlock:
     height: int | None
     block_hash: str | None

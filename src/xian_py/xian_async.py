@@ -27,6 +27,7 @@ from xian_py.exception import (
 )
 from xian_py.models import (
     BdsStatus,
+    DeveloperRewardSummary,
     IndexedBlock,
     IndexedEvent,
     IndexedTransaction,
@@ -796,6 +797,16 @@ class XianAsync:
         if not isinstance(payload, dict):
             raise XianException("Unexpected BDS status payload")
         return BdsStatus.from_dict(payload)
+
+    async def get_developer_rewards(
+        self, recipient_key: str
+    ) -> DeveloperRewardSummary:
+        payload = await self._abci_query_value(
+            f"/developer_rewards/{recipient_key}"
+        )
+        if not isinstance(payload, dict):
+            raise XianException("Unexpected developer rewards payload")
+        return DeveloperRewardSummary.from_dict(payload)
 
     async def list_blocks(
         self,
