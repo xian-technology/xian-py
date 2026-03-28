@@ -413,10 +413,7 @@ async def _lookup_tx_in_recent_blocks_async(
     for height in range(max(1, start_height), end_height + 1):
         block = await get_block_async(node_url, height, session=session)
         block_txs = (
-            block.get("result", {})
-            .get("block", {})
-            .get("data", {})
-            .get("txs")
+            block.get("result", {}).get("block", {}).get("data", {}).get("txs")
             or []
         )
         if not block_txs:
@@ -436,7 +433,8 @@ async def _lookup_tx_in_recent_blocks_async(
             )
             tx_result = (
                 dict(txs_results[index])
-                if index < len(txs_results) and isinstance(txs_results[index], dict)
+                if index < len(txs_results)
+                and isinstance(txs_results[index], dict)
                 else {"code": 0, "data": None, "log": ""}
             )
             tx_result["data"] = _decode_block_result_data(tx_result.get("data"))
@@ -486,7 +484,9 @@ async def wait_for_tx_async(
                 .get("latest_block_height")
             )
             latest_height = (
-                int(latest_height_raw) if latest_height_raw is not None else None
+                int(latest_height_raw)
+                if latest_height_raw is not None
+                else None
             )
         except Exception:
             latest_height = None

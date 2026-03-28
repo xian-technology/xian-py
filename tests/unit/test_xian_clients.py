@@ -580,7 +580,9 @@ def test_xian_async_call_decodes_structured_return_value() -> None:
     assert result == {"owner": "alice", "count": 2}
 
 
-def test_xian_async_call_decodes_structured_return_value_with_datetime_strings() -> None:
+def test_xian_async_call_decodes_structured_return_value_with_datetime_strings() -> (
+    None
+):
     client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
 
     with patch.object(
@@ -642,7 +644,10 @@ def test_xian_async_call_preserves_hex_string_results() -> None:
         result = asyncio.run(client.call("con_private_token", "asset_id", {}))
 
     assert isinstance(result, str)
-    assert result == "0x19b2c45b73b5f3b755f05f76320d13965fc6fb9898b3238ce501bbddc5898972"
+    assert (
+        result
+        == "0x19b2c45b73b5f3b755f05f76320d13965fc6fb9898b3238ce501bbddc5898972"
+    )
 
 
 def test_xian_async_call_raises_on_failed_simulated_execution() -> None:
@@ -1231,7 +1236,9 @@ def test_xian_async_simulate_retries_transport_errors() -> None:
 
     async def run_simulate() -> dict:
         try:
-            return await client.simulate("currency", "balance_of", {"address": wallet.public_key})
+            return await client.simulate(
+                "currency", "balance_of", {"address": wallet.public_key}
+            )
         finally:
             await client.close()
 
