@@ -821,7 +821,7 @@ def test_xian_async_exposes_bds_status_as_typed_model() -> None:
                     "result": {
                         "response": {
                             "value": _b64(
-                                '{"worker_running":true,"catchup_running":false,"queue_depth":2,"height_lag":1,"indexed":{"indexed_height":41},"spool_pending_count":0,"alerts":[]}'
+                                '{"worker_running":true,"catchup_running":false,"catching_up":true,"queue_depth":2,"current_block_height":42,"height_lag":1,"indexed":{"indexed_height":41},"spool_pending_count":0,"alerts":[]}'
                             ),
                             "info": "dict",
                         }
@@ -835,6 +835,8 @@ def test_xian_async_exposes_bds_status_as_typed_model() -> None:
 
     assert isinstance(status, BdsStatus)
     assert status.worker_running is True
+    assert status.catching_up is True
+    assert status.current_block_height == 42
     assert status.indexed_height == 41
 
 

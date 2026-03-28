@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import hashlib
 import json
 from decimal import Decimal
 from unittest.mock import patch
@@ -245,6 +246,15 @@ def test_wait_for_tx_async_returns_decoded_transaction_once_found() -> None:
             _FakeResponse(
                 {
                     "result": {
+                        "sync_info": {
+                            "latest_block_height": "0",
+                        }
+                    }
+                }
+            ),
+            _FakeResponse(
+                {
+                    "result": {
                         "tx": _b64(
                             json.dumps(
                                 {
@@ -282,3 +292,82 @@ def test_wait_for_tx_async_returns_decoded_transaction_once_found() -> None:
 
     assert result["result"]["tx"]["payload"]["function"] == "transfer"
     assert result["result"]["tx_result"]["data"]["result"] == "ok"
+
+
+def test_wait_for_tx_async_falls_back_to_recent_block_scan() -> None:
+    tx_payload = {
+        "payload": {
+            "contract": "currency",
+            "function": "transfer",
+            "kwargs": {"amount": 1, "to": "bob"},
+        }
+    }
+    tx_hex = json.dumps(tx_payload).encode("utf-8").hex()
+    block_tx = _b64(tx_hex)
+    tx_hash = hashlib.sha256(bytes.fromhex(tx_hex)).hexdigest().upper()
+
+    fake_session = _FakeClientSession(
+        get_responses=[
+            _FakeResponse(
+                {"error": {"message": "not found", "data": "missing"}}
+            ),
+            _FakeResponse(
+                {
+                    "result": {
+                        "sync_info": {
+                            "latest_block_height": "5",
+                        }
+                    }
+                }
+            ),
+            _FakeResponse(
+                {
+                    "result": {
+                        "block": {
+                            "data": {
+                                "txs": [block_tx],
+                            }
+                        }
+                    }
+                }
+            ),
+            _FakeResponse(
+                {
+                    "result": {
+                        "txs_results": [
+                            {
+                                "code": 0,
+                                "data": _b64(
+                                    json.dumps({"status": 0, "result": "ok"})
+                                ),
+                                "log": "",
+                            }
+                        ]
+                    }
+                }
+            ),
+        ]
+    )
+
+    with patch(
+        "xian_py.transaction.aiohttp.ClientSession", return_value=fake_session
+    ):
+        result = asyncio.run(
+            wait_for_tx_async(
+                "http://node",
+                tx_hash,
+                timeout_seconds=1.0,
+                poll_interval_seconds=0.0,
+            )
+        )
+
+    assert result["result"]["hash"] == tx_hash
+    assert result["result"]["height"] == "1"
+    assert result["result"]["tx"]["payload"]["kwargs"]["to"] == "bob"
+    assert result["result"]["tx_result"]["data"]["result"] == "ok"
+    assert fake_session.calls == [
+        ("get", f"http://node/tx?hash=0x{tx_hash}"),
+        ("get", "http://node/status"),
+        ("get", "http://node/block?height=1"),
+        ("get", "http://node/block_results?height=1"),
+    ]

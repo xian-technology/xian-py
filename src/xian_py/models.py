@@ -155,7 +155,9 @@ class NodeStatus:
 class BdsStatus:
     worker_running: bool
     catchup_running: bool
+    catching_up: bool
     queue_depth: int
+    current_block_height: int | None
     height_lag: int | None
     indexed_height: int | None
     spool_pending_count: int
@@ -174,7 +176,9 @@ class BdsStatus:
         return cls(
             worker_running=bool(raw_dict.get("worker_running")),
             catchup_running=bool(raw_dict.get("catchup_running")),
+            catching_up=bool(raw_dict.get("catching_up")),
             queue_depth=int(raw_dict.get("queue_depth", 0)),
+            current_block_height=raw_dict.get("current_block_height"),
             height_lag=raw_dict.get("height_lag"),
             indexed_height=indexed_height,
             spool_pending_count=int(raw_dict.get("spool_pending_count", 0)),

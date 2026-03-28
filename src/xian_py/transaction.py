@@ -8,6 +8,7 @@ This module provides both async and sync versions of all functions:
 Both versions are exported to allow users to choose based on their needs.
 """
 
+import hashlib
 import json
 from asyncio import get_running_loop, sleep
 from base64 import b64decode
@@ -214,6 +215,44 @@ async def simulate_tx_async(
 simulate_tx = sync_wrapper(simulate_tx_async)
 
 
+async def get_status_async(
+    node_url: str,
+    *,
+    session: aiohttp.ClientSession | None = None,
+) -> dict[str, Any]:
+    return await request_json_async(
+        "GET",
+        f"{node_url}/status",
+        session=session,
+    )
+
+
+async def get_block_async(
+    node_url: str,
+    height: int,
+    *,
+    session: aiohttp.ClientSession | None = None,
+) -> dict[str, Any]:
+    return await request_json_async(
+        "GET",
+        f"{node_url}/block?height={height}",
+        session=session,
+    )
+
+
+async def get_block_results_async(
+    node_url: str,
+    height: int,
+    *,
+    session: aiohttp.ClientSession | None = None,
+) -> dict[str, Any]:
+    return await request_json_async(
+        "GET",
+        f"{node_url}/block_results?height={height}",
+        session=session,
+    )
+
+
 def create_tx(payload: dict, wallet: Wallet) -> dict:
     """
     Create offline transaction that can be broadcast
@@ -344,6 +383,75 @@ async def broadcast_tx_nowait_async(
 broadcast_tx_nowait = sync_wrapper(broadcast_tx_nowait_async)
 
 
+def _hash_block_tx(block_tx: str) -> str:
+    encoded = b64decode(block_tx).decode("utf-8")
+    return hashlib.sha256(bytes.fromhex(encoded)).hexdigest().upper()
+
+
+def _decode_block_result_data(value: Any) -> Any:
+    if value in (None, ""):
+        return value
+    try:
+        decoded = decode_str(value)
+    except Exception:
+        return value
+    try:
+        return json.loads(decoded)
+    except json.JSONDecodeError:
+        return decoded
+
+
+async def _lookup_tx_in_recent_blocks_async(
+    node_url: str,
+    tx_hash: str,
+    *,
+    start_height: int,
+    end_height: int,
+    session: aiohttp.ClientSession | None = None,
+) -> dict[str, Any] | None:
+    target_hash = tx_hash.upper()
+    for height in range(max(1, start_height), end_height + 1):
+        block = await get_block_async(node_url, height, session=session)
+        block_txs = (
+            block.get("result", {})
+            .get("block", {})
+            .get("data", {})
+            .get("txs")
+            or []
+        )
+        if not block_txs:
+            continue
+
+        for index, block_tx in enumerate(block_txs):
+            if _hash_block_tx(block_tx) != target_hash:
+                continue
+
+            block_results = await get_block_results_async(
+                node_url,
+                height,
+                session=session,
+            )
+            txs_results = (
+                block_results.get("result", {}).get("txs_results") or []
+            )
+            tx_result = (
+                dict(txs_results[index])
+                if index < len(txs_results) and isinstance(txs_results[index], dict)
+                else {"code": 0, "data": None, "log": ""}
+            )
+            tx_result["data"] = _decode_block_result_data(tx_result.get("data"))
+            return {
+                "result": {
+                    "hash": target_hash,
+                    "height": str(height),
+                    "index": index,
+                    "tx": decode_dict(block_tx),
+                    "tx_result": tx_result,
+                }
+            }
+    return None
+
+
 async def wait_for_tx_async(
     node_url: str,
     tx_hash: str,
@@ -357,6 +465,8 @@ async def wait_for_tx_async(
     """
     deadline = get_running_loop().time() + timeout_seconds
     last_error: str | None = None
+    last_scanned_height = 0
+    initial_block_scan_window = 8
 
     while True:
         data = await get_tx_async(
@@ -368,6 +478,37 @@ async def wait_for_tx_async(
             return data
 
         last_error = data["error"].get("data") or data["error"].get("message")
+        try:
+            status = await get_status_async(node_url, session=session)
+            latest_height_raw = (
+                status.get("result", {})
+                .get("sync_info", {})
+                .get("latest_block_height")
+            )
+            latest_height = (
+                int(latest_height_raw) if latest_height_raw is not None else None
+            )
+        except Exception:
+            latest_height = None
+
+        if latest_height is not None:
+            scan_from = (
+                max(1, latest_height - initial_block_scan_window + 1)
+                if last_scanned_height == 0
+                else last_scanned_height + 1
+            )
+            if scan_from <= latest_height:
+                fallback = await _lookup_tx_in_recent_blocks_async(
+                    node_url,
+                    tx_hash,
+                    start_height=scan_from,
+                    end_height=latest_height,
+                    session=session,
+                )
+                if fallback is not None:
+                    return fallback
+                last_scanned_height = latest_height
+
         if get_running_loop().time() >= deadline:
             raise TxTimeoutError(
                 f"Timed out waiting for transaction {tx_hash}: {last_error or 'not found'}"
