@@ -2024,25 +2024,14 @@ wheels = [
 ]
 
 [[package]]
-name = "xian-accounts"
-version = "0.1.0"
-source = { editable = "../xian-contracting/packages/xian-accounts" }
-dependencies = [
-    { name = "pynacl" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "pynacl", specifier = ">=1.5.0,<2" }]
-
-[[package]]
 name = "xian-py"
 version = "0.4.8"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "pynacl" },
-    { name = "xian-accounts" },
-    { name = "xian-runtime-types" },
+    { name = "xian-tech-accounts" },
+    { name = "xian-tech-runtime-types" },
 ]
 
 [package.optional-dependencies]
@@ -2074,8 +2063,8 @@ requires-dist = [
     { name = "fastapi", marker = "extra == 'app'", specifier = ">=0.116.0,<0.117" },
     { name = "pynacl", specifier = ">=1.5.0,<2" },
     { name = "uvicorn", marker = "extra == 'app'", specifier = ">=0.35.0,<0.36" },
-    { name = "xian-accounts", editable = "../xian-contracting/packages/xian-accounts" },
-    { name = "xian-runtime-types", editable = "../xian-contracting/packages/xian-runtime-types" },
+    { name = "xian-tech-accounts", editable = "../xian-contracting/packages/xian-accounts" },
+    { name = "xian-tech-runtime-types", editable = "../xian-contracting/packages/xian-runtime-types" },
 ]
 provides-extras = ["hd", "eth", "app"]
 
@@ -2087,7 +2076,18 @@ dev = [
 ]
 
 [[package]]
-name = "xian-runtime-types"
+name = "xian-tech-accounts"
+version = "0.1.0"
+source = { editable = "../xian-contracting/packages/xian-accounts" }
+dependencies = [
+    { name = "pynacl" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pynacl", specifier = ">=1.5.0,<2" }]
+
+[[package]]
+name = "xian-tech-runtime-types"
 version = "0.1.0"
 source = { editable = "../xian-contracting/packages/xian-runtime-types" }
 
