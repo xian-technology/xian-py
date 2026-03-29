@@ -37,5 +37,5 @@ def test_hd_wallet_requires_optional_dependency(monkeypatch) -> None:
 def test_ethereum_wallet_requires_optional_dependency(monkeypatch) -> None:
     monkeypatch.setattr(wallet_module, "ETHEREUM_SUPPORT", False)
 
-    with pytest.raises(ImportError, match="xian-py\\[eth\\]"):
+    with pytest.raises(ImportError, match="xian-tech-py\\[eth\\]"):
         wallet_module.EthereumWallet()

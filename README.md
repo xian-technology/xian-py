@@ -8,8 +8,11 @@ workers, automation jobs, and operator tooling.
 Install the SDK:
 
 ```bash
-pip install xian-py
+pip install xian-tech-py
 ```
+
+The published PyPI package name is `xian-tech-py`. The import package remains
+`xian_py`.
 
 Read state and send a transaction:
 
@@ -101,9 +104,9 @@ Indexed event/history queries and projector loops require a BDS-enabled node.
 Optional extras:
 
 ```bash
-pip install "xian-py[app]"
-pip install "xian-py[eth]"
-pip install "xian-py[hd]"
+pip install "xian-tech-py[app]"
+pip install "xian-tech-py[eth]"
+pip install "xian-tech-py[hd]"
 ```
 
 Use the `app` extra for the included FastAPI-based examples.

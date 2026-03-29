@@ -20,7 +20,7 @@ def _require_ethereum_support() -> None:
     if not ETHEREUM_SUPPORT:
         raise ImportError(
             "Ethereum wallet helpers require the optional 'eth' dependency "
-            "group; install with 'pip install xian-py[eth]'"
+            "group; install with 'pip install xian-tech-py[eth]'"
         )
 
 
@@ -41,7 +41,7 @@ def _load_bip_utils() -> dict[str, object]:
     except ImportError as exc:
         raise ImportError(
             "HD wallet support requires the optional 'hd' dependency group; "
-            "install with 'pip install xian-py[hd]'"
+            "install with 'pip install xian-tech-py[hd]'"
         ) from exc
 
     return {
@@ -198,7 +198,7 @@ class HDWallet:
         """Get Ethereum wallet for specific account index"""
         if not ETHEREUM_SUPPORT:
             raise ImportError(
-                "Ethereum support not installed. Install with 'pip install xian-py[eth]'"
+                "Ethereum support not installed. Install with 'pip install xian-tech-py[eth]'"
             )
 
         bip_utils = _load_bip_utils()
