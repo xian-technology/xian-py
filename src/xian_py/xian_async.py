@@ -1,9 +1,11 @@
 import ast
 import asyncio
+import json
 import math
 import re
 from decimal import Decimal
 from typing import Any, Literal, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 import aiohttp
 from xian_runtime_types.decimal import ContractingDecimal
@@ -32,6 +34,7 @@ from xian_py.models import (
     IndexedBlock,
     IndexedEvent,
     IndexedTransaction,
+    LiveEvent,
     NodeStatus,
     PerformanceStatus,
     StateEntry,
@@ -43,6 +46,195 @@ from xian_py.wallet import Wallet
 _SIMULATION_DATETIME_RE = re.compile(
     r"(?<=:\s)(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)(?=[,}])"
 )
+
+def _coerce_int(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _rpc_ws_url(url: str) -> str:
+    parsed = urlsplit(url)
+    if not parsed.scheme:
+        parsed = urlsplit(f"http://{url}")
+    scheme = parsed.scheme.lower()
+
+    if scheme in {"http", "ws"}:
+        ws_scheme = "ws"
+    elif scheme in {"https", "wss"}:
+        ws_scheme = "wss"
+    else:
+        raise ValueError("websocket_url must use http(s):// or ws(s):// scheme")
+
+    path = parsed.path.rstrip("/")
+    if path.endswith("/websocket"):
+        resolved_path = path
+    elif not path:
+        resolved_path = "/websocket"
+    else:
+        resolved_path = f"{path}/websocket"
+
+    return urlunsplit((ws_scheme, parsed.netloc, resolved_path, "", ""))
+
+
+def _rpc_graphql_url(url: str) -> str:
+    parsed = urlsplit(url)
+    if not parsed.scheme:
+        parsed = urlsplit(f"http://{url}")
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"}:
+        raise ValueError("node_url must use http(s):// scheme")
+
+    path = parsed.path.rstrip("/")
+    if path.endswith("/graphql"):
+        resolved_path = path
+    elif not path:
+        resolved_path = "/graphql"
+    else:
+        resolved_path = f"{path}/graphql"
+
+    return urlunsplit((scheme, parsed.netloc, resolved_path, "", ""))
+
+
+def _quote_cometbft_query_value(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+    return f"'{escaped}'"
+
+
+def _build_cometbft_event_query(contract: str, event: str) -> str:
+    return (
+        "tm.event='Tx' "
+        f"AND {event}.contract={_quote_cometbft_query_value(contract)}"
+    )
+
+
+def _decode_ws_tx_execution(payload: dict[str, Any]) -> dict[str, Any] | None:
+    tx_result = (
+        payload.get("result", {})
+        .get("data", {})
+        .get("value", {})
+        .get("TxResult", {})
+        .get("result", {})
+    )
+    encoded = tx_result.get("data") if isinstance(tx_result, dict) else None
+    if not isinstance(encoded, str) or not encoded:
+        return None
+    try:
+        decoded = tr.decode_str(encoded)
+    except Exception:
+        return None
+    try:
+        parsed = ast.literal_eval(decoded)
+    except Exception:
+        parsed = None
+    if isinstance(parsed, dict):
+        return parsed
+    try:
+        loaded = json.loads(decoded)
+    except json.JSONDecodeError:
+        return None
+    return loaded if isinstance(loaded, dict) else None
+
+
+def _ws_tx_metadata(
+    payload: dict[str, Any],
+) -> tuple[str | None, int | None, int | None]:
+    ws_result = payload.get("result", {})
+    value = ws_result.get("data", {}).get("value", {})
+    tx_result = value.get("TxResult", {})
+    result = tx_result.get("result", {})
+    execution = _decode_ws_tx_execution(payload)
+    tx_hash = None
+    ws_events = ws_result.get("events")
+    if isinstance(ws_events, dict):
+        tx_hash_values = ws_events.get("tx.hash")
+        if isinstance(tx_hash_values, list) and tx_hash_values:
+            first_tx_hash = tx_hash_values[0]
+            if isinstance(first_tx_hash, str):
+                tx_hash = first_tx_hash
+        elif isinstance(tx_hash_values, str):
+            tx_hash = tx_hash_values
+    if not isinstance(tx_hash, str):
+        tx_hash = result.get("hash")
+    if not isinstance(tx_hash, str):
+        tx_hash = tx_result.get("hash")
+    if not isinstance(tx_hash, str):
+        tx_hash = execution.get("hash") if isinstance(execution, dict) else None
+    block_height = _coerce_int(tx_result.get("height") or value.get("height"))
+    tx_index = _coerce_int(tx_result.get("index"))
+    return tx_hash if isinstance(tx_hash, str) else None, block_height, tx_index
+
+
+def _extract_matching_live_events(
+    payload: dict[str, Any],
+    *,
+    contract: str,
+    event: str,
+) -> list[LiveEvent]:
+    execution = _decode_ws_tx_execution(payload)
+    if not isinstance(execution, dict):
+        return []
+    tx_hash, block_height, tx_index = _ws_tx_metadata(payload)
+    events = execution.get("events")
+    if not isinstance(events, list):
+        return []
+
+    matched: list[LiveEvent] = []
+    for event_index, item in enumerate(events):
+        if not isinstance(item, dict):
+            continue
+        item_contract = str(item.get("contract", ""))
+        item_event = str(item.get("event", "ContractEvent"))
+        if item_contract != contract or item_event != event:
+            continue
+
+        data_indexed = item.get("data_indexed")
+        normalized_indexed = (
+            dict(data_indexed) if isinstance(data_indexed, dict) else None
+        )
+        data = item.get("data")
+        normalized_data = dict(data) if isinstance(data, dict) else None
+
+        matched.append(
+            LiveEvent(
+                tx_hash=tx_hash,
+                block_height=block_height,
+                tx_index=tx_index,
+                event_index=event_index,
+                contract=item_contract,
+                event=item_event,
+                signer=item.get("signer"),
+                caller=item.get("caller"),
+                data_indexed=normalized_indexed,
+                data=normalized_data,
+                raw=dict(item),
+            )
+        )
+    return matched
+
+
+def _graphql_event_node_to_dict(node: dict[str, Any]) -> dict[str, Any]:
+    transaction = node.get("transactionByTxHash")
+    block_height = None
+    if isinstance(transaction, dict):
+        block_height = _coerce_int(transaction.get("blockHeight"))
+
+    return {
+        "id": _coerce_int(node.get("id")),
+        "tx_hash": node.get("txHash"),
+        "block_height": block_height,
+        "tx_index": None,
+        "event_index": None,
+        "contract": node.get("contract"),
+        "event": node.get("event"),
+        "signer": node.get("signer"),
+        "caller": node.get("caller"),
+        "data_indexed": node.get("dataIndexed"),
+        "data": node.get("data"),
+        "created": node.get("created"),
+        "raw": dict(node),
+    }
 
 
 def _validate_xian_wallet(wallet: Any) -> None:
@@ -134,6 +326,203 @@ class XianAsync:
         if self._session and not self._external_session:
             await self._session.close()
         self._session = None
+
+    def _resolve_cometbft_ws_url(self) -> str:
+        websocket_url = self.config.watcher.websocket_url
+        if websocket_url is None:
+            websocket_url = self.node_url
+        return _rpc_ws_url(websocket_url)
+
+    def _resolve_bds_graphql_url(self) -> str:
+        return _rpc_graphql_url(self.node_url)
+
+    async def _graphql_query(
+        self,
+        query: str,
+        *,
+        variables: dict[str, Any],
+    ) -> dict[str, Any]:
+        async def do_request() -> dict[str, Any]:
+            try:
+                async with self.session.post(
+                    self._resolve_bds_graphql_url(),
+                    json={"query": query, "variables": variables},
+                    headers={"Content-Type": "application/json"},
+                ) as response:
+                    if hasattr(response, "raise_for_status"):
+                        response.raise_for_status()
+                    payload = await response.json()
+            except XianException:
+                raise
+            except Exception as exc:
+                raise TransportError(exc) from exc
+
+            if not isinstance(payload, dict):
+                raise XianException("Unexpected GraphQL payload")
+            if "errors" in payload:
+                raise XianException(
+                    "GraphQL query failed",
+                    details={"errors": payload["errors"]},
+                )
+
+            data = payload.get("data")
+            if not isinstance(data, dict):
+                raise XianException("Unexpected GraphQL payload")
+            return data
+
+        return await self._retry_read(do_request)
+
+    async def _graphql_list_events(
+        self,
+        contract: str,
+        event: str,
+        *,
+        limit: int,
+        offset: int,
+        after_id: int | None,
+    ) -> list[IndexedEvent]:
+        query = """
+        query ListEvents(
+          $contract: String!
+          $event: String!
+          $limit: Int!
+          $offset: Int!
+        ) {
+          allEvents(
+            first: $limit
+            offset: $offset
+            orderBy: ID_ASC
+            condition: {contract: $contract, event: $event}
+          ) {
+            edges {
+              node {
+                id
+                txHash
+                contract
+                event
+                signer
+                caller
+                dataIndexed
+                data
+                created
+                transactionByTxHash {
+                  blockHeight
+                }
+              }
+            }
+          }
+        }
+        """
+        variables: dict[str, Any] = {
+            "contract": contract,
+            "event": event,
+            "limit": limit,
+            "offset": offset,
+        }
+
+        if after_id is not None:
+            query = """
+            query ListEventsAfter(
+              $contract: String!
+              $event: String!
+              $limit: Int!
+              $afterId: Int!
+            ) {
+              allEvents(
+                first: $limit
+                orderBy: ID_ASC
+                condition: {contract: $contract, event: $event}
+                filter: {id: {greaterThan: $afterId}}
+              ) {
+                edges {
+                  node {
+                    id
+                    txHash
+                    contract
+                    event
+                    signer
+                    caller
+                    dataIndexed
+                    data
+                    created
+                    transactionByTxHash {
+                      blockHeight
+                    }
+                  }
+                }
+              }
+            }
+            """
+            variables = {
+                "contract": contract,
+                "event": event,
+                "limit": limit,
+                "afterId": after_id,
+            }
+
+        data = await self._graphql_query(query, variables=variables)
+        edges = data.get("allEvents", {}).get("edges", [])
+        if not isinstance(edges, list):
+            raise XianException("Unexpected GraphQL event payload")
+
+        events: list[IndexedEvent] = []
+        for edge in edges:
+            if not isinstance(edge, dict):
+                continue
+            node = edge.get("node")
+            if not isinstance(node, dict):
+                continue
+            events.append(
+                IndexedEvent.from_dict(_graphql_event_node_to_dict(node))
+            )
+        return events
+
+    async def _graphql_get_events_for_tx(
+        self,
+        tx_hash: str,
+    ) -> list[IndexedEvent]:
+        query = """
+        query EventsForTx($txHash: String!) {
+          allEvents(
+            first: 1000
+            orderBy: ID_ASC
+            filter: {txHash: {equalTo: $txHash}}
+          ) {
+            edges {
+              node {
+                id
+                txHash
+                contract
+                event
+                signer
+                caller
+                dataIndexed
+                data
+                created
+                transactionByTxHash {
+                  blockHeight
+                }
+              }
+            }
+          }
+        }
+        """
+        data = await self._graphql_query(query, variables={"txHash": tx_hash})
+        edges = data.get("allEvents", {}).get("edges", [])
+        if not isinstance(edges, list):
+            raise XianException("Unexpected GraphQL event payload")
+
+        events: list[IndexedEvent] = []
+        for edge in edges:
+            if not isinstance(edge, dict):
+                continue
+            node = edge.get("node")
+            if not isinstance(node, dict):
+                continue
+            events.append(
+                IndexedEvent.from_dict(_graphql_event_node_to_dict(node))
+            )
+        return events
 
     async def ensure_chain_id(self) -> None:
         if not self._chain_id_set:
@@ -917,10 +1306,21 @@ class XianAsync:
         return [IndexedTransaction.from_dict(item) for item in payload]
 
     async def get_events_for_tx(self, tx_hash: str) -> list[IndexedEvent]:
-        payload = await self._abci_query_value(f"/events_for_tx/{tx_hash}")
-        if not isinstance(payload, list):
-            raise XianException("Unexpected event list payload")
-        return [IndexedEvent.from_dict(item) for item in payload]
+        payload: Any = None
+        try:
+            payload = await self._abci_query_value(f"/events_for_tx/{tx_hash}")
+        except XianException:
+            payload = None
+
+        if isinstance(payload, list):
+            return [IndexedEvent.from_dict(item) for item in payload]
+
+        fallback_events = await self._graphql_get_events_for_tx(tx_hash)
+        if fallback_events:
+            return fallback_events
+        if payload is None:
+            return []
+        raise XianException("Unexpected event list payload")
 
     async def list_events(
         self,
@@ -936,10 +1336,28 @@ class XianAsync:
             path = f"{path}/after_id={after_id}"
         else:
             path = f"{path}/offset={offset}"
-        payload = await self._abci_query_value(path)
-        if not isinstance(payload, list):
-            raise XianException("Unexpected event list payload")
-        return [IndexedEvent.from_dict(item) for item in payload]
+
+        payload: Any = None
+        try:
+            payload = await self._abci_query_value(path)
+        except XianException:
+            payload = None
+
+        if isinstance(payload, list):
+            return [IndexedEvent.from_dict(item) for item in payload]
+
+        fallback_events = await self._graphql_list_events(
+            contract,
+            event,
+            limit=limit,
+            offset=offset,
+            after_id=after_id,
+        )
+        if fallback_events:
+            return fallback_events
+        if payload is None:
+            return []
+        raise XianException("Unexpected event list payload")
 
     async def get_state_history(
         self,
@@ -1030,6 +1448,178 @@ class XianAsync:
             raw=payload,
         )
 
+    async def _receive_ws_json(
+        self,
+        ws: aiohttp.ClientWebSocketResponse,
+    ) -> dict[str, Any]:
+        while True:
+            msg = await ws.receive()
+            if msg.type == aiohttp.WSMsgType.TEXT:
+                try:
+                    payload = json.loads(msg.data)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(payload, dict):
+                    return payload
+                continue
+            if msg.type == aiohttp.WSMsgType.ERROR:
+                raise TransportError(
+                    "CometBFT websocket error",
+                    cause=ws.exception(),
+                )
+            if msg.type in (
+                aiohttp.WSMsgType.CLOSE,
+                aiohttp.WSMsgType.CLOSING,
+                aiohttp.WSMsgType.CLOSED,
+            ):
+                raise TransportError("CometBFT websocket closed")
+
+    async def _subscribe_cometbft_txs(
+        self,
+        ws: aiohttp.ClientWebSocketResponse,
+        *,
+        contract: str,
+        event: str,
+    ) -> list[dict[str, Any]]:
+        subscription_id = "xian-py-watch-events"
+        query = _build_cometbft_event_query(contract, event)
+        buffered: list[dict[str, Any]] = []
+        await ws.send_json(
+            {
+                "jsonrpc": "2.0",
+                "method": "subscribe",
+                "id": subscription_id,
+                "params": {"query": query},
+            }
+        )
+
+        while True:
+            payload = await self._receive_ws_json(ws)
+            if "error" in payload:
+                raise XianException(
+                    payload.get("error", {}).get("message")
+                    or "CometBFT subscription failed",
+                    details=payload,
+                )
+            if payload.get("id") == subscription_id:
+                return buffered
+            buffered.append(payload)
+
+    @staticmethod
+    def _match_indexed_event(
+        candidates: list[IndexedEvent],
+        live_event: LiveEvent,
+    ) -> IndexedEvent | None:
+        for item in candidates:
+            if (
+                live_event.event_index is not None
+                and item.event_index == live_event.event_index
+            ):
+                return item
+        for item in candidates:
+            if (
+                item.contract == live_event.contract
+                and item.event == live_event.event
+                and item.signer == live_event.signer
+                and item.caller == live_event.caller
+                and item.data == live_event.data
+            ):
+                return item
+        return None
+
+    async def _resolve_live_indexed_events(
+        self,
+        live_events: list[LiveEvent],
+        *,
+        poll_interval_seconds: float,
+    ) -> list[IndexedEvent]:
+        if not live_events:
+            return []
+
+        tx_hash = live_events[0].tx_hash
+        if not tx_hash:
+            raise XianException(
+                "CometBFT websocket event missing tx_hash",
+                details={"events": [event.raw for event in live_events]},
+            )
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + max(
+            self.config.transport.read_timeout_seconds,
+            1.0,
+        )
+
+        while True:
+            indexed_events: list[IndexedEvent] = []
+            try:
+                indexed_events = await self.get_events_for_tx(tx_hash)
+            except XianException:
+                indexed_events = []
+
+            resolved_events: list[IndexedEvent] = []
+            missing = False
+            for live_event in live_events:
+                resolved = self._match_indexed_event(indexed_events, live_event)
+                if resolved is None or resolved.id is None:
+                    missing = True
+                    break
+                resolved_events.append(resolved)
+            if not missing:
+                return resolved_events
+
+            remaining_seconds = deadline - loop.time()
+            if remaining_seconds <= 0:
+                raise XianException(
+                    "CometBFT websocket events were not indexed before timeout",
+                    details={"tx_hash": tx_hash},
+                )
+            await asyncio.sleep(
+                min(
+                    poll_interval_seconds,
+                    remaining_seconds,
+                    1.0,
+                )
+            )
+
+    async def _watch_events_polling(
+        self,
+        contract: str,
+        event: str,
+        *,
+        after_id: int | None = None,
+        limit: int | None = None,
+        poll_interval_seconds: float | None = None,
+    ):
+        if limit is None:
+            limit = self.config.watcher.batch_limit
+        if poll_interval_seconds is None:
+            poll_interval_seconds = self.config.watcher.poll_interval_seconds
+        if limit <= 0:
+            raise ValueError("limit must be > 0")
+        if poll_interval_seconds <= 0:
+            raise ValueError("poll_interval_seconds must be > 0")
+
+        cursor = after_id if after_id is not None else 0
+
+        while True:
+            events = await self.list_events(
+                contract,
+                event,
+                limit=limit,
+                after_id=cursor,
+            )
+            if not events:
+                await asyncio.sleep(poll_interval_seconds)
+                continue
+
+            for item in events:
+                if item.id is None:
+                    raise XianException(
+                        "Event watcher requires event IDs in indexed payloads"
+                    )
+                cursor = item.id
+                yield item
+
     async def watch_blocks(
         self,
         *,
@@ -1068,35 +1658,148 @@ class XianAsync:
         limit: int | None = None,
         poll_interval_seconds: float | None = None,
     ):
+        watcher = self.config.watcher
         if limit is None:
-            limit = self.config.watcher.batch_limit
+            limit = watcher.batch_limit
         if poll_interval_seconds is None:
-            poll_interval_seconds = self.config.watcher.poll_interval_seconds
+            poll_interval_seconds = watcher.poll_interval_seconds
         if limit <= 0:
             raise ValueError("limit must be > 0")
         if poll_interval_seconds <= 0:
             raise ValueError("poll_interval_seconds must be > 0")
 
-        cursor = after_id if after_id is not None else 0
-
-        while True:
-            events = await self.list_events(
+        mode = watcher.mode
+        if mode == "poll":
+            async for item in self._watch_events_polling(
                 contract,
                 event,
+                after_id=after_id,
                 limit=limit,
-                after_id=cursor,
-            )
-            if not events:
-                await asyncio.sleep(poll_interval_seconds)
-                continue
-
-            for item in events:
-                if item.id is None:
-                    raise XianException(
-                        "Event watcher requires event IDs in indexed payloads"
-                    )
-                cursor = item.id
+                poll_interval_seconds=poll_interval_seconds,
+            ):
                 yield item
+            return
+
+        ws_url = self._resolve_cometbft_ws_url()
+        cursor = after_id if after_id is not None else 0
+        websocket_started = False
+
+        while True:
+            try:
+                async with self.session.ws_connect(
+                    ws_url,
+                    heartbeat=watcher.websocket_heartbeat_seconds,
+                    receive_timeout=None,
+                ) as ws:
+                    buffered = await self._subscribe_cometbft_txs(
+                        ws,
+                        contract=contract,
+                        event=event,
+                    )
+                    websocket_started = True
+
+                    while True:
+                        pending = await self.list_events(
+                            contract,
+                            event,
+                            limit=limit,
+                            after_id=cursor,
+                        )
+                        if not pending:
+                            break
+                        for item in pending:
+                            if item.id is None:
+                                raise XianException(
+                                    "Event watcher requires event IDs in "
+                                    "indexed payloads"
+                                )
+                            cursor = item.id
+                            yield item
+
+                    while True:
+                        payload = (
+                            buffered.pop(0)
+                            if buffered
+                            else await self._receive_ws_json(ws)
+                        )
+
+                        live_events = _extract_matching_live_events(
+                            payload,
+                            contract=contract,
+                            event=event,
+                        )
+                        if not live_events:
+                            continue
+
+                        resolved_events = await self._resolve_live_indexed_events(
+                            live_events,
+                            poll_interval_seconds=poll_interval_seconds,
+                        )
+                        for resolved in resolved_events:
+                            if resolved.id is None or resolved.id <= cursor:
+                                continue
+                            cursor = resolved.id
+                            yield resolved
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                if not websocket_started and mode == "auto":
+                    async for item in self._watch_events_polling(
+                        contract,
+                        event,
+                        after_id=cursor,
+                        limit=limit,
+                        poll_interval_seconds=poll_interval_seconds,
+                    ):
+                        yield item
+                    return
+                await asyncio.sleep(poll_interval_seconds)
+
+    async def watch_live_events(
+        self,
+        contract: str,
+        event: str,
+        *,
+        poll_interval_seconds: float | None = None,
+    ):
+        watcher = self.config.watcher
+        if poll_interval_seconds is None:
+            poll_interval_seconds = watcher.poll_interval_seconds
+        if poll_interval_seconds <= 0:
+            raise ValueError("poll_interval_seconds must be > 0")
+
+        ws_url = self._resolve_cometbft_ws_url()
+
+        while True:
+            try:
+                async with self.session.ws_connect(
+                    ws_url,
+                    heartbeat=watcher.websocket_heartbeat_seconds,
+                    receive_timeout=None,
+                ) as ws:
+                    buffered = await self._subscribe_cometbft_txs(
+                        ws,
+                        contract=contract,
+                        event=event,
+                    )
+
+                    while True:
+                        payload = (
+                            buffered.pop(0)
+                            if buffered
+                            else await self._receive_ws_json(ws)
+                        )
+                        live_events = _extract_matching_live_events(
+                            payload,
+                            contract=contract,
+                            event=event,
+                        )
+                        for live_event in live_events:
+                            yield live_event
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                await asyncio.sleep(poll_interval_seconds)
 
     @staticmethod
     def _coerce_amount(

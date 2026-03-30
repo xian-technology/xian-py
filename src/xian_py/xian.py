@@ -16,6 +16,7 @@ from xian_py.models import (
     IndexedBlock,
     IndexedEvent,
     IndexedTransaction,
+    LiveEvent,
     NodeStatus,
     PerformanceStatus,
     StateEntry,
@@ -536,6 +537,22 @@ class Xian:
                 event,
                 after_id=after_id,
                 limit=limit,
+                poll_interval_seconds=poll_interval_seconds,
+            ),
+        )
+
+    def watch_live_events(
+        self,
+        contract: str,
+        event: str,
+        *,
+        poll_interval_seconds: float | None = None,
+    ) -> _SyncAsyncIterator[LiveEvent]:
+        return _SyncAsyncIterator(
+            self,
+            self._async_client.watch_live_events(
+                contract,
+                event,
                 poll_interval_seconds=poll_interval_seconds,
             ),
         )

@@ -35,8 +35,11 @@ class SubmissionConfig:
 
 @dataclass(frozen=True)
 class WatcherConfig:
+    mode: Literal["auto", "poll", "websocket"] = "auto"
     poll_interval_seconds: float = 1.0
     batch_limit: int = 100
+    websocket_url: str | None = None
+    websocket_heartbeat_seconds: float = 25.0
 
 
 @dataclass(frozen=True)

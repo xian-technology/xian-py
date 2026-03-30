@@ -273,6 +273,38 @@ class IndexedTransaction:
 
 
 @dataclass(frozen=True)
+class LiveEvent:
+    tx_hash: str | None
+    block_height: int | None
+    tx_index: int | None
+    event_index: int | None
+    contract: str | None
+    event: str | None
+    signer: str | None
+    caller: str | None
+    data_indexed: dict[str, Any] | None
+    data: dict[str, Any] | None
+    raw: dict[str, Any]
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "LiveEvent":
+        raw_dict = dict(raw)
+        return cls(
+            tx_hash=raw_dict.get("tx_hash"),
+            block_height=raw_dict.get("block_height"),
+            tx_index=raw_dict.get("tx_index"),
+            event_index=raw_dict.get("event_index"),
+            contract=raw_dict.get("contract"),
+            event=raw_dict.get("event"),
+            signer=raw_dict.get("signer"),
+            caller=raw_dict.get("caller"),
+            data_indexed=_decode_json_mapping(raw_dict.get("data_indexed")),
+            data=_decode_json_mapping(raw_dict.get("data")),
+            raw=raw_dict,
+        )
+
+
+@dataclass(frozen=True)
 class IndexedEvent:
     id: int | None
     tx_hash: str | None

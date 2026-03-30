@@ -3,6 +3,7 @@ from xian_py import (
     DeveloperRewardSummary,
     EventProjector,
     EventSource,
+    LiveEvent,
     PerformanceStatus,
     SQLiteProjectionState,
     TransactionReceipt,
@@ -25,6 +26,7 @@ def test_public_exports_are_available() -> None:
     assert DeveloperRewardSummary is not None
     assert EventProjector is not None
     assert EventSource is not None
+    assert LiveEvent is not None
     assert PerformanceStatus is not None
     assert SQLiteProjectionState is not None
     assert TransactionReceipt is not None

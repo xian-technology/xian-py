@@ -5,7 +5,11 @@ from typing import Any
 
 from xian_runtime_types.decimal import ContractingDecimal
 
-from xian_py.models import IndexedEvent, StateEntry, TransactionSubmission
+from xian_py.models import (
+    IndexedEvent,
+    StateEntry,
+    TransactionSubmission,
+)
 
 
 def _merge_call_kwargs(
@@ -58,6 +62,18 @@ class AsyncEventClient:
         ):
             yield item
 
+    async def watch_live(
+        self,
+        *,
+        poll_interval_seconds: float | None = None,
+    ):
+        async for item in self.client.watch_live_events(
+            self.contract,
+            self.event,
+            poll_interval_seconds=poll_interval_seconds,
+        ):
+            yield item
+
 
 @dataclass(frozen=True)
 class EventClient:
@@ -92,6 +108,17 @@ class EventClient:
             self.event,
             after_id=after_id,
             limit=limit,
+            poll_interval_seconds=poll_interval_seconds,
+        )
+
+    def watch_live(
+        self,
+        *,
+        poll_interval_seconds: float | None = None,
+    ):
+        return self.client.watch_live_events(
+            self.contract,
+            self.event,
             poll_interval_seconds=poll_interval_seconds,
         )
 

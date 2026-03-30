@@ -27,7 +27,7 @@ with Xian("http://127.0.0.1:26657") as client:
     print(balance, receipt.code)
 ```
 
-Watch indexed events from a BDS-enabled node:
+Watch indexed events over the CometBFT websocket:
 
 ```python
 import asyncio
@@ -44,6 +44,27 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+Watch raw live events directly from the CometBFT websocket:
+
+```python
+import asyncio
+
+from xian_py import XianAsync
+
+
+async def main() -> None:
+    async with XianAsync("http://127.0.0.1:26657") as client:
+        async for event in client.token().transfers().watch_live():
+            print(event.tx_hash, event.data)
+
+
+asyncio.run(main())
+```
+
+By default the SDK derives the websocket endpoint from the RPC URL, for example
+`http://127.0.0.1:26657` -> `ws://127.0.0.1:26657/websocket`. If you need an
+override, set `WatcherConfig(websocket_url="ws://rpc-host:26657/websocket")`.
+
 ## Principles
 
 - The SDK keeps sync and async clients aligned so the same concepts work in
@@ -51,7 +72,8 @@ asyncio.run(main())
 - Transaction submission is explicit. Choose a broadcast mode deliberately
   instead of relying on hidden retry or blocking behavior.
 - Read models and projector loops belong in application code, but the SDK owns
-  the repetitive plumbing for event polling, cursors, and decoding.
+  the repetitive plumbing for websocket event delivery, catch-up cursors, raw
+  CometBFT decoding, and typed event conversion.
 - Reference apps and examples live in this repo because they demonstrate how to
   integrate Xian into Python systems, but they are not part of the published
   wheel.
@@ -73,12 +95,18 @@ asyncio.run(main())
   status models
 - query indexed blocks, transactions, events, state-history, and developer
   reward aggregates from BDS-backed nodes
-- watch blocks and indexed events with resumable cursors
+- watch indexed events with websocket live delivery plus resumable BDS cursors
+- watch raw live websocket events without BDS when low-latency delivery matters
+  more than replayable cursors
 - use thin helper clients for common patterns such as contract, token, event,
   and state-key access
-- build SQLite-backed read models with the shared projector primitives
+- build SQLite-backed read models with the shared projector primitives, using
+  CometBFT websocket wakeups while keeping BDS cursor reconciliation
 
-Indexed event/history queries and projector loops require a BDS-enabled node.
+Event watching uses the CometBFT websocket directly and still expects a
+BDS-enabled node for cursorable indexed catch-up and canonical event IDs.
+Use `watch_live_events()` or `.watch_live()` when you explicitly want
+websocket-only, non-resumable delivery.
 
 ## Core API Layers
 

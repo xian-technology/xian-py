@@ -1,7 +1,10 @@
 import asyncio
 import base64
+import json
+from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, patch
 
+import aiohttp
 import pytest
 from xian_runtime_types.decimal import ContractingDecimal
 
@@ -18,6 +21,7 @@ from xian_py.models import (
     DeveloperRewardSummary,
     IndexedBlock,
     IndexedEvent,
+    LiveEvent,
     NodeStatus,
     PerformanceStatus,
     TransactionReceipt,
@@ -30,6 +34,68 @@ from xian_py.xian_async import XianAsync
 
 def _b64(value: str) -> str:
     return base64.b64encode(value.encode("utf-8")).decode("utf-8")
+
+
+def _ws_tx_payload(
+    execution: dict,
+    *,
+    height: str = "12",
+    index: int = 0,
+    tx_hash: str | None = None,
+) -> dict:
+    resolved_tx_hash = tx_hash or execution.get("hash")
+    result: dict[str, object] = {
+        "query": "tm.event='Tx'",
+        "data": {
+            "type": "tendermint/event/Tx",
+            "value": {
+                "TxResult": {
+                    "height": height,
+                    "index": index,
+                    "result": {
+                        "data": _b64(json.dumps(execution)),
+                        "events": [],
+                    },
+                }
+            },
+        },
+    }
+    if resolved_tx_hash is not None:
+        result["events"] = {
+            "tx.hash": [resolved_tx_hash],
+            "tx.height": [height],
+        }
+    return {
+        "jsonrpc": "2.0",
+        "result": result,
+    }
+
+
+def _graphql_event_node(
+    event_id: int,
+    *,
+    tx_hash: str,
+    contract: str = "currency",
+    event: str = "Transfer",
+    signer: str = "alice",
+    caller: str = "alice",
+    data_indexed: dict | None = None,
+    data: dict | None = None,
+    block_height: int = 12,
+    created: str = "2026-03-23T12:00:12Z",
+) -> dict:
+    return {
+        "id": event_id,
+        "txHash": tx_hash,
+        "contract": contract,
+        "event": event,
+        "signer": signer,
+        "caller": caller,
+        "dataIndexed": data_indexed or {},
+        "data": data or {},
+        "created": created,
+        "transactionByTxHash": {"blockHeight": block_height},
+    }
 
 
 class _FakeResponse:
@@ -58,13 +124,58 @@ class _FakeSession:
     ):
         self.get_responses = list(get_responses or [])
         self.post_responses = list(post_responses or [])
+        self.post_calls: list[tuple[str, dict]] = []
         self.closed = False
 
-    def get(self, url: str) -> _FakeResponse:
+    def get(self, url: str, **kwargs) -> _FakeResponse:
         return self.get_responses.pop(0)
 
-    def post(self, url: str) -> _FakeResponse:
+    def post(self, url: str, **kwargs) -> _FakeResponse:
+        self.post_calls.append((url, kwargs))
         return self.post_responses.pop(0)
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class _FakeWebSocket:
+    def __init__(self, payloads: list[dict]):
+        self.payloads = list(payloads)
+        self.sent: list[dict] = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def send_json(self, payload: dict) -> None:
+        self.sent.append(payload)
+
+    async def receive(self):
+        if not self.payloads:
+            return SimpleNamespace(type=aiohttp.WSMsgType.CLOSED, data=None)
+        return SimpleNamespace(
+            type=aiohttp.WSMsgType.TEXT,
+            data=json.dumps(self.payloads.pop(0)),
+        )
+
+    def exception(self):
+        return None
+
+
+class _FakeWebSocketSession:
+    def __init__(self, *, websocket=None, connect_error: Exception | None = None):
+        self.websocket = websocket
+        self.connect_error = connect_error
+        self.ws_connect_calls: list[tuple[str, dict]] = []
+        self.closed = False
+
+    def ws_connect(self, url: str, **kwargs):
+        self.ws_connect_calls.append((url, kwargs))
+        if self.connect_error is not None:
+            raise self.connect_error
+        return self.websocket
 
     async def close(self) -> None:
         self.closed = True
@@ -872,6 +983,123 @@ def test_xian_async_exposes_developer_rewards_as_typed_model() -> None:
     assert summary.tx_count == 4
 
 
+def test_xian_async_list_events_falls_back_to_graphql() -> None:
+    client = XianAsync("https://node.xian.org", chain_id="xian-1")
+    client._session = _FakeSession(
+        post_responses=[
+            _FakeResponse(
+                {
+                    "result": {
+                        "response": {
+                            "value": None,
+                            "info": None,
+                        }
+                    }
+                }
+            ),
+            _FakeResponse(
+                {
+                    "data": {
+                        "allEvents": {
+                            "edges": [
+                                {
+                                    "node": _graphql_event_node(
+                                        11,
+                                        tx_hash="TX-11",
+                                        data_indexed={"to": "bob"},
+                                        data={"amount": "5", "to": "bob"},
+                                    )
+                                },
+                                {
+                                    "node": _graphql_event_node(
+                                        12,
+                                        tx_hash="TX-12",
+                                        data_indexed={"to": "carol"},
+                                        data={"amount": "7", "to": "carol"},
+                                        block_height=13,
+                                    )
+                                },
+                            ]
+                        }
+                    }
+                }
+            ),
+        ]
+    )
+
+    events = asyncio.run(
+        client.list_events("currency", "Transfer", limit=2, after_id=10)
+    )
+
+    assert [event.id for event in events] == [11, 12]
+    assert events[0].tx_hash == "TX-11"
+    assert events[0].block_height == 12
+    graphql_call = client.session.post_calls[1]
+    assert graphql_call[0] == "https://node.xian.org/graphql"
+    assert graphql_call[1]["json"]["variables"] == {
+        "contract": "currency",
+        "event": "Transfer",
+        "limit": 2,
+        "afterId": 10,
+    }
+
+
+def test_xian_async_get_events_for_tx_falls_back_to_graphql() -> None:
+    client = XianAsync("https://node.xian.org", chain_id="xian-1")
+    client._session = _FakeSession(
+        post_responses=[
+            _FakeResponse(
+                {
+                    "result": {
+                        "response": {
+                            "value": None,
+                            "info": None,
+                        }
+                    }
+                }
+            ),
+            _FakeResponse(
+                {
+                    "data": {
+                        "allEvents": {
+                            "edges": [
+                                {
+                                    "node": _graphql_event_node(
+                                        21,
+                                        tx_hash="TX-21",
+                                        data_indexed={"to": "bob"},
+                                        data={"amount": "5", "to": "bob"},
+                                    )
+                                },
+                                {
+                                    "node": _graphql_event_node(
+                                        22,
+                                        tx_hash="TX-21",
+                                        contract="con_staking_v1",
+                                        event="Withdraw",
+                                        data_indexed={"address": "bob"},
+                                        data={"amount": "5"},
+                                    )
+                                },
+                            ]
+                        }
+                    }
+                }
+            ),
+        ]
+    )
+
+    events = asyncio.run(client.get_events_for_tx("TX-21"))
+
+    assert [(event.id, event.contract, event.event) for event in events] == [
+        (21, "currency", "Transfer"),
+        (22, "con_staking_v1", "Withdraw"),
+    ]
+    graphql_call = client.session.post_calls[1]
+    assert graphql_call[0] == "https://node.xian.org/graphql"
+    assert graphql_call[1]["json"]["variables"] == {"txHash": "TX-21"}
+
+
 def test_sync_client_reuses_background_runtime_until_closed() -> None:
     wallet = Wallet()
     client = Xian("http://node", chain_id="xian-1", wallet=wallet)
@@ -1022,7 +1250,11 @@ def test_xian_async_watch_blocks_yields_new_blocks_from_rpc() -> None:
 
 def test_xian_async_watch_events_uses_after_id_cursor() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", wallet=wallet)
+    client = XianAsync(
+        "http://node",
+        wallet=wallet,
+        config=XianClientConfig(watcher=WatcherConfig(mode="poll")),
+    )
 
     async def run_watch() -> list[IndexedEvent]:
         try:
@@ -1087,6 +1319,398 @@ def test_xian_async_watch_events_uses_after_id_cursor() -> None:
     assert first_call.kwargs["limit"] == 2
 
 
+def test_xian_async_watch_events_uses_cometbft_websocket_for_live_tail() -> None:
+    wallet = Wallet()
+    config = XianClientConfig(
+        watcher=WatcherConfig(
+            mode="auto",
+            poll_interval_seconds=0.01,
+            batch_limit=25,
+            websocket_url="http://rpc.example:26657",
+        )
+    )
+    websocket = _FakeWebSocket(
+        [
+            {"jsonrpc": "2.0", "id": "xian-py-watch-events", "result": {}},
+            _ws_tx_payload(
+                {
+                    "hash": "EXECUTION-TX-12",
+                    "events": [
+                        {
+                            "contract": "currency",
+                            "event": "Transfer",
+                            "signer": "alice",
+                            "caller": "alice",
+                            "data_indexed": {"to": "carol"},
+                            "data": {"amount": "7", "to": "carol"},
+                        }
+                    ],
+                },
+                index=1,
+                tx_hash="TX-12",
+            ),
+        ]
+    )
+    session = _FakeWebSocketSession(websocket=websocket)
+    client = XianAsync(
+        "http://node",
+        wallet=wallet,
+        config=config,
+        session=session,
+    )
+
+    async def run_watch() -> list[IndexedEvent]:
+        try:
+            events: list[IndexedEvent] = []
+            async for event in client.watch_events(
+                "currency",
+                "Transfer",
+                after_id=10,
+            ):
+                events.append(event)
+                if len(events) == 2:
+                    break
+            return events
+        finally:
+            await client.close()
+
+    with patch.object(
+        client,
+        "list_events",
+        AsyncMock(
+            side_effect=[
+                [
+                    IndexedEvent(
+                        id=11,
+                        tx_hash="TX-11",
+                        block_height=12,
+                        tx_index=0,
+                        event_index=0,
+                        contract="currency",
+                        event="Transfer",
+                        signer="alice",
+                        caller="alice",
+                        data_indexed={"to": "bob"},
+                        data={"amount": "5", "to": "bob"},
+                        created="2026-03-23T12:00:12Z",
+                        raw={},
+                    )
+                ],
+                [],
+            ]
+        ),
+    ), patch.object(
+        client,
+        "get_events_for_tx",
+        AsyncMock(
+            return_value=[
+                IndexedEvent(
+                    id=12,
+                    tx_hash="TX-12",
+                    block_height=12,
+                    tx_index=1,
+                    event_index=0,
+                    contract="currency",
+                    event="Transfer",
+                    signer="alice",
+                    caller="alice",
+                    data_indexed={"to": "carol"},
+                    data={"amount": "7", "to": "carol"},
+                    created="2026-03-23T12:00:12Z",
+                    raw={},
+                )
+            ]
+        ),
+    ):
+        events = asyncio.run(run_watch())
+
+    assert [event.id for event in events] == [11, 12]
+    assert session.ws_connect_calls[0][0] == "ws://rpc.example:26657/websocket"
+    assert websocket.sent[0] == {
+        "jsonrpc": "2.0",
+        "method": "subscribe",
+        "id": "xian-py-watch-events",
+        "params": {"query": "tm.event='Tx' AND Transfer.contract='currency'"},
+    }
+
+
+def test_xian_async_watch_events_auto_falls_back_to_polling() -> None:
+    wallet = Wallet()
+    config = XianClientConfig(
+        watcher=WatcherConfig(
+            mode="auto",
+            poll_interval_seconds=0.01,
+            batch_limit=25,
+            websocket_url="http://rpc.example:26657",
+        )
+    )
+    session = _FakeWebSocketSession(connect_error=OSError("offline"))
+    client = XianAsync(
+        "http://node",
+        wallet=wallet,
+        config=config,
+        session=session,
+    )
+
+    async def run_watch() -> IndexedEvent:
+        try:
+            async for event in client.watch_events(
+                "currency",
+                "Transfer",
+                after_id=10,
+            ):
+                return event
+        finally:
+            await client.close()
+
+    with patch.object(
+        client,
+        "list_events",
+        AsyncMock(
+            return_value=[
+                IndexedEvent(
+                    id=11,
+                    tx_hash="TX-11",
+                    block_height=12,
+                    tx_index=0,
+                    event_index=0,
+                    contract="currency",
+                    event="Transfer",
+                    signer="alice",
+                    caller="alice",
+                    data_indexed={"to": "bob"},
+                    data={"amount": "5", "to": "bob"},
+                    created="2026-03-23T12:00:12Z",
+                    raw={},
+                )
+            ]
+        ),
+    ):
+        event = asyncio.run(run_watch())
+
+    assert event.id == 11
+    assert session.ws_connect_calls[0][0] == "ws://rpc.example:26657/websocket"
+
+
+def test_xian_async_watch_events_resolves_indexed_rows_for_live_messages() -> None:
+    wallet = Wallet()
+    config = XianClientConfig(
+        watcher=WatcherConfig(
+            mode="auto",
+            poll_interval_seconds=0.01,
+            batch_limit=25,
+            websocket_url="http://rpc.example:26657",
+        )
+    )
+    websocket = _FakeWebSocket(
+        [
+            {"jsonrpc": "2.0", "id": "xian-py-watch-events", "result": {}},
+            _ws_tx_payload(
+                {
+                    "hash": "TX-12",
+                    "events": [
+                        {
+                            "contract": "currency",
+                            "event": "Transfer",
+                            "signer": "alice",
+                            "caller": "alice",
+                            "data_indexed": {"to": "carol"},
+                            "data": {"amount": "7", "to": "carol"},
+                        }
+                    ],
+                },
+                index=1,
+            ),
+        ]
+    )
+    session = _FakeWebSocketSession(websocket=websocket)
+    client = XianAsync(
+        "http://node",
+        wallet=wallet,
+        config=config,
+        session=session,
+    )
+
+    resolved_event = IndexedEvent(
+        id=12,
+        tx_hash="TX-12",
+        block_height=12,
+        tx_index=1,
+        event_index=0,
+        contract="currency",
+        event="Transfer",
+        signer="alice",
+        caller="alice",
+        data_indexed={"to": "carol"},
+        data={"amount": "7", "to": "carol"},
+        created="2026-03-23T12:00:12Z",
+        raw={},
+    )
+
+    async def run_watch() -> IndexedEvent:
+        try:
+            async for event in client.watch_events(
+                "currency",
+                "Transfer",
+                after_id=11,
+            ):
+                return event
+        finally:
+            await client.close()
+
+    with (
+        patch.object(client, "list_events", AsyncMock(return_value=[])),
+        patch.object(
+            client,
+            "get_events_for_tx",
+            AsyncMock(return_value=[resolved_event]),
+        ) as get_events_for_tx,
+    ):
+        event = asyncio.run(run_watch())
+
+    assert event.id == 12
+    get_events_for_tx.assert_awaited_once_with("TX-12")
+
+
+def test_xian_async_watch_live_events_uses_cometbft_websocket_without_bds() -> (
+    None
+):
+    wallet = Wallet()
+    config = XianClientConfig(
+        watcher=WatcherConfig(
+            mode="poll",
+            poll_interval_seconds=0.01,
+            websocket_url="http://rpc.example:26657",
+        )
+    )
+    websocket = _FakeWebSocket(
+        [
+            {"jsonrpc": "2.0", "id": "xian-py-watch-events", "result": {}},
+            _ws_tx_payload(
+                {
+                    "hash": "EXECUTION-TX-12",
+                    "events": [
+                        {
+                            "contract": "currency",
+                            "event": "Transfer",
+                            "signer": "alice",
+                            "caller": "alice",
+                            "data_indexed": {"to": "carol"},
+                            "data": {"amount": "7", "to": "carol"},
+                        }
+                    ],
+                },
+                index=1,
+                tx_hash="TX-12",
+            ),
+        ]
+    )
+    session = _FakeWebSocketSession(websocket=websocket)
+    client = XianAsync(
+        "http://node",
+        wallet=wallet,
+        config=config,
+        session=session,
+    )
+
+    async def run_watch() -> LiveEvent:
+        try:
+            async for event in client.watch_live_events(
+                "currency",
+                "Transfer",
+            ):
+                return event
+        finally:
+            await client.close()
+
+    with (
+        patch.object(
+            client,
+            "list_events",
+            AsyncMock(side_effect=AssertionError("list_events not expected")),
+        ),
+        patch.object(
+            client,
+            "get_events_for_tx",
+            AsyncMock(
+                side_effect=AssertionError("get_events_for_tx not expected")
+            ),
+        ),
+    ):
+        event = asyncio.run(run_watch())
+
+    assert event.tx_hash == "TX-12"
+    assert event.block_height == 12
+    assert event.tx_index == 1
+    assert event.event_index == 0
+    assert event.contract == "currency"
+    assert event.event == "Transfer"
+    assert event.signer == "alice"
+    assert event.caller == "alice"
+    assert event.data_indexed == {"to": "carol"}
+    assert event.data == {"amount": "7", "to": "carol"}
+    assert session.ws_connect_calls[0][0] == "ws://rpc.example:26657/websocket"
+
+
+def test_xian_async_resolve_live_indexed_events_caps_retry_sleep() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", wallet=wallet)
+
+    live_event = LiveEvent(
+        tx_hash="TX-12",
+        block_height=12,
+        tx_index=1,
+        event_index=0,
+        contract="currency",
+        event="Transfer",
+        signer="alice",
+        caller="alice",
+        data_indexed={"to": "carol"},
+        data={"amount": "7", "to": "carol"},
+        raw={},
+    )
+    resolved_event = IndexedEvent(
+        id=12,
+        tx_hash="TX-12",
+        block_height=12,
+        tx_index=1,
+        event_index=0,
+        contract="currency",
+        event="Transfer",
+        signer="alice",
+        caller="alice",
+        data_indexed={"to": "carol"},
+        data={"amount": "7", "to": "carol"},
+        created="2026-03-23T12:00:12Z",
+        raw={},
+    )
+
+    async def run_resolve() -> list[IndexedEvent]:
+        try:
+            return await client._resolve_live_indexed_events(
+                [live_event],
+                poll_interval_seconds=30.0,
+            )
+        finally:
+            await client.close()
+
+    sleep = AsyncMock(return_value=None)
+    with (
+        patch.object(
+            client,
+            "get_events_for_tx",
+            AsyncMock(side_effect=[[], [resolved_event]]),
+        ) as get_events_for_tx,
+        patch("asyncio.sleep", sleep),
+    ):
+        events = asyncio.run(run_resolve())
+
+    assert [event.id for event in events] == [12]
+    assert get_events_for_tx.await_count == 2
+    sleep.assert_awaited_once()
+    assert sleep.await_args.args[0] == pytest.approx(1.0)
+
+
 def test_sync_watch_events_wraps_async_iterator() -> None:
     wallet = Wallet()
     client = Xian("http://node", chain_id="xian-testnet", wallet=wallet)
@@ -1136,6 +1760,55 @@ def test_sync_watch_events_wraps_async_iterator() -> None:
 
     assert first.id == 21
     assert second.id == 22
+
+
+def test_sync_watch_live_events_wraps_async_iterator() -> None:
+    wallet = Wallet()
+    client = Xian("http://node", chain_id="xian-testnet", wallet=wallet)
+
+    async def async_events():
+        yield LiveEvent(
+            tx_hash="TX-21",
+            block_height=21,
+            tx_index=0,
+            event_index=0,
+            contract="currency",
+            event="Transfer",
+            signer="alice",
+            caller="alice",
+            data_indexed={"to": "bob"},
+            data={"amount": "2", "to": "bob"},
+            raw={},
+        )
+        yield LiveEvent(
+            tx_hash="TX-22",
+            block_height=22,
+            tx_index=0,
+            event_index=0,
+            contract="currency",
+            event="Transfer",
+            signer="alice",
+            caller="alice",
+            data_indexed={"to": "carol"},
+            data={"amount": "3", "to": "carol"},
+            raw={},
+        )
+
+    try:
+        with patch.object(
+            client._async_client,
+            "watch_live_events",
+            return_value=async_events(),
+        ):
+            iterator = client.watch_live_events("currency", "Transfer")
+            first = next(iterator)
+            second = next(iterator)
+            iterator.close()
+    finally:
+        client.close()
+
+    assert first.tx_hash == "TX-21"
+    assert second.tx_hash == "TX-22"
 
 
 def test_xian_async_get_node_status_retries_transport_errors() -> None:
@@ -1326,6 +1999,7 @@ def test_xian_async_watch_events_uses_watcher_defaults_from_config() -> None:
     wallet = Wallet()
     config = XianClientConfig(
         watcher=WatcherConfig(
+            mode="poll",
             poll_interval_seconds=0.01,
             batch_limit=25,
         )
