@@ -266,7 +266,7 @@ class Xian:
         self,
         contract: str,
         variable: str,
-        *keys: str,
+        *keys: object,
     ) -> None | int | float | dict | str:
         return self._run_async(
             self._async_client.get_state(contract, variable, *keys)

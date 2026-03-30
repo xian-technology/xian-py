@@ -128,11 +128,11 @@ class AsyncStateKeyClient:
     client: Any
     contract: str
     variable: str
-    keys: tuple[str, ...]
+    keys: tuple[object, ...]
 
     @property
     def full_key(self) -> str:
-        suffix = f":{':'.join(self.keys)}" if self.keys else ""
+        suffix = f":{':'.join(str(key) for key in self.keys)}" if self.keys else ""
         return f"{self.contract}.{self.variable}{suffix}"
 
     async def get(self) -> Any:
@@ -158,11 +158,11 @@ class StateKeyClient:
     client: Any
     contract: str
     variable: str
-    keys: tuple[str, ...]
+    keys: tuple[object, ...]
 
     @property
     def full_key(self) -> str:
-        suffix = f":{':'.join(self.keys)}" if self.keys else ""
+        suffix = f":{':'.join(str(key) for key in self.keys)}" if self.keys else ""
         return f"{self.contract}.{self.variable}{suffix}"
 
     def get(self) -> Any:
@@ -186,10 +186,10 @@ class AsyncContractClient:
     client: Any
     name: str
 
-    async def get_state(self, variable: str, *keys: str) -> Any:
+    async def get_state(self, variable: str, *keys: object) -> Any:
         return await self.client.get_state(self.name, variable, *keys)
 
-    def state_key(self, variable: str, *keys: str) -> AsyncStateKeyClient:
+    def state_key(self, variable: str, *keys: object) -> AsyncStateKeyClient:
         return AsyncStateKeyClient(
             self.client, self.name, variable, tuple(keys)
         )
@@ -266,10 +266,10 @@ class ContractClient:
     client: Any
     name: str
 
-    def get_state(self, variable: str, *keys: str) -> Any:
+    def get_state(self, variable: str, *keys: object) -> Any:
         return self.client.get_state(self.name, variable, *keys)
 
-    def state_key(self, variable: str, *keys: str) -> StateKeyClient:
+    def state_key(self, variable: str, *keys: object) -> StateKeyClient:
         return StateKeyClient(self.client, self.name, variable, tuple(keys))
 
     def simulate(
@@ -407,12 +407,20 @@ class AsyncTokenClient(AsyncContractClient):
         *,
         owner: str | None = None,
     ) -> int | ContractingDecimal:
+        address = owner or self.client.wallet.public_key
         value = await self.client.get_state(
             self.name,
             "approvals",
-            owner or self.client.wallet.public_key,
+            address,
             spender,
         )
+        if value is None:
+            value = await self.client.get_state(
+                self.name,
+                "balances",
+                address,
+                spender,
+            )
         return 0 if value is None else value
 
     def transfers(self) -> AsyncEventClient:
@@ -485,12 +493,20 @@ class TokenClient(ContractClient):
         *,
         owner: str | None = None,
     ) -> int | ContractingDecimal:
+        address = owner or self.client.wallet.public_key
         value = self.client.get_state(
             self.name,
             "approvals",
-            owner or self.client.wallet.public_key,
+            address,
             spender,
         )
+        if value is None:
+            value = self.client.get_state(
+                self.name,
+                "balances",
+                address,
+                spender,
+            )
         return 0 if value is None else value
 
     def transfers(self) -> EventClient:

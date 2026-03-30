@@ -1058,12 +1058,12 @@ class XianAsync:
         self,
         contract: str,
         variable: str,
-        *keys: str,
+        *keys: object,
     ) -> None | int | ContractingDecimal | dict | list | str:
         """Retrieve contract state and decode it."""
         path = f"/get/{contract}.{variable}"
         if keys:
-            path = f"{path}:{':'.join(keys)}"
+            path = f"{path}:{':'.join(str(key) for key in keys)}"
         return await self._abci_query_value(path)
 
     async def get_contract(self, contract: str) -> None | str:

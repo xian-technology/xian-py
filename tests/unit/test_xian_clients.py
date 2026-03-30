@@ -2,7 +2,7 @@ import asyncio
 import base64
 import json
 from types import SimpleNamespace
-from unittest.mock import ANY, AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
@@ -721,6 +721,20 @@ def test_xian_async_call_decodes_structured_return_value_with_datetime_strings()
     }
 
 
+def test_xian_async_get_state_stringifies_non_string_keys() -> None:
+    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+
+    with patch.object(
+        client,
+        "_abci_query_value",
+        AsyncMock(return_value=123),
+    ) as query:
+        result = asyncio.run(client.get_state("con_pairs", "pairs", 1, "reserve0"))
+
+    assert result == 123
+    query.assert_awaited_once_with("/get/con_pairs.pairs:1:reserve0")
+
+
 def test_xian_async_call_returns_plain_string_results() -> None:
     client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
 
@@ -879,6 +893,30 @@ def test_xian_async_get_approved_amount_falls_back_to_balances() -> None:
         "balances",
         wallet.public_key,
         "dex",
+    )
+
+
+def test_async_token_client_allowance_falls_back_to_balances() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client.get_state = AsyncMock(
+        side_effect=[None, ContractingDecimal("10.0")]
+    )
+
+    allowance = asyncio.run(client.token("currency").allowance("con_dex"))
+
+    assert allowance == ContractingDecimal("10.0")
+    assert client.get_state.await_args_list[0].args == (
+        "currency",
+        "approvals",
+        wallet.public_key,
+        "con_dex",
+    )
+    assert client.get_state.await_args_list[1].args == (
+        "currency",
+        "balances",
+        wallet.public_key,
+        "con_dex",
     )
 
 
@@ -2145,6 +2183,30 @@ def test_async_token_client_uses_token_helpers() -> None:
     )
 
 
+def test_token_client_allowance_falls_back_to_balances() -> None:
+    wallet = Wallet()
+    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    client.get_state = MagicMock(
+        side_effect=[None, ContractingDecimal("7.0")]
+    )
+
+    allowance = client.token("currency").allowance("con_dex")
+
+    assert allowance == ContractingDecimal("7.0")
+    assert client.get_state.call_args_list[0].args == (
+        "currency",
+        "approvals",
+        wallet.public_key,
+        "con_dex",
+    )
+    assert client.get_state.call_args_list[1].args == (
+        "currency",
+        "balances",
+        wallet.public_key,
+        "con_dex",
+    )
+
+
 def test_async_state_key_client_uses_exact_full_key() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
@@ -2163,6 +2225,27 @@ def test_async_state_key_client_uses_exact_full_key() -> None:
         "currency.balances:alice",
         limit=5,
         offset=2,
+    )
+
+
+def test_async_state_key_client_stringifies_non_string_keys() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    state_key = client.state_key("con_pairs", "pairs", 1, "reserve0")
+    client.get_state = AsyncMock(return_value=500)
+    client.get_state_history = AsyncMock(return_value=[])
+
+    value = asyncio.run(state_key.get())
+    history = asyncio.run(state_key.history(limit=2))
+
+    assert value == 500
+    assert history == []
+    assert state_key.full_key == "con_pairs.pairs:1:reserve0"
+    client.get_state.assert_awaited_once_with("con_pairs", "pairs", 1, "reserve0")
+    client.get_state_history.assert_awaited_once_with(
+        "con_pairs.pairs:1:reserve0",
+        limit=2,
+        offset=0,
     )
 
 
