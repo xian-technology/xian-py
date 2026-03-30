@@ -99,7 +99,9 @@ class _FakeWebSocket:
 
 
 class _FakeWebSocketSession:
-    def __init__(self, *, websocket=None, connect_error: Exception | None = None):
+    def __init__(
+        self, *, websocket=None, connect_error: Exception | None = None
+    ):
         self.websocket = websocket
         self.connect_error = connect_error
         self.ws_connect_calls: list[tuple[str, dict]] = []

@@ -132,7 +132,9 @@ class AsyncStateKeyClient:
 
     @property
     def full_key(self) -> str:
-        suffix = f":{':'.join(str(key) for key in self.keys)}" if self.keys else ""
+        suffix = (
+            f":{':'.join(str(key) for key in self.keys)}" if self.keys else ""
+        )
         return f"{self.contract}.{self.variable}{suffix}"
 
     async def get(self) -> Any:
@@ -162,7 +164,9 @@ class StateKeyClient:
 
     @property
     def full_key(self) -> str:
-        suffix = f":{':'.join(str(key) for key in self.keys)}" if self.keys else ""
+        suffix = (
+            f":{':'.join(str(key) for key in self.keys)}" if self.keys else ""
+        )
         return f"{self.contract}.{self.variable}{suffix}"
 
     def get(self) -> Any:
