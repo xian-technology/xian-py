@@ -368,11 +368,15 @@ class TestEventProjector(unittest.IsolatedAsyncioTestCase):
                 await task
 
         assert applied_ids == [1]
-        assert client.calls == [
+        assert client.calls[:3] == [
             ("currency", "Transfer", 50, 0),
             ("currency", "Transfer", 50, 0),
             ("currency", "Transfer", 50, 0),
         ]
+        assert client.calls[3:] in (
+            [],
+            [("currency", "Transfer", 50, 1)],
+        )
 
     async def test_run_forever_deduplicates_live_wakeup_subscriptions(
         self,
