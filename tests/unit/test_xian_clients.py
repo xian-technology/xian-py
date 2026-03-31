@@ -165,7 +165,9 @@ class _FakeWebSocket:
 
 
 class _FakeWebSocketSession:
-    def __init__(self, *, websocket=None, connect_error: Exception | None = None):
+    def __init__(
+        self, *, websocket=None, connect_error: Exception | None = None
+    ):
         self.websocket = websocket
         self.connect_error = connect_error
         self.ws_connect_calls: list[tuple[str, dict]] = []
@@ -729,7 +731,9 @@ def test_xian_async_get_state_stringifies_non_string_keys() -> None:
         "_abci_query_value",
         AsyncMock(return_value=123),
     ) as query:
-        result = asyncio.run(client.get_state("con_pairs", "pairs", 1, "reserve0"))
+        result = asyncio.run(
+            client.get_state("con_pairs", "pairs", 1, "reserve0")
+        )
 
     assert result == 123
     query.assert_awaited_once_with("/get/con_pairs.pairs:1:reserve0")
@@ -899,9 +903,7 @@ def test_xian_async_get_approved_amount_falls_back_to_balances() -> None:
 def test_async_token_client_allowance_falls_back_to_balances() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
-    client.get_state = AsyncMock(
-        side_effect=[None, ContractingDecimal("10.0")]
-    )
+    client.get_state = AsyncMock(side_effect=[None, ContractingDecimal("10.0")])
 
     allowance = asyncio.run(client.token("currency").allowance("con_dex"))
 
@@ -1357,7 +1359,9 @@ def test_xian_async_watch_events_uses_after_id_cursor() -> None:
     assert first_call.kwargs["limit"] == 2
 
 
-def test_xian_async_watch_events_uses_cometbft_websocket_for_live_tail() -> None:
+def test_xian_async_watch_events_uses_cometbft_websocket_for_live_tail() -> (
+    None
+):
     wallet = Wallet()
     config = XianClientConfig(
         watcher=WatcherConfig(
@@ -1412,52 +1416,55 @@ def test_xian_async_watch_events_uses_cometbft_websocket_for_live_tail() -> None
         finally:
             await client.close()
 
-    with patch.object(
-        client,
-        "list_events",
-        AsyncMock(
-            side_effect=[
-                [
+    with (
+        patch.object(
+            client,
+            "list_events",
+            AsyncMock(
+                side_effect=[
+                    [
+                        IndexedEvent(
+                            id=11,
+                            tx_hash="TX-11",
+                            block_height=12,
+                            tx_index=0,
+                            event_index=0,
+                            contract="currency",
+                            event="Transfer",
+                            signer="alice",
+                            caller="alice",
+                            data_indexed={"to": "bob"},
+                            data={"amount": "5", "to": "bob"},
+                            created="2026-03-23T12:00:12Z",
+                            raw={},
+                        )
+                    ],
+                    [],
+                ]
+            ),
+        ),
+        patch.object(
+            client,
+            "get_events_for_tx",
+            AsyncMock(
+                return_value=[
                     IndexedEvent(
-                        id=11,
-                        tx_hash="TX-11",
+                        id=12,
+                        tx_hash="TX-12",
                         block_height=12,
-                        tx_index=0,
+                        tx_index=1,
                         event_index=0,
                         contract="currency",
                         event="Transfer",
                         signer="alice",
                         caller="alice",
-                        data_indexed={"to": "bob"},
-                        data={"amount": "5", "to": "bob"},
+                        data_indexed={"to": "carol"},
+                        data={"amount": "7", "to": "carol"},
                         created="2026-03-23T12:00:12Z",
                         raw={},
                     )
-                ],
-                [],
-            ]
-        ),
-    ), patch.object(
-        client,
-        "get_events_for_tx",
-        AsyncMock(
-            return_value=[
-                IndexedEvent(
-                    id=12,
-                    tx_hash="TX-12",
-                    block_height=12,
-                    tx_index=1,
-                    event_index=0,
-                    contract="currency",
-                    event="Transfer",
-                    signer="alice",
-                    caller="alice",
-                    data_indexed={"to": "carol"},
-                    data={"amount": "7", "to": "carol"},
-                    created="2026-03-23T12:00:12Z",
-                    raw={},
-                )
-            ]
+                ]
+            ),
         ),
     ):
         events = asyncio.run(run_watch())
@@ -1530,7 +1537,9 @@ def test_xian_async_watch_events_auto_falls_back_to_polling() -> None:
     assert session.ws_connect_calls[0][0] == "ws://rpc.example:26657/websocket"
 
 
-def test_xian_async_watch_events_resolves_indexed_rows_for_live_messages() -> None:
+def test_xian_async_watch_events_resolves_indexed_rows_for_live_messages() -> (
+    None
+):
     wallet = Wallet()
     config = XianClientConfig(
         watcher=WatcherConfig(
@@ -2186,9 +2195,7 @@ def test_async_token_client_uses_token_helpers() -> None:
 def test_token_client_allowance_falls_back_to_balances() -> None:
     wallet = Wallet()
     client = Xian("http://node", chain_id="xian-1", wallet=wallet)
-    client.get_state = MagicMock(
-        side_effect=[None, ContractingDecimal("7.0")]
-    )
+    client.get_state = MagicMock(side_effect=[None, ContractingDecimal("7.0")])
 
     allowance = client.token("currency").allowance("con_dex")
 
@@ -2241,7 +2248,9 @@ def test_async_state_key_client_stringifies_non_string_keys() -> None:
     assert value == 500
     assert history == []
     assert state_key.full_key == "con_pairs.pairs:1:reserve0"
-    client.get_state.assert_awaited_once_with("con_pairs", "pairs", 1, "reserve0")
+    client.get_state.assert_awaited_once_with(
+        "con_pairs", "pairs", 1, "reserve0"
+    )
     client.get_state_history.assert_awaited_once_with(
         "con_pairs.pairs:1:reserve0",
         limit=2,

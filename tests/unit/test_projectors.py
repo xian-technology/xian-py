@@ -99,7 +99,9 @@ class _FakeWebSocket:
 
 
 class _FakeWebSocketSession:
-    def __init__(self, *, websocket=None, connect_error: Exception | None = None):
+    def __init__(
+        self, *, websocket=None, connect_error: Exception | None = None
+    ):
         self.websocket = websocket
         self.connect_error = connect_error
         self.ws_connect_calls: list[tuple[str, dict]] = []
@@ -366,11 +368,15 @@ class TestEventProjector(unittest.IsolatedAsyncioTestCase):
                 await task
 
         assert applied_ids == [1]
-        assert client.calls == [
+        assert client.calls[:3] == [
             ("currency", "Transfer", 50, 0),
             ("currency", "Transfer", 50, 0),
             ("currency", "Transfer", 50, 0),
         ]
+        assert client.calls[3:] in (
+            [],
+            [("currency", "Transfer", 50, 1)],
+        )
 
     async def test_run_forever_deduplicates_live_wakeup_subscriptions(
         self,

@@ -47,6 +47,7 @@ _SIMULATION_DATETIME_RE = re.compile(
     r"(?<=:\s)(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)(?=[,}])"
 )
 
+
 def _coerce_int(value: Any) -> int | None:
     try:
         return int(value) if value is not None else None
@@ -1731,9 +1732,11 @@ class XianAsync:
                         if not live_events:
                             continue
 
-                        resolved_events = await self._resolve_live_indexed_events(
-                            live_events,
-                            poll_interval_seconds=poll_interval_seconds,
+                        resolved_events = (
+                            await self._resolve_live_indexed_events(
+                                live_events,
+                                poll_interval_seconds=poll_interval_seconds,
+                            )
                         )
                         for resolved in resolved_events:
                             if resolved.id is None or resolved.id <= cursor:
