@@ -20,6 +20,7 @@ from xian_py.models import (
     NodeStatus,
     PerformanceStatus,
     StateEntry,
+    TokenBalancePage,
     TransactionReceipt,
     TransactionSubmission,
 )
@@ -385,6 +386,23 @@ class Xian:
     ) -> DeveloperRewardSummary:
         return self._run_async(
             self._async_client.get_developer_rewards(recipient_key)
+        )
+
+    def get_token_balances(
+        self,
+        address: str | None = None,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        include_zero: bool = False,
+    ) -> TokenBalancePage:
+        return self._run_async(
+            self._async_client.get_token_balances(
+                address,
+                limit=limit,
+                offset=offset,
+                include_zero=include_zero,
+            )
         )
 
     def list_blocks(

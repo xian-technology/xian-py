@@ -36,6 +36,8 @@ from xian_py.models import (
     NodeStatus,
     PerformanceStatus,
     StateEntry,
+    TokenBalance,
+    TokenBalancePage,
     TransactionReceipt,
     TransactionSubmission,
 )
@@ -77,6 +79,8 @@ __all__ = [
     "SQLiteProjectionState",
     "StateEntry",
     "SubmissionConfig",
+    "TokenBalance",
+    "TokenBalancePage",
     "TransactionError",
     "TransactionReceipt",
     "TransactionSubmission",

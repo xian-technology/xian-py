@@ -221,6 +221,75 @@ class DeveloperRewardSummary:
 
 
 @dataclass(frozen=True)
+class TokenBalance:
+    contract: str
+    balance: str | None
+    name: str | None
+    symbol: str | None
+    logo_url: str | None
+    last_tx_hash: str | None
+    last_block_height: int | None
+    updated_at: str | None
+    raw: dict[str, Any]
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "TokenBalance":
+        raw_dict = dict(raw)
+        last_block_height = raw_dict.get("last_block_height")
+        try:
+            last_block_height = (
+                int(last_block_height)
+                if last_block_height is not None
+                else None
+            )
+        except (TypeError, ValueError):
+            last_block_height = None
+
+        balance = raw_dict.get("balance")
+        return cls(
+            contract=str(raw_dict.get("contract", "")),
+            balance=None if balance is None else str(balance),
+            name=raw_dict.get("name"),
+            symbol=raw_dict.get("symbol"),
+            logo_url=raw_dict.get("logo_url"),
+            last_tx_hash=raw_dict.get("last_tx_hash"),
+            last_block_height=last_block_height,
+            updated_at=raw_dict.get("updated_at"),
+            raw=raw_dict,
+        )
+
+
+@dataclass(frozen=True)
+class TokenBalancePage:
+    available: bool
+    address: str | None
+    items: list[TokenBalance]
+    total: int
+    limit: int
+    offset: int
+    raw: dict[str, Any]
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "TokenBalancePage":
+        raw_dict = dict(raw)
+        raw_items = raw_dict.get("items", [])
+        items = [
+            TokenBalance.from_dict(item)
+            for item in raw_items
+            if isinstance(item, Mapping)
+        ]
+        return cls(
+            available=bool(raw_dict.get("available", False)),
+            address=raw_dict.get("address"),
+            items=items,
+            total=int(raw_dict.get("total", len(items))),
+            limit=int(raw_dict.get("limit", len(items))),
+            offset=int(raw_dict.get("offset", 0)),
+            raw=raw_dict,
+        )
+
+
+@dataclass(frozen=True)
 class IndexedBlock:
     height: int | None
     block_hash: str | None

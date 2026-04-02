@@ -38,6 +38,7 @@ from xian_py.models import (
     NodeStatus,
     PerformanceStatus,
     StateEntry,
+    TokenBalancePage,
     TransactionReceipt,
     TransactionSubmission,
 )
@@ -1231,6 +1232,23 @@ class XianAsync:
         if not isinstance(payload, dict):
             raise XianException("Unexpected developer rewards payload")
         return DeveloperRewardSummary.from_dict(payload)
+
+    async def get_token_balances(
+        self,
+        address: str | None = None,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        include_zero: bool = False,
+    ) -> TokenBalancePage:
+        address = address or self.wallet.public_key
+        path = f"/token_balances/{address}/limit={limit}/offset={offset}"
+        if include_zero:
+            path = f"{path}/include_zero=true"
+        payload = await self._abci_query_value(path)
+        if not isinstance(payload, dict):
+            raise XianException("Unexpected token balances payload")
+        return TokenBalancePage.from_dict(payload)
 
     async def list_blocks(
         self,

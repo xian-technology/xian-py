@@ -24,6 +24,8 @@ from xian_py.models import (
     LiveEvent,
     NodeStatus,
     PerformanceStatus,
+    TokenBalance,
+    TokenBalancePage,
     TransactionReceipt,
     TransactionSubmission,
 )
@@ -1023,6 +1025,74 @@ def test_xian_async_exposes_developer_rewards_as_typed_model() -> None:
     assert summary.tx_count == 4
 
 
+def test_xian_async_exposes_token_balances_as_typed_page() -> None:
+    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+
+    with patch.object(
+        client,
+        "_abci_query_value",
+        AsyncMock(
+            return_value={
+                "available": True,
+                "address": "alice",
+                "items": [
+                    {
+                        "contract": "currency",
+                        "balance": "12.5",
+                        "name": "Xian",
+                        "symbol": "XIAN",
+                        "logo_url": "https://example.com/xian.svg",
+                        "last_tx_hash": "TX-1",
+                        "last_block_height": 12,
+                        "updated_at": "2026-04-02T12:00:00Z",
+                    }
+                ],
+                "total": 1,
+                "limit": 25,
+                "offset": 5,
+            }
+        ),
+    ) as query:
+        page = asyncio.run(
+            client.get_token_balances(
+                "alice",
+                limit=25,
+                offset=5,
+                include_zero=True,
+            )
+        )
+
+    assert isinstance(page, TokenBalancePage)
+    assert page.available is True
+    assert page.address == "alice"
+    assert page.total == 1
+    assert page.items == [
+        TokenBalance(
+            contract="currency",
+            balance="12.5",
+            name="Xian",
+            symbol="XIAN",
+            logo_url="https://example.com/xian.svg",
+            last_tx_hash="TX-1",
+            last_block_height=12,
+            updated_at="2026-04-02T12:00:00Z",
+            raw={
+                "contract": "currency",
+                "balance": "12.5",
+                "name": "Xian",
+                "symbol": "XIAN",
+                "logo_url": "https://example.com/xian.svg",
+                "last_tx_hash": "TX-1",
+                "last_block_height": 12,
+                "updated_at": "2026-04-02T12:00:00Z",
+            },
+        )
+    ]
+    query.assert_awaited_once_with(
+        "/token_balances/alice/limit=25/offset=5/include_zero=true"
+    )
+
+
 def test_xian_async_list_events_falls_back_to_graphql() -> None:
     client = XianAsync("https://node.xian.org", chain_id="xian-1")
     client._session = _FakeSession(
@@ -1152,6 +1222,26 @@ def test_sync_client_reuses_background_runtime_until_closed() -> None:
 
     client.close()
     client._async_client.close.assert_awaited_once()
+
+
+def test_sync_client_exposes_token_balances() -> None:
+    wallet = Wallet()
+    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    page = TokenBalancePage(
+        available=True,
+        address=wallet.public_key,
+        items=[],
+        total=0,
+        limit=100,
+        offset=0,
+        raw={},
+    )
+    client._async_client.get_token_balances = AsyncMock(return_value=page)
+    client._async_client.close = AsyncMock()
+
+    assert client.get_token_balances() == page
+
+    client.close()
 
 
 def test_sync_client_context_manager_closes_async_client() -> None:
