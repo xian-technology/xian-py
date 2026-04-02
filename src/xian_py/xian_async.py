@@ -1106,9 +1106,6 @@ class XianAsync:
         address = address if address else self.wallet.public_key
 
         value = await self.get_state(token, "approvals", address, contract)
-        if value is None:
-            value = await self.get_state(token, "balances", address, contract)
-
         return 0 if value is None else value
 
     async def approve(

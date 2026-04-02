@@ -28,6 +28,8 @@ from xian_py.models import (
     TokenBalancePage,
     TransactionReceipt,
     TransactionSubmission,
+    TokenBalance,
+    TokenBalancePage,
 )
 from xian_py.wallet import Wallet
 from xian_py.xian import Xian
@@ -880,45 +882,33 @@ def test_xian_async_get_contract_code_returns_runtime_code() -> None:
     assert contract == "runtime-code"
 
 
-def test_xian_async_get_approved_amount_falls_back_to_balances() -> None:
+def test_xian_async_get_approved_amount_reads_approvals() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
-    client.get_state = AsyncMock(side_effect=[None, 25])
+    client.get_state = AsyncMock(return_value=25)
 
     approved_amount = asyncio.run(client.get_approved_amount("dex"))
 
     assert approved_amount == 25
-    assert client.get_state.await_args_list[0].args == (
+    assert client.get_state.await_args.args == (
         "currency",
         "approvals",
         wallet.public_key,
         "dex",
     )
-    assert client.get_state.await_args_list[1].args == (
-        "currency",
-        "balances",
-        wallet.public_key,
-        "dex",
-    )
 
 
-def test_async_token_client_allowance_falls_back_to_balances() -> None:
+def test_async_token_client_allowance_reads_approvals() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
-    client.get_state = AsyncMock(side_effect=[None, ContractingDecimal("10.0")])
+    client.get_state = AsyncMock(return_value=ContractingDecimal("10.0"))
 
     allowance = asyncio.run(client.token("currency").allowance("con_dex"))
 
     assert allowance == ContractingDecimal("10.0")
-    assert client.get_state.await_args_list[0].args == (
+    assert client.get_state.await_args.args == (
         "currency",
         "approvals",
-        wallet.public_key,
-        "con_dex",
-    )
-    assert client.get_state.await_args_list[1].args == (
-        "currency",
-        "balances",
         wallet.public_key,
         "con_dex",
     )
@@ -2282,23 +2272,17 @@ def test_async_token_client_uses_token_helpers() -> None:
     )
 
 
-def test_token_client_allowance_falls_back_to_balances() -> None:
+def test_token_client_allowance_reads_approvals() -> None:
     wallet = Wallet()
     client = Xian("http://node", chain_id="xian-1", wallet=wallet)
-    client.get_state = MagicMock(side_effect=[None, ContractingDecimal("7.0")])
+    client.get_state = MagicMock(return_value=ContractingDecimal("7.0"))
 
     allowance = client.token("currency").allowance("con_dex")
 
     assert allowance == ContractingDecimal("7.0")
-    assert client.get_state.call_args_list[0].args == (
+    assert client.get_state.call_args.args == (
         "currency",
         "approvals",
-        wallet.public_key,
-        "con_dex",
-    )
-    assert client.get_state.call_args_list[1].args == (
-        "currency",
-        "balances",
         wallet.public_key,
         "con_dex",
     )

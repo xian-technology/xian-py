@@ -2,6 +2,7 @@ from xian_py.validator import validate_contract
 
 VALID_CONTRACT = """
 balances = Hash()
+approvals = Hash()
 metadata = Hash()
 
 @construct
@@ -22,10 +23,12 @@ def transfer(amount, to):
 
 @export
 def approve(amount, to):
-    balances[ctx.caller, to] += amount
+    approvals[ctx.caller, to] = amount
 
 @export
 def transfer_from(amount, to, main_account):
+    assert approvals[main_account, ctx.caller] >= amount
+    approvals[main_account, ctx.caller] -= amount
     balances[main_account] -= amount
     balances[to] += amount
 
