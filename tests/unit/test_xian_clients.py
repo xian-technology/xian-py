@@ -28,8 +28,6 @@ from xian_py.models import (
     TokenBalancePage,
     TransactionReceipt,
     TransactionSubmission,
-    TokenBalance,
-    TokenBalancePage,
 )
 from xian_py.wallet import Wallet
 from xian_py.xian import Xian
