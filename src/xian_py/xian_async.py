@@ -552,6 +552,28 @@ class XianAsync:
                     retry.max_delay_seconds,
                 )
 
+    async def _retry_broadcast(self, operation):
+        retry = self.config.retry
+        attempts = max(retry.max_attempts, 1)
+        delay = max(retry.initial_delay_seconds, 0.0)
+
+        for attempt in range(1, attempts + 1):
+            try:
+                return await operation()
+            except Exception as exc:
+                if (
+                    not retry.retry_transport_errors
+                    or not isinstance(exc, TransportError)
+                    or attempt >= attempts
+                ):
+                    raise
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                delay = min(
+                    max(delay * retry.backoff_multiplier, delay),
+                    retry.max_delay_seconds,
+                )
+
     def _is_retryable_read_error(self, exc: Exception) -> bool:
         retry = self.config.retry
         if retry.retry_transport_errors and isinstance(exc, TransportError):
@@ -888,24 +910,26 @@ class XianAsync:
         tx = tr.create_tx(payload, self.wallet)
 
         try:
-            if mode == "async":
-                data = await tr.broadcast_tx_nowait_async(
+            async def _broadcast_once():
+                if mode == "async":
+                    return await tr.broadcast_tx_nowait_async(
+                        self.node_url,
+                        tx,
+                        session=self.session,
+                    )
+                if mode == "commit":
+                    return await tr.broadcast_tx_commit_async(
+                        self.node_url,
+                        tx,
+                        session=self.session,
+                    )
+                return await tr.broadcast_tx_wait_async(
                     self.node_url,
                     tx,
                     session=self.session,
                 )
-            elif mode == "commit":
-                data = await tr.broadcast_tx_commit_async(
-                    self.node_url,
-                    tx,
-                    session=self.session,
-                )
-            else:
-                data = await tr.broadcast_tx_wait_async(
-                    self.node_url,
-                    tx,
-                    session=self.session,
-                )
+
+            data = await self._retry_broadcast(_broadcast_once)
         except Exception:
             await self._invalidate_reserved_nonce(reserved_nonce)
             raise

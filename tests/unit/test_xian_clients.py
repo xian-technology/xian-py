@@ -377,6 +377,64 @@ def test_xian_async_send_tx_invalidates_reserved_nonce_after_checktx_failure() -
     assert get_nonce_async.await_count == 2
 
 
+def test_xian_async_send_tx_retries_transport_errors_with_same_nonce() -> None:
+    wallet = Wallet()
+    config = XianClientConfig(
+        retry=RetryPolicy(
+            max_attempts=2,
+            initial_delay_seconds=0.0,
+            max_delay_seconds=0.0,
+        )
+    )
+    client = XianAsync(
+        "http://node",
+        chain_id="xian-1",
+        wallet=wallet,
+        config=config,
+    )
+    observed_nonces: list[int] = []
+
+    def _capture_tx(payload: dict, wallet: Wallet) -> dict:
+        observed_nonces.append(payload["nonce"])
+        return {"signed": payload["nonce"]}
+
+    async def run_send() -> TransactionSubmission:
+        try:
+            return await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+                stamps=100,
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr,
+        "get_nonce_async",
+        AsyncMock(return_value=11),
+    ) as get_nonce_async:
+        with patch.object(tr, "create_tx", side_effect=_capture_tx):
+            with patch.object(
+                tr,
+                "broadcast_tx_wait_async",
+                AsyncMock(
+                    side_effect=[
+                        TransportError("offline"),
+                        {"result": {"code": 0, "hash": "abc123"}},
+                    ]
+                ),
+            ) as broadcast_tx_wait_async:
+                result = asyncio.run(run_send())
+
+    assert result.submitted is True
+    assert result.accepted is True
+    assert result.tx_hash == "abc123"
+    assert observed_nonces == [11]
+    assert get_nonce_async.await_count == 1
+    assert broadcast_tx_wait_async.await_count == 2
+
+
 def test_xian_async_send_tx_can_wait_for_finalized_receipt() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
