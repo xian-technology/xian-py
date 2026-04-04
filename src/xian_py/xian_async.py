@@ -910,6 +910,7 @@ class XianAsync:
         tx = tr.create_tx(payload, self.wallet)
 
         try:
+
             async def _broadcast_once():
                 if mode == "async":
                     return await tr.broadcast_tx_nowait_async(
