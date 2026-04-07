@@ -19,6 +19,7 @@ from xian_py.models import (
     LiveEvent,
     NodeStatus,
     PerformanceStatus,
+    ShieldedOutputTag,
     StateEntry,
     TokenBalancePage,
     TransactionReceipt,
@@ -462,6 +463,25 @@ class Xian:
 
     def get_events_for_tx(self, tx_hash: str) -> list[IndexedEvent]:
         return self._run_async(self._async_client.get_events_for_tx(tx_hash))
+
+    def list_shielded_output_tags(
+        self,
+        tag_value: str,
+        *,
+        kind: str = "sync_hint",
+        limit: int = 100,
+        offset: int = 0,
+        after_id: int | None = None,
+    ) -> list[ShieldedOutputTag]:
+        return self._run_async(
+            self._async_client.list_shielded_output_tags(
+                tag_value,
+                kind=kind,
+                limit=limit,
+                offset=offset,
+                after_id=after_id,
+            )
+        )
 
     def list_events(
         self,
