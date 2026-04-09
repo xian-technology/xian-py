@@ -452,6 +452,50 @@ class ShieldedOutputTag:
 
 
 @dataclass(frozen=True)
+class ShieldedWalletHistoryEntry:
+    event_id: int | None
+    tx_hash: str | None
+    block_height: int | None
+    tx_index: int | None
+    contract: str | None
+    function: str | None
+    action: str | None
+    output_index: int | None
+    note_index: int | None
+    commitment: str | None
+    new_root: str | None
+    payload_hash: str | None
+    output_payload: str | None
+    tag_kind: str | None
+    tag_value: str | None
+    created: str | None
+    raw: dict[str, Any]
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "ShieldedWalletHistoryEntry":
+        raw_dict = dict(raw)
+        return cls(
+            event_id=raw_dict.get("event_id"),
+            tx_hash=raw_dict.get("tx_hash"),
+            block_height=raw_dict.get("block_height"),
+            tx_index=raw_dict.get("tx_index"),
+            contract=raw_dict.get("contract"),
+            function=raw_dict.get("function"),
+            action=raw_dict.get("action"),
+            output_index=raw_dict.get("output_index"),
+            note_index=raw_dict.get("note_index"),
+            commitment=raw_dict.get("commitment"),
+            new_root=raw_dict.get("new_root"),
+            payload_hash=raw_dict.get("payload_hash"),
+            output_payload=raw_dict.get("output_payload"),
+            tag_kind=raw_dict.get("tag_kind"),
+            tag_value=raw_dict.get("tag_value"),
+            created=raw_dict.get("created") or raw_dict.get("created_at"),
+            raw=raw_dict,
+        )
+
+
+@dataclass(frozen=True)
 class StateEntry:
     key: str | None
     value: Any

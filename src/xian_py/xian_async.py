@@ -38,6 +38,7 @@ from xian_py.models import (
     NodeStatus,
     PerformanceStatus,
     ShieldedOutputTag,
+    ShieldedWalletHistoryEntry,
     StateEntry,
     TokenBalancePage,
     TransactionReceipt,
@@ -1387,6 +1388,29 @@ class XianAsync:
         if not isinstance(items, list):
             raise XianException("Unexpected shielded output tag item list")
         return [ShieldedOutputTag.from_dict(item) for item in items]
+
+    async def list_shielded_wallet_history(
+        self,
+        tag_value: str,
+        *,
+        kind: str = "sync_hint",
+        limit: int = 100,
+        after_note_index: int = 0,
+    ) -> list[ShieldedWalletHistoryEntry]:
+        path = (
+            f"/shielded_wallet_history/{tag_value}/limit={limit}/kind={kind}"
+            f"/after_note_index={after_note_index}"
+        )
+        payload = await self._abci_query_value(path)
+        if not isinstance(payload, dict):
+            raise XianException("Unexpected shielded wallet history payload")
+
+        items = payload.get("items")
+        if not isinstance(items, list):
+            raise XianException(
+                "Unexpected shielded wallet history item list"
+            )
+        return [ShieldedWalletHistoryEntry.from_dict(item) for item in items]
 
     async def list_events(
         self,

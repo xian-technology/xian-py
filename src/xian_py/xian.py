@@ -20,6 +20,7 @@ from xian_py.models import (
     NodeStatus,
     PerformanceStatus,
     ShieldedOutputTag,
+    ShieldedWalletHistoryEntry,
     StateEntry,
     TokenBalancePage,
     TransactionReceipt,
@@ -480,6 +481,23 @@ class Xian:
                 limit=limit,
                 offset=offset,
                 after_id=after_id,
+            )
+        )
+
+    def list_shielded_wallet_history(
+        self,
+        tag_value: str,
+        *,
+        kind: str = "sync_hint",
+        limit: int = 100,
+        after_note_index: int = 0,
+    ) -> list[ShieldedWalletHistoryEntry]:
+        return self._run_async(
+            self._async_client.list_shielded_wallet_history(
+                tag_value,
+                kind=kind,
+                limit=limit,
+                after_note_index=after_note_index,
             )
         )
 
