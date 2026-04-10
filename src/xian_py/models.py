@@ -20,6 +20,41 @@ def _decode_json_mapping(value: Any) -> dict[str, Any] | None:
     return None
 
 
+def _coerce_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    return value if isinstance(value, str) else str(value)
+
+
+def _coerce_bool(value: Any, *, default: bool) -> bool:
+    return value if isinstance(value, bool) else default
+
+
+def _normalize_submission_kinds(value: Any) -> list[str]:
+    supported = (
+        "shielded_note_relay_transfer",
+        "shielded_command",
+    )
+    if not isinstance(value, list) or not value:
+        return list(supported)
+    kinds: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if item in supported and item not in seen:
+            kinds.append(item)
+            seen.add(item)
+    return kinds or list(supported)
+
+
 @dataclass(frozen=True)
 class TransactionReceipt:
     success: bool
@@ -77,8 +112,252 @@ class TransactionSubmission:
             response=dict(raw_dict.get("response", {})),
             receipt=receipt
             if isinstance(receipt, TransactionReceipt)
+            else TransactionReceipt.from_lookup(receipt)
+            if isinstance(receipt, Mapping)
             else None,
         )
+
+
+@dataclass(frozen=True)
+class ShieldedRelayerInfoPolicy:
+    quote_ttl_seconds: int
+    default_expiry_seconds: int
+    max_expiry_seconds: int
+    min_note_relayer_fee: int
+    min_command_relayer_fee: int
+    allowed_note_contracts: list[str]
+    allowed_command_contracts: list[str]
+    allowed_command_targets: list[str]
+    raw: dict[str, Any]
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "ShieldedRelayerInfoPolicy":
+        raw_dict = dict(raw)
+        return cls(
+            quote_ttl_seconds=_coerce_int(raw_dict.get("quote_ttl_seconds")) or 0,
+            default_expiry_seconds=(
+                _coerce_int(raw_dict.get("default_expiry_seconds")) or 0
+            ),
+            max_expiry_seconds=_coerce_int(raw_dict.get("max_expiry_seconds"))
+            or 0,
+            min_note_relayer_fee=(
+                _coerce_int(raw_dict.get("min_note_relayer_fee")) or 0
+            ),
+            min_command_relayer_fee=(
+                _coerce_int(raw_dict.get("min_command_relayer_fee")) or 0
+            ),
+            allowed_note_contracts=[
+                item
+                for item in raw_dict.get("allowed_note_contracts", [])
+                if isinstance(item, str)
+            ],
+            allowed_command_contracts=[
+                item
+                for item in raw_dict.get("allowed_command_contracts", [])
+                if isinstance(item, str)
+            ],
+            allowed_command_targets=[
+                item
+                for item in raw_dict.get("allowed_command_targets", [])
+                if isinstance(item, str)
+            ],
+            raw=raw_dict,
+        )
+
+
+@dataclass(frozen=True)
+class ShieldedRelayerCatalogEntry:
+    id: str
+    relayer_url: str
+    auth_token: str | None
+    auth_scheme: str
+    public_info: bool
+    public_quote: bool
+    public_job_lookup: bool
+    priority: int
+    submission_kinds: list[str]
+
+    @classmethod
+    def from_dict(
+        cls, raw: Mapping[str, Any], *, index: int = 0
+    ) -> "ShieldedRelayerCatalogEntry":
+        raw_dict = dict(raw)
+        relayer_url = (
+            _coerce_str(raw_dict.get("relayer_url"))
+            or _coerce_str(raw_dict.get("relayerUrl"))
+            or _coerce_str(raw_dict.get("base_url"))
+            or _coerce_str(raw_dict.get("baseUrl"))
+            or ""
+        ).rstrip("/")
+        if not relayer_url:
+            raise ValueError(
+                "shielded relayer entry must define relayer_url/relayerUrl "
+                "or base_url/baseUrl"
+            )
+        auth_token = (
+            _coerce_str(raw_dict.get("auth_token"))
+            or _coerce_str(raw_dict.get("authToken"))
+        )
+        priority = _coerce_int(raw_dict.get("priority"))
+        return cls(
+            id=(_coerce_str(raw_dict.get("id")) or f"relayer-{index + 1}").strip(),
+            relayer_url=relayer_url,
+            auth_token=(auth_token.strip() or None) if auth_token else None,
+            auth_scheme=(
+                "bearer"
+                if (
+                    _coerce_str(raw_dict.get("auth_scheme"))
+                    or _coerce_str(raw_dict.get("authScheme"))
+                )
+                == "bearer"
+                else "none"
+            ),
+            public_info=_coerce_bool(
+                raw_dict.get("public_info", raw_dict.get("publicInfo")),
+                default=True,
+            ),
+            public_quote=_coerce_bool(
+                raw_dict.get("public_quote", raw_dict.get("publicQuote")),
+                default=False,
+            ),
+            public_job_lookup=_coerce_bool(
+                raw_dict.get(
+                    "public_job_lookup", raw_dict.get("publicJobLookup")
+                ),
+                default=False,
+            ),
+            priority=priority if priority is not None and priority >= 0 else 100,
+            submission_kinds=_normalize_submission_kinds(
+                raw_dict.get(
+                    "submission_kinds", raw_dict.get("submissionKinds")
+                )
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class ShieldedRelayerInfo:
+    service: str
+    protocol_version: str
+    available: bool
+    chain_id: str | None
+    relayer_account: str | None
+    submission_mode: str
+    wait_for_tx: bool
+    capabilities: dict[str, bool]
+    policy: ShieldedRelayerInfoPolicy
+    raw: dict[str, Any]
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "ShieldedRelayerInfo":
+        raw_dict = dict(raw)
+        policy_raw = raw_dict.get("policy")
+        return cls(
+            service=str(raw_dict.get("service", "xian-shielded-relayer")),
+            protocol_version=str(raw_dict.get("protocol_version", "v1")),
+            available=bool(raw_dict.get("available", False)),
+            chain_id=raw_dict.get("chain_id"),
+            relayer_account=raw_dict.get("relayer_account"),
+            submission_mode=str(raw_dict.get("submission_mode", "checktx")),
+            wait_for_tx=bool(raw_dict.get("wait_for_tx", False)),
+            capabilities={
+                key: bool(value)
+                for key, value in raw_dict.get("capabilities", {}).items()
+            }
+            if isinstance(raw_dict.get("capabilities"), Mapping)
+            else {},
+            policy=ShieldedRelayerInfoPolicy.from_dict(policy_raw)
+            if isinstance(policy_raw, Mapping)
+            else ShieldedRelayerInfoPolicy.from_dict({}),
+            raw=raw_dict,
+        )
+
+
+@dataclass(frozen=True)
+class ShieldedRelayerQuote:
+    kind: str
+    contract: str
+    target_contract: str | None
+    chain_id: str | None
+    relayer_account: str | None
+    relayer_fee: int
+    expires_at: str | None
+    issued_at: str | None
+    policy_version: str | None
+    raw: dict[str, Any]
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "ShieldedRelayerQuote":
+        raw_dict = dict(raw)
+        return cls(
+            kind=str(raw_dict.get("kind", "")),
+            contract=str(raw_dict.get("contract", "")),
+            target_contract=raw_dict.get("target_contract"),
+            chain_id=raw_dict.get("chain_id"),
+            relayer_account=raw_dict.get("relayer_account"),
+            relayer_fee=_coerce_int(raw_dict.get("relayer_fee")) or 0,
+            expires_at=raw_dict.get("expires_at"),
+            issued_at=raw_dict.get("issued_at"),
+            policy_version=raw_dict.get("policy_version"),
+            raw=raw_dict,
+        )
+
+
+@dataclass(frozen=True)
+class ShieldedRelayerInfoResult:
+    relayer: ShieldedRelayerCatalogEntry
+    info: ShieldedRelayerInfo
+
+
+@dataclass(frozen=True)
+class ShieldedRelayerQuoteResult:
+    relayer: ShieldedRelayerCatalogEntry
+    quote: ShieldedRelayerQuote
+
+
+@dataclass(frozen=True)
+class ShieldedRelayerJob:
+    job_id: str
+    kind: str
+    status: str
+    chain_id: str | None
+    relayer_account: str | None
+    contract: str | None
+    function_name: str | None
+    tx_hash: str | None
+    submitted_at: str | None
+    updated_at: str | None
+    error: str | None
+    submission: TransactionSubmission | None
+    raw: dict[str, Any]
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "ShieldedRelayerJob":
+        raw_dict = dict(raw)
+        submission_raw = raw_dict.get("submission")
+        return cls(
+            job_id=str(raw_dict.get("job_id", "")),
+            kind=str(raw_dict.get("kind", "")),
+            status=str(raw_dict.get("status", "unknown")),
+            chain_id=raw_dict.get("chain_id"),
+            relayer_account=raw_dict.get("relayer_account"),
+            contract=raw_dict.get("contract"),
+            function_name=raw_dict.get("function_name"),
+            tx_hash=raw_dict.get("tx_hash"),
+            submitted_at=raw_dict.get("submitted_at"),
+            updated_at=raw_dict.get("updated_at"),
+            error=raw_dict.get("error"),
+            submission=TransactionSubmission.from_dict(submission_raw)
+            if isinstance(submission_raw, Mapping)
+            else None,
+            raw=raw_dict,
+        )
+
+
+@dataclass(frozen=True)
+class ShieldedRelayerJobResult:
+    relayer: ShieldedRelayerCatalogEntry
+    job: ShieldedRelayerJob
 
 
 @dataclass(frozen=True)
