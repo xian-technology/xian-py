@@ -194,7 +194,7 @@ class _InvalidWallet:
         return "sig"
 
 
-def test_xian_async_send_tx_populates_chain_id_nonce_and_stamps() -> None:
+def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", wallet=wallet)
     client.get_chain_id = AsyncMock(return_value="xian-mainnet-1")
@@ -215,7 +215,7 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_stamps() -> None:
         with patch.object(
             tr,
             "simulate_tx_async",
-            AsyncMock(return_value={"stamps_used": 77}),
+            AsyncMock(return_value={"chi_used": 77}),
         ) as simulate_tx_async:
             with patch.object(
                 tr,
@@ -240,7 +240,7 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_stamps() -> None:
     create_payload = create_tx.call_args.args[0]
     assert create_payload["chain_id"] == "xian-mainnet-1"
     assert create_payload["nonce"] == 11
-    assert create_payload["stamps_supplied"] == 87
+    assert create_payload["chi_supplied"] == 87
     broadcast_tx_wait_async.assert_awaited_once_with(
         "http://node",
         {"signed": True},
@@ -250,8 +250,8 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_stamps() -> None:
     assert result.accepted is True
     assert result.finalized is False
     assert result.tx_hash == "abc123"
-    assert result.stamps_estimated == 77
-    assert result.stamps_supplied == 87
+    assert result.chi_estimated == 77
+    assert result.chi_supplied == 87
 
 
 def test_xian_async_rejects_non_ed25519_wallets() -> None:
@@ -290,13 +290,13 @@ def test_xian_async_send_tx_reserves_nonces_locally_for_concurrent_calls() -> (
                     "currency",
                     "transfer",
                     {"amount": 1, "to": wallet.public_key},
-                    stamps=100,
+                    chi=100,
                 ),
                 client.send_tx(
                     "currency",
                     "transfer",
                     {"amount": 2, "to": wallet.public_key},
-                    stamps=100,
+                    chi=100,
                 ),
             )
         finally:
@@ -338,13 +338,13 @@ def test_xian_async_send_tx_invalidates_reserved_nonce_after_checktx_failure() -
                 "currency",
                 "transfer",
                 {"amount": 1, "to": wallet.public_key},
-                stamps=100,
+                chi=100,
             )
             succeeded = await client.send_tx(
                 "currency",
                 "transfer",
                 {"amount": 1, "to": wallet.public_key},
-                stamps=100,
+                chi=100,
             )
             return failed, succeeded
         finally:
@@ -406,7 +406,7 @@ def test_xian_async_send_tx_retries_transport_errors_with_same_nonce() -> None:
                 "currency",
                 "transfer",
                 {"amount": 1, "to": wallet.public_key},
-                stamps=100,
+                chi=100,
             )
         finally:
             await client.close()
@@ -447,7 +447,7 @@ def test_xian_async_send_tx_can_wait_for_finalized_receipt() -> None:
                 "currency",
                 "transfer",
                 {"amount": 1, "to": wallet.public_key},
-                stamps=100,
+                chi=100,
                 wait_for_tx=True,
                 timeout_seconds=1.0,
                 poll_interval_seconds=0.0,
@@ -498,7 +498,7 @@ def test_xian_async_send_tx_async_mode_reports_submission_without_checktx() -> (
                 "currency",
                 "transfer",
                 {"amount": 1, "to": wallet.public_key},
-                stamps=100,
+                chi=100,
                 mode="async",
             )
         finally:
@@ -534,7 +534,7 @@ def test_xian_async_send_tx_commit_mode_does_not_report_finalized_when_checktx_f
                 "currency",
                 "transfer",
                 {"amount": 1, "to": wallet.public_key},
-                stamps=100,
+                chi=100,
                 mode="commit",
             )
         finally:
@@ -634,7 +634,7 @@ def test_xian_async_get_tx_surfaces_error_payloads() -> None:
 def test_xian_async_get_tx_exposes_transaction_and_execution() -> None:
     client = XianAsync("http://node", chain_id="xian-1")
     tx = {"payload": {"contract": "currency", "function": "transfer"}}
-    execution = {"status": 0, "result": "ok", "stamps_used": 7}
+    execution = {"status": 0, "result": "ok", "chi_used": 7}
 
     with patch.object(
         tr,
@@ -2404,8 +2404,8 @@ def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:
             wait_for_tx=True,
             timeout_seconds=1.0,
             poll_interval_seconds=0.0,
-            stamp_margin=0.25,
-            min_stamp_headroom=5,
+            chi_margin=0.25,
+            min_chi_headroom=5,
         )
     )
     client = XianAsync(
@@ -2429,7 +2429,7 @@ def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:
         with patch.object(
             tr,
             "simulate_tx_async",
-            AsyncMock(return_value={"stamps_used": 80}),
+            AsyncMock(return_value={"chi_used": 80}),
         ):
             with patch.object(
                 tr,
@@ -2459,7 +2459,7 @@ def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:
                         result = asyncio.run(run_send())
 
     create_payload = create_tx.call_args.args[0]
-    assert create_payload["stamps_supplied"] == 100
+    assert create_payload["chi_supplied"] == 100
     assert result.submitted is True
     assert result.finalized is True
     assert result.receipt is not None
@@ -2531,8 +2531,8 @@ def test_async_contract_client_send_merges_kwargs() -> None:
                 "tx_hash": "abc123",
                 "mode": "checktx",
                 "nonce": 1,
-                "stamps_supplied": 100,
-                "stamps_estimated": 90,
+                "chi_supplied": 100,
+                "chi_estimated": 90,
                 "message": None,
                 "response": {},
                 "receipt": None,
@@ -2554,15 +2554,15 @@ def test_async_contract_client_send_merges_kwargs() -> None:
         contract="currency",
         function="transfer",
         kwargs={"amount": 1, "to": "bob"},
-        stamps=None,
+        chi=None,
         nonce=None,
         chain_id=None,
         mode="checktx",
         wait_for_tx=None,
         timeout_seconds=None,
         poll_interval_seconds=None,
-        stamp_margin=None,
-        min_stamp_headroom=None,
+        chi_margin=None,
+        min_chi_headroom=None,
     )
 
 
@@ -2580,8 +2580,8 @@ def test_async_token_client_uses_token_helpers() -> None:
                 "tx_hash": "tx-transfer",
                 "mode": "checktx",
                 "nonce": 1,
-                "stamps_supplied": 100,
-                "stamps_estimated": 90,
+                "chi_supplied": 100,
+                "chi_estimated": 90,
                 "message": None,
                 "response": {},
                 "receipt": None,
@@ -2605,13 +2605,13 @@ def test_async_token_client_uses_token_helpers() -> None:
         amount=5,
         to_address="bob",
         token="currency",
-        stamps=None,
+        chi=None,
         mode="checktx",
         wait_for_tx=None,
         timeout_seconds=None,
         poll_interval_seconds=None,
-        stamp_margin=None,
-        min_stamp_headroom=None,
+        chi_margin=None,
+        min_chi_headroom=None,
     )
 
 

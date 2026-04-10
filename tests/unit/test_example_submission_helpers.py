@@ -34,8 +34,8 @@ def successful_submission() -> TransactionSubmission:
         tx_hash="ABC",
         mode="checktx",
         nonce=1,
-        stamps_supplied=10,
-        stamps_estimated=8,
+        chi_supplied=10,
+        chi_estimated=8,
         message=None,
         response={},
         receipt=TransactionReceipt(
@@ -57,8 +57,8 @@ def failed_submission() -> TransactionSubmission:
         tx_hash="ABC",
         mode="checktx",
         nonce=1,
-        stamps_supplied=10,
-        stamps_estimated=8,
+        chi_supplied=10,
+        chi_estimated=8,
         message=None,
         response={},
         receipt=TransactionReceipt(

@@ -104,7 +104,7 @@ def test_get_nonce_async_decodes_nonce_value() -> None:
 
 def test_simulate_tx_async_decodes_successful_response() -> None:
     payload = {"contract": "currency", "function": "transfer"}
-    expected = {"stamps_used": 42, "result": "ok"}
+    expected = {"chi_used": 42, "result": "ok"}
     fake_session = _FakeClientSession(
         post_responses=[
             _FakeResponse(
@@ -141,7 +141,7 @@ def test_simulate_tx_async_encodes_runtime_numeric_values() -> None:
                     "result": {
                         "response": {
                             "code": 0,
-                            "value": _b64(json.dumps({"stamps_used": 1})),
+                            "value": _b64(json.dumps({"chi_used": 1})),
                         }
                     }
                 }
@@ -212,7 +212,7 @@ def test_create_tx_formats_payload_and_signs_it() -> None:
     payload = {
         "sender": wallet.public_key,
         "nonce": 1,
-        "stamps_supplied": 25,
+        "chi_supplied": 25,
         "contract": "currency",
         "function": "transfer",
         "kwargs": {"to": wallet.public_key, "amount": 5},

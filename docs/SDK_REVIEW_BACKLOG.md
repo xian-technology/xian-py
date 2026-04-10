@@ -10,8 +10,8 @@
 - `wait_for_tx(...)` helper on async and sync clients
 - local nonce reservation cache per client wallet to prevent concurrent nonce
   reuse
-- automatic stamp estimation headroom for implicit stamp selection
-- `refresh_nonce()` and `estimate_stamps()` helpers
+- automatic chi estimation headroom for implicit chi selection
+- `refresh_nonce()` and `estimate_chi()` helpers
 - block watchers driven from node RPC with resume by height
 - event watchers driven from indexed BDS reads with stable `after_id` cursor
 - typed `NodeStatus` reads for application and operator workflows

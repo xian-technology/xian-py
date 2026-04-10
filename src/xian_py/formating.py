@@ -45,7 +45,7 @@ def cid_id_formatted(s: str):
 TRANSACTION_PAYLOAD_RULES = {
     "sender": key_is_formatted,
     "nonce": number_is_formatted,
-    "stamps_supplied": number_is_formatted,
+    "chi_supplied": number_is_formatted,
     "contract": identifier_is_formatted,
     "function": identifier_is_formatted,
     "kwargs": kwargs_are_formatted,

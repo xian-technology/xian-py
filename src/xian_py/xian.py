@@ -181,30 +181,30 @@ class Xian:
         contract: str,
         function: str,
         kwargs: dict,
-        stamps: int | None = None,
+        chi: int | None = None,
         nonce: int = None,
         chain_id: str = None,
         mode: str | None = None,
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        stamp_margin: float | None = None,
-        min_stamp_headroom: int | None = None,
+        chi_margin: float | None = None,
+        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         return self._run_async(
             self._async_client.send_tx(
                 contract=contract,
                 function=function,
                 kwargs=kwargs,
-                stamps=stamps,
+                chi=chi,
                 nonce=nonce,
                 chain_id=chain_id,
                 mode=mode,
                 wait_for_tx=wait_for_tx,
                 timeout_seconds=timeout_seconds,
                 poll_interval_seconds=poll_interval_seconds,
-                stamp_margin=stamp_margin,
-                min_stamp_headroom=min_stamp_headroom,
+                chi_margin=chi_margin,
+                min_chi_headroom=min_chi_headroom,
             )
         )
 
@@ -213,26 +213,26 @@ class Xian:
         amount: int | float | str,
         to_address: str,
         token: str = "currency",
-        stamps: int | None = None,
+        chi: int | None = None,
         mode: str | None = None,
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        stamp_margin: float | None = None,
-        min_stamp_headroom: int | None = None,
+        chi_margin: float | None = None,
+        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         return self._run_async(
             self._async_client.send(
                 amount,
                 to_address,
                 token,
-                stamps=stamps,
+                chi=chi,
                 mode=mode,
                 wait_for_tx=wait_for_tx,
                 timeout_seconds=timeout_seconds,
                 poll_interval_seconds=poll_interval_seconds,
-                stamp_margin=stamp_margin,
-                min_stamp_headroom=min_stamp_headroom,
+                chi_margin=chi_margin,
+                min_chi_headroom=min_chi_headroom,
             )
         )
 
@@ -246,22 +246,22 @@ class Xian:
             self._async_client.call(contract, function, kwargs)
         )
 
-    def estimate_stamps(
+    def estimate_chi(
         self,
         contract: str,
         function: str,
         kwargs: dict,
         *,
-        stamp_margin: float | None = None,
-        min_stamp_headroom: int | None = None,
+        chi_margin: float | None = None,
+        min_chi_headroom: int | None = None,
     ) -> dict:
         return self._run_async(
-            self._async_client.estimate_stamps(
+            self._async_client.estimate_chi(
                 contract,
                 function,
                 kwargs,
-                stamp_margin=stamp_margin,
-                min_stamp_headroom=min_stamp_headroom,
+                chi_margin=chi_margin,
+                min_chi_headroom=min_chi_headroom,
             )
         )
 
@@ -296,26 +296,26 @@ class Xian:
         contract: str,
         token: str = "currency",
         amount: int | float | str = 999999999999,
-        stamps: int | None = None,
+        chi: int | None = None,
         mode: str | None = None,
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        stamp_margin: float | None = None,
-        min_stamp_headroom: int | None = None,
+        chi_margin: float | None = None,
+        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         return self._run_async(
             self._async_client.approve(
                 contract,
                 token,
                 amount,
-                stamps=stamps,
+                chi=chi,
                 mode=mode,
                 wait_for_tx=wait_for_tx,
                 timeout_seconds=timeout_seconds,
                 poll_interval_seconds=poll_interval_seconds,
-                stamp_margin=stamp_margin,
-                min_stamp_headroom=min_stamp_headroom,
+                chi_margin=chi_margin,
+                min_chi_headroom=min_chi_headroom,
             )
         )
 
@@ -324,26 +324,26 @@ class Xian:
         name: str,
         code: str,
         args: dict = None,
-        stamps: int | None = None,
+        chi: int | None = None,
         mode: str | None = None,
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        stamp_margin: float | None = None,
-        min_stamp_headroom: int | None = None,
+        chi_margin: float | None = None,
+        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         return self._run_async(
             self._async_client.submit_contract(
                 name,
                 code,
                 args,
-                stamps=stamps,
+                chi=chi,
                 mode=mode,
                 wait_for_tx=wait_for_tx,
                 timeout_seconds=timeout_seconds,
                 poll_interval_seconds=poll_interval_seconds,
-                stamp_margin=stamp_margin,
-                min_stamp_headroom=min_stamp_headroom,
+                chi_margin=chi_margin,
+                min_chi_headroom=min_chi_headroom,
             )
         )
 

@@ -258,8 +258,8 @@ def _validate_xian_wallet(wallet: Any) -> None:
 class XianAsync:
     """Async version of the Xian class for non-blocking operations."""
 
-    DEFAULT_STAMP_MARGIN = SubmissionConfig().stamp_margin
-    DEFAULT_MIN_STAMP_HEADROOM = SubmissionConfig().min_stamp_headroom
+    DEFAULT_CHI_MARGIN = SubmissionConfig().chi_margin
+    DEFAULT_MIN_CHI_HEADROOM = SubmissionConfig().min_chi_headroom
 
     def __init__(
         self,
@@ -744,24 +744,24 @@ class XianAsync:
         )
         return self._normalize_tx_lookup(data)
 
-    async def estimate_stamps(
+    async def estimate_chi(
         self,
         contract: str,
         function: str,
         kwargs: dict,
         *,
-        stamp_margin: float | None = None,
-        min_stamp_headroom: int | None = None,
+        chi_margin: float | None = None,
+        min_chi_headroom: int | None = None,
     ) -> dict[str, Any]:
-        stamp_margin = (
-            self.config.submission.stamp_margin
-            if stamp_margin is None
-            else stamp_margin
+        chi_margin = (
+            self.config.submission.chi_margin
+            if chi_margin is None
+            else chi_margin
         )
-        min_stamp_headroom = (
-            self.config.submission.min_stamp_headroom
-            if min_stamp_headroom is None
-            else min_stamp_headroom
+        min_chi_headroom = (
+            self.config.submission.min_chi_headroom
+            if min_chi_headroom is None
+            else min_chi_headroom
         )
         payload = {
             "contract": contract,
@@ -776,11 +776,11 @@ class XianAsync:
                 session=self.session,
             )
         )
-        estimated = int(simulation["stamps_used"])
-        suggested = self._apply_stamp_headroom(
+        estimated = int(simulation["chi_used"])
+        suggested = self._apply_chi_headroom(
             estimated,
-            stamp_margin=stamp_margin,
-            min_stamp_headroom=min_stamp_headroom,
+            chi_margin=chi_margin,
+            min_chi_headroom=min_chi_headroom,
         )
         return {
             "estimated": estimated,
@@ -817,20 +817,20 @@ class XianAsync:
                 self._next_nonce = None
 
     @classmethod
-    def _apply_stamp_headroom(
+    def _apply_chi_headroom(
         cls,
         estimated: int,
         *,
-        stamp_margin: float,
-        min_stamp_headroom: int,
+        chi_margin: float,
+        min_chi_headroom: int,
     ) -> int:
-        if stamp_margin < 0:
-            raise ValueError("stamp_margin must be >= 0")
-        if min_stamp_headroom < 0:
-            raise ValueError("min_stamp_headroom must be >= 0")
+        if chi_margin < 0:
+            raise ValueError("chi_margin must be >= 0")
+        if min_chi_headroom < 0:
+            raise ValueError("min_chi_headroom must be >= 0")
 
-        proportional = math.ceil(estimated * stamp_margin)
-        headroom = max(proportional, min_stamp_headroom)
+        proportional = math.ceil(estimated * chi_margin)
+        headroom = max(proportional, min_chi_headroom)
         return estimated + headroom
 
     async def send_tx(
@@ -838,15 +838,15 @@ class XianAsync:
         contract: str,
         function: str,
         kwargs: dict,
-        stamps: int | None = None,
+        chi: int | None = None,
         nonce: int = None,
         chain_id: str = None,
         mode: Literal["async", "checktx", "commit"] | None = None,
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        stamp_margin: float | None = None,
-        min_stamp_headroom: int | None = None,
+        chi_margin: float | None = None,
+        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         """Send a transaction using an explicit broadcast mode."""
         mode = mode or self.config.submission.mode
@@ -865,15 +865,15 @@ class XianAsync:
             if poll_interval_seconds is None
             else poll_interval_seconds
         )
-        stamp_margin = (
-            self.config.submission.stamp_margin
-            if stamp_margin is None
-            else stamp_margin
+        chi_margin = (
+            self.config.submission.chi_margin
+            if chi_margin is None
+            else chi_margin
         )
-        min_stamp_headroom = (
-            self.config.submission.min_stamp_headroom
-            if min_stamp_headroom is None
-            else min_stamp_headroom
+        min_chi_headroom = (
+            self.config.submission.min_chi_headroom
+            if min_chi_headroom is None
+            else min_chi_headroom
         )
 
         if mode not in {"async", "checktx", "commit"}:
@@ -886,17 +886,17 @@ class XianAsync:
             chain_id = self.chain_id
 
         estimated_stamps: int | None = None
-        supplied_stamps = stamps
+        supplied_stamps = chi
         if supplied_stamps is None:
-            stamp_estimate = await self.estimate_stamps(
+            chi_estimate = await self.estimate_chi(
                 contract,
                 function,
                 kwargs,
-                stamp_margin=stamp_margin,
-                min_stamp_headroom=min_stamp_headroom,
+                chi_margin=chi_margin,
+                min_chi_headroom=min_chi_headroom,
             )
-            estimated_stamps = stamp_estimate["estimated"]
-            supplied_stamps = stamp_estimate["suggested"]
+            estimated_stamps = chi_estimate["estimated"]
+            supplied_stamps = chi_estimate["suggested"]
 
         reserved_nonce = await self._reserve_nonce(nonce)
         payload = {
@@ -906,7 +906,7 @@ class XianAsync:
             "kwargs": kwargs,
             "nonce": reserved_nonce,
             "sender": self.wallet.public_key,
-            "stamps_supplied": supplied_stamps,
+            "chi_supplied": supplied_stamps,
         }
 
         tx = tr.create_tx(payload, self.wallet)
@@ -945,8 +945,8 @@ class XianAsync:
             "tx_hash": None,
             "mode": mode,
             "nonce": reserved_nonce,
-            "stamps_supplied": supplied_stamps,
-            "stamps_estimated": estimated_stamps,
+            "chi_supplied": supplied_stamps,
+            "chi_estimated": estimated_stamps,
             "response": data,
             "receipt": None,
         }
@@ -1021,26 +1021,26 @@ class XianAsync:
         amount: int | float | str | Decimal | ContractingDecimal,
         to_address: str,
         token: str = "currency",
-        stamps: int | None = None,
+        chi: int | None = None,
         mode: Literal["async", "checktx", "commit"] | None = None,
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        stamp_margin: float | None = None,
-        min_stamp_headroom: int | None = None,
+        chi_margin: float | None = None,
+        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         """Send a token to a given address."""
         return await self.send_tx(
             token,
             "transfer",
             {"amount": self._coerce_amount(amount), "to": to_address},
-            stamps=stamps,
+            chi=chi,
             mode=mode,
             wait_for_tx=wait_for_tx,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
-            stamp_margin=stamp_margin,
-            min_stamp_headroom=min_stamp_headroom,
+            chi_margin=chi_margin,
+            min_chi_headroom=min_chi_headroom,
         )
 
     async def simulate(
@@ -1140,26 +1140,26 @@ class XianAsync:
         contract: str,
         token: str = "currency",
         amount: int | float | str | Decimal | ContractingDecimal = 999999999999,
-        stamps: int | None = None,
+        chi: int | None = None,
         mode: Literal["async", "checktx", "commit"] | None = None,
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        stamp_margin: float | None = None,
-        min_stamp_headroom: int | None = None,
+        chi_margin: float | None = None,
+        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         """Approve a contract to spend a token amount."""
         return await self.send_tx(
             token,
             "approve",
             {"amount": self._coerce_amount(amount), "to": contract},
-            stamps=stamps,
+            chi=chi,
             mode=mode,
             wait_for_tx=wait_for_tx,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
-            stamp_margin=stamp_margin,
-            min_stamp_headroom=min_stamp_headroom,
+            chi_margin=chi_margin,
+            min_chi_headroom=min_chi_headroom,
         )
 
     async def submit_contract(
@@ -1167,13 +1167,13 @@ class XianAsync:
         name: str,
         code: str,
         args: dict = None,
-        stamps: int | None = None,
+        chi: int | None = None,
         mode: Literal["async", "checktx", "commit"] | None = None,
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        stamp_margin: float | None = None,
-        min_stamp_headroom: int | None = None,
+        chi_margin: float | None = None,
+        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         """Submit a contract to the network."""
         kwargs: dict[str, Any] = {"name": name, "code": code}
@@ -1184,13 +1184,13 @@ class XianAsync:
             "submission",
             "submit_contract",
             kwargs,
-            stamps=stamps,
+            chi=chi,
             mode=mode,
             wait_for_tx=wait_for_tx,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
-            stamp_margin=stamp_margin,
-            min_stamp_headroom=min_stamp_headroom,
+            chi_margin=chi_margin,
+            min_chi_headroom=min_chi_headroom,
         )
 
     async def get_nodes(self) -> list[str]:

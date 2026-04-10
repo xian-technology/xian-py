@@ -187,7 +187,7 @@ async def simulate_tx_async(
     *,
     session: aiohttp.ClientSession | None = None,
 ) -> dict:
-    """Estimate the amount of stamps a tx will cost"""
+    """Estimate the amount of chi a tx will cost"""
     encoded = encode(payload).encode().hex()
 
     try:
@@ -263,7 +263,7 @@ def create_tx(payload: dict, wallet: Wallet) -> dict:
         kwargs: Arguments for function
         nonce: Unique continuous number
         sender: Wallet address of sender
-        stamps: Max amount of stamps to use
+        chi: Max amount of chi to use
     :param wallet: Wallet object with public and private key
     :return: Encoded transaction data
     """

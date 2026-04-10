@@ -89,8 +89,8 @@ class TransactionSubmission:
     tx_hash: str | None
     mode: str
     nonce: int
-    stamps_supplied: int
-    stamps_estimated: int | None
+    chi_supplied: int
+    chi_estimated: int | None
     message: Any
     response: dict[str, Any]
     receipt: TransactionReceipt | None
@@ -106,8 +106,8 @@ class TransactionSubmission:
             tx_hash=raw_dict.get("tx_hash"),
             mode=str(raw_dict.get("mode")),
             nonce=int(raw_dict.get("nonce", 0)),
-            stamps_supplied=int(raw_dict.get("stamps_supplied", 0)),
-            stamps_estimated=raw_dict.get("stamps_estimated"),
+            chi_supplied=int(raw_dict.get("chi_supplied", 0)),
+            chi_estimated=raw_dict.get("chi_estimated"),
             message=raw_dict.get("message"),
             response=dict(raw_dict.get("response", {})),
             receipt=receipt
@@ -599,7 +599,7 @@ class IndexedTransaction:
     contract: str | None
     function: str | None
     success: bool | None
-    stamps_used: int | None
+    chi_used: int | None
     created: str | None
     raw: dict[str, Any]
 
@@ -614,7 +614,7 @@ class IndexedTransaction:
             contract=raw_dict.get("contract"),
             function=raw_dict.get("function"),
             success=raw_dict.get("success"),
-            stamps_used=raw_dict.get("stamps_used"),
+            chi_used=raw_dict.get("chi_used"),
             created=raw_dict.get("created") or raw_dict.get("created_at"),
             raw=raw_dict,
         )
