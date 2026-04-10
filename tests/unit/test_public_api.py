@@ -5,6 +5,17 @@ from xian_py import (
     EventSource,
     LiveEvent,
     PerformanceStatus,
+    ShieldedRelayerAsyncClient,
+    ShieldedRelayerAsyncPoolClient,
+    ShieldedRelayerCatalogEntry,
+    ShieldedRelayerClient,
+    ShieldedRelayerInfo,
+    ShieldedRelayerInfoResult,
+    ShieldedRelayerJob,
+    ShieldedRelayerJobResult,
+    ShieldedRelayerPoolClient,
+    ShieldedRelayerQuote,
+    ShieldedRelayerQuoteResult,
     SQLiteProjectionState,
     TransactionReceipt,
     TransactionSubmission,
@@ -28,6 +39,17 @@ def test_public_exports_are_available() -> None:
     assert EventSource is not None
     assert LiveEvent is not None
     assert PerformanceStatus is not None
+    assert ShieldedRelayerAsyncClient is not None
+    assert ShieldedRelayerAsyncPoolClient is not None
+    assert ShieldedRelayerCatalogEntry is not None
+    assert ShieldedRelayerClient is not None
+    assert ShieldedRelayerInfo is not None
+    assert ShieldedRelayerInfoResult is not None
+    assert ShieldedRelayerJob is not None
+    assert ShieldedRelayerJobResult is not None
+    assert ShieldedRelayerPoolClient is not None
+    assert ShieldedRelayerQuote is not None
+    assert ShieldedRelayerQuoteResult is not None
     assert SQLiteProjectionState is not None
     assert TransactionReceipt is not None
     assert TransactionSubmission is not None

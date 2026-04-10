@@ -19,7 +19,10 @@ from xian_py.models import (
     LiveEvent,
     NodeStatus,
     PerformanceStatus,
+    ShieldedOutputTag,
+    ShieldedWalletHistoryEntry,
     StateEntry,
+    TokenBalancePage,
     TransactionReceipt,
     TransactionSubmission,
 )
@@ -387,6 +390,23 @@ class Xian:
             self._async_client.get_developer_rewards(recipient_key)
         )
 
+    def get_token_balances(
+        self,
+        address: str | None = None,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        include_zero: bool = False,
+    ) -> TokenBalancePage:
+        return self._run_async(
+            self._async_client.get_token_balances(
+                address,
+                limit=limit,
+                offset=offset,
+                include_zero=include_zero,
+            )
+        )
+
     def list_blocks(
         self,
         *,
@@ -444,6 +464,42 @@ class Xian:
 
     def get_events_for_tx(self, tx_hash: str) -> list[IndexedEvent]:
         return self._run_async(self._async_client.get_events_for_tx(tx_hash))
+
+    def list_shielded_output_tags(
+        self,
+        tag_value: str,
+        *,
+        kind: str = "sync_hint",
+        limit: int = 100,
+        offset: int = 0,
+        after_id: int | None = None,
+    ) -> list[ShieldedOutputTag]:
+        return self._run_async(
+            self._async_client.list_shielded_output_tags(
+                tag_value,
+                kind=kind,
+                limit=limit,
+                offset=offset,
+                after_id=after_id,
+            )
+        )
+
+    def list_shielded_wallet_history(
+        self,
+        tag_value: str,
+        *,
+        kind: str = "sync_hint",
+        limit: int = 100,
+        after_note_index: int = 0,
+    ) -> list[ShieldedWalletHistoryEntry]:
+        return self._run_async(
+            self._async_client.list_shielded_wallet_history(
+                tag_value,
+                kind=kind,
+                limit=limit,
+                after_note_index=after_note_index,
+            )
+        )
 
     def list_events(
         self,

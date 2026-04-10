@@ -15,24 +15,24 @@ class ValidatorBase(ast.NodeVisitor):
 
 class ValidatorXSC001(ValidatorBase):
     def __init__(self):
-        self.required_variables = {"balances", "metadata"}
+        self.required_variables = {"balances", "approvals", "metadata"}
         self.required_functions = {
-            "change_metadata": {"key", "value"},
-            "transfer": {"amount", "to"},
-            "approve": {"amount", "to"},
-            "transfer_from": {"amount", "to", "main_account"},
-            "balance_of": {"address"},
+            "change_metadata": ("key", "value"),
+            "transfer": ("amount", "to"),
+            "approve": ("amount", "to"),
+            "transfer_from": ("amount", "to", "main_account"),
+            "balance_of": ("address",),
         }
         self.found_variables: Set[str] = set()
-        self.found_functions: Dict[str, Set[str]] = {}
+        self.found_functions: Dict[str, tuple[str, ...]] = {}
         self.has_constructor = False
         self.is_hash_type: Dict[str, bool] = {}
         self.metadata_fields = {
             "token_name",
             "token_symbol",
             "token_logo_url",
+            "token_logo_svg",
             "token_website",
-            "operator",
         }
         self.found_metadata_fields: Set[str] = set()
 
@@ -53,7 +53,7 @@ class ValidatorXSC001(ValidatorBase):
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         func_name = node.name
-        args = {arg.arg for arg in node.args.args}
+        args = tuple(arg.arg for arg in node.args.args)
         self.found_functions[func_name] = args
 
         for decorator in node.decorator_list:

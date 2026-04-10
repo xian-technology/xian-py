@@ -418,13 +418,6 @@ class AsyncTokenClient(AsyncContractClient):
             address,
             spender,
         )
-        if value is None:
-            value = await self.client.get_state(
-                self.name,
-                "balances",
-                address,
-                spender,
-            )
         return 0 if value is None else value
 
     def transfers(self) -> AsyncEventClient:
@@ -504,13 +497,6 @@ class TokenClient(ContractClient):
             address,
             spender,
         )
-        if value is None:
-            value = self.client.get_state(
-                self.name,
-                "balances",
-                address,
-                spender,
-            )
         return 0 if value is None else value
 
     def transfers(self) -> EventClient:

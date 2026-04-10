@@ -37,7 +37,10 @@ from xian_py.models import (
     LiveEvent,
     NodeStatus,
     PerformanceStatus,
+    ShieldedOutputTag,
+    ShieldedWalletHistoryEntry,
     StateEntry,
+    TokenBalancePage,
     TransactionReceipt,
     TransactionSubmission,
 )
@@ -551,6 +554,28 @@ class XianAsync:
                     retry.max_delay_seconds,
                 )
 
+    async def _retry_broadcast(self, operation):
+        retry = self.config.retry
+        attempts = max(retry.max_attempts, 1)
+        delay = max(retry.initial_delay_seconds, 0.0)
+
+        for attempt in range(1, attempts + 1):
+            try:
+                return await operation()
+            except Exception as exc:
+                if (
+                    not retry.retry_transport_errors
+                    or not isinstance(exc, TransportError)
+                    or attempt >= attempts
+                ):
+                    raise
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                delay = min(
+                    max(delay * retry.backoff_multiplier, delay),
+                    retry.max_delay_seconds,
+                )
+
     def _is_retryable_read_error(self, exc: Exception) -> bool:
         retry = self.config.retry
         if retry.retry_transport_errors and isinstance(exc, TransportError):
@@ -887,24 +912,27 @@ class XianAsync:
         tx = tr.create_tx(payload, self.wallet)
 
         try:
-            if mode == "async":
-                data = await tr.broadcast_tx_nowait_async(
+
+            async def _broadcast_once():
+                if mode == "async":
+                    return await tr.broadcast_tx_nowait_async(
+                        self.node_url,
+                        tx,
+                        session=self.session,
+                    )
+                if mode == "commit":
+                    return await tr.broadcast_tx_commit_async(
+                        self.node_url,
+                        tx,
+                        session=self.session,
+                    )
+                return await tr.broadcast_tx_wait_async(
                     self.node_url,
                     tx,
                     session=self.session,
                 )
-            elif mode == "commit":
-                data = await tr.broadcast_tx_commit_async(
-                    self.node_url,
-                    tx,
-                    session=self.session,
-                )
-            else:
-                data = await tr.broadcast_tx_wait_async(
-                    self.node_url,
-                    tx,
-                    session=self.session,
-                )
+
+            data = await self._retry_broadcast(_broadcast_once)
         except Exception:
             await self._invalidate_reserved_nonce(reserved_nonce)
             raise
@@ -1105,9 +1133,6 @@ class XianAsync:
         address = address if address else self.wallet.public_key
 
         value = await self.get_state(token, "approvals", address, contract)
-        if value is None:
-            value = await self.get_state(token, "balances", address, contract)
-
         return 0 if value is None else value
 
     async def approve(
@@ -1232,6 +1257,23 @@ class XianAsync:
             raise XianException("Unexpected developer rewards payload")
         return DeveloperRewardSummary.from_dict(payload)
 
+    async def get_token_balances(
+        self,
+        address: str | None = None,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        include_zero: bool = False,
+    ) -> TokenBalancePage:
+        address = address or self.wallet.public_key
+        path = f"/token_balances/{address}/limit={limit}/offset={offset}"
+        if include_zero:
+            path = f"{path}/include_zero=true"
+        payload = await self._abci_query_value(path)
+        if not isinstance(payload, dict):
+            raise XianException("Unexpected token balances payload")
+        return TokenBalancePage.from_dict(payload)
+
     async def list_blocks(
         self,
         *,
@@ -1322,6 +1364,53 @@ class XianAsync:
         if payload is None:
             return []
         raise XianException("Unexpected event list payload")
+
+    async def list_shielded_output_tags(
+        self,
+        tag_value: str,
+        *,
+        kind: str = "sync_hint",
+        limit: int = 100,
+        offset: int = 0,
+        after_id: int | None = None,
+    ) -> list[ShieldedOutputTag]:
+        path = f"/shielded_output_tags/{tag_value}/limit={limit}/kind={kind}"
+        if after_id is not None:
+            path = f"{path}/after_id={after_id}"
+        else:
+            path = f"{path}/offset={offset}"
+
+        payload = await self._abci_query_value(path)
+        if not isinstance(payload, dict):
+            raise XianException("Unexpected shielded output tag payload")
+
+        items = payload.get("items")
+        if not isinstance(items, list):
+            raise XianException("Unexpected shielded output tag item list")
+        return [ShieldedOutputTag.from_dict(item) for item in items]
+
+    async def list_shielded_wallet_history(
+        self,
+        tag_value: str,
+        *,
+        kind: str = "sync_hint",
+        limit: int = 100,
+        after_note_index: int = 0,
+    ) -> list[ShieldedWalletHistoryEntry]:
+        path = (
+            f"/shielded_wallet_history/{tag_value}/limit={limit}/kind={kind}"
+            f"/after_note_index={after_note_index}"
+        )
+        payload = await self._abci_query_value(path)
+        if not isinstance(payload, dict):
+            raise XianException("Unexpected shielded wallet history payload")
+
+        items = payload.get("items")
+        if not isinstance(items, list):
+            raise XianException(
+                "Unexpected shielded wallet history item list"
+            )
+        return [ShieldedWalletHistoryEntry.from_dict(item) for item in items]
 
     async def list_events(
         self,

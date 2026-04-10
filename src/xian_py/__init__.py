@@ -35,7 +35,18 @@ from xian_py.models import (
     LiveEvent,
     NodeStatus,
     PerformanceStatus,
+    ShieldedRelayerCatalogEntry,
+    ShieldedRelayerInfo,
+    ShieldedRelayerInfoPolicy,
+    ShieldedRelayerInfoResult,
+    ShieldedRelayerJob,
+    ShieldedRelayerJobResult,
+    ShieldedRelayerQuote,
+    ShieldedRelayerQuoteResult,
+    ShieldedOutputTag,
     StateEntry,
+    TokenBalance,
+    TokenBalancePage,
     TransactionReceipt,
     TransactionSubmission,
 )
@@ -48,6 +59,12 @@ from xian_py.projectors import (
     merged_event_payload,
 )
 from xian_py.run_sync import run_sync
+from xian_py.shielded_relayer import (
+    ShieldedRelayerAsyncClient,
+    ShieldedRelayerAsyncPoolClient,
+    ShieldedRelayerClient,
+    ShieldedRelayerPoolClient,
+)
 from xian_py.wallet import Wallet
 from xian_py.xian import Xian
 from xian_py.xian_async import XianAsync
@@ -73,10 +90,25 @@ __all__ = [
     "PerformanceStatus",
     "RpcError",
     "RetryPolicy",
+    "ShieldedRelayerAsyncClient",
+    "ShieldedRelayerAsyncPoolClient",
+    "ShieldedRelayerCatalogEntry",
+    "ShieldedRelayerClient",
+    "ShieldedRelayerInfo",
+    "ShieldedRelayerInfoPolicy",
+    "ShieldedRelayerInfoResult",
+    "ShieldedRelayerJob",
+    "ShieldedRelayerJobResult",
+    "ShieldedRelayerPoolClient",
+    "ShieldedRelayerQuote",
+    "ShieldedRelayerQuoteResult",
+    "ShieldedOutputTag",
     "SimulationError",
     "SQLiteProjectionState",
     "StateEntry",
     "SubmissionConfig",
+    "TokenBalance",
+    "TokenBalancePage",
     "TransactionError",
     "TransactionReceipt",
     "TransactionSubmission",
