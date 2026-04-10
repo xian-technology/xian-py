@@ -24,6 +24,8 @@ from xian_py.models import (
     LiveEvent,
     NodeStatus,
     PerformanceStatus,
+    ShieldedOutputTag,
+    ShieldedWalletHistoryEntry,
     TokenBalance,
     TokenBalancePage,
     TransactionReceipt,
@@ -1139,6 +1141,173 @@ def test_xian_async_exposes_token_balances_as_typed_page() -> None:
     )
 
 
+def test_xian_async_exposes_shielded_output_tags_as_typed_models() -> None:
+    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+
+    with patch.object(
+        client,
+        "_abci_query_value",
+        AsyncMock(
+            return_value={
+                "available": True,
+                "items": [
+                    {
+                        "id": 7,
+                        "tx_hash": "TX-7",
+                        "block_height": 44,
+                        "tx_index": 0,
+                        "contract": "con_private",
+                        "function": "transfer_shielded",
+                        "action": "transfer",
+                        "output_index": 1,
+                        "note_index": 12,
+                        "commitment": "0xabc",
+                        "new_root": "0xdef",
+                        "payload_hash": "0x123",
+                        "tag_kind": "sync_hint",
+                        "tag_value": "tag-1",
+                        "created_at": "2026-04-07T10:00:00Z",
+                    }
+                ],
+                "limit": 10,
+                "offset": 3,
+            }
+        ),
+    ) as query:
+        items = asyncio.run(
+            client.list_shielded_output_tags(
+                "tag-1",
+                limit=10,
+                offset=3,
+            )
+        )
+
+    assert items == [
+        ShieldedOutputTag(
+            id=7,
+            tx_hash="TX-7",
+            block_height=44,
+            tx_index=0,
+            contract="con_private",
+            function="transfer_shielded",
+            action="transfer",
+            output_index=1,
+            note_index=12,
+            commitment="0xabc",
+            new_root="0xdef",
+            payload_hash="0x123",
+            tag_kind="sync_hint",
+            tag_value="tag-1",
+            created="2026-04-07T10:00:00Z",
+            raw={
+                "id": 7,
+                "tx_hash": "TX-7",
+                "block_height": 44,
+                "tx_index": 0,
+                "contract": "con_private",
+                "function": "transfer_shielded",
+                "action": "transfer",
+                "output_index": 1,
+                "note_index": 12,
+                "commitment": "0xabc",
+                "new_root": "0xdef",
+                "payload_hash": "0x123",
+                "tag_kind": "sync_hint",
+                "tag_value": "tag-1",
+                "created_at": "2026-04-07T10:00:00Z",
+            },
+        )
+    ]
+    query.assert_awaited_once_with(
+        "/shielded_output_tags/tag-1/limit=10/kind=sync_hint/offset=3"
+    )
+
+
+def test_xian_async_exposes_shielded_wallet_history_as_typed_models() -> None:
+    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+
+    with patch.object(
+        client,
+        "_abci_query_value",
+        AsyncMock(
+            return_value={
+                "available": True,
+                "items": [
+                    {
+                        "event_id": 9,
+                        "tx_hash": "TX-9",
+                        "block_height": 45,
+                        "tx_index": 0,
+                        "contract": "con_private",
+                        "function": "transfer_shielded",
+                        "action": "transfer",
+                        "output_index": 1,
+                        "note_index": 12,
+                        "commitment": "0xabc",
+                        "new_root": "0xdef",
+                        "payload_hash": "0x123",
+                        "output_payload": "0x456",
+                        "tag_kind": "sync_hint",
+                        "tag_value": "tag-1",
+                        "created_at": "2026-04-07T10:00:00Z",
+                    }
+                ],
+                "limit": 10,
+                "after_note_index": 3,
+            }
+        ),
+    ) as query:
+        items = asyncio.run(
+            client.list_shielded_wallet_history(
+                "tag-1",
+                limit=10,
+                after_note_index=3,
+            )
+        )
+
+    assert items == [
+        ShieldedWalletHistoryEntry(
+            event_id=9,
+            tx_hash="TX-9",
+            block_height=45,
+            tx_index=0,
+            contract="con_private",
+            function="transfer_shielded",
+            action="transfer",
+            output_index=1,
+            note_index=12,
+            commitment="0xabc",
+            new_root="0xdef",
+            payload_hash="0x123",
+            output_payload="0x456",
+            tag_kind="sync_hint",
+            tag_value="tag-1",
+            created="2026-04-07T10:00:00Z",
+            raw={
+                "event_id": 9,
+                "tx_hash": "TX-9",
+                "block_height": 45,
+                "tx_index": 0,
+                "contract": "con_private",
+                "function": "transfer_shielded",
+                "action": "transfer",
+                "output_index": 1,
+                "note_index": 12,
+                "commitment": "0xabc",
+                "new_root": "0xdef",
+                "payload_hash": "0x123",
+                "output_payload": "0x456",
+                "tag_kind": "sync_hint",
+                "tag_value": "tag-1",
+                "created_at": "2026-04-07T10:00:00Z",
+            },
+        )
+    ]
+    query.assert_awaited_once_with(
+        "/shielded_wallet_history/tag-1/limit=10/kind=sync_hint/after_note_index=3"
+    )
+
+
 def test_xian_async_list_events_falls_back_to_graphql() -> None:
     client = XianAsync("https://node.xian.org", chain_id="xian-1")
     client._session = _FakeSession(
@@ -1286,6 +1455,71 @@ def test_sync_client_exposes_token_balances() -> None:
     client._async_client.close = AsyncMock()
 
     assert client.get_token_balances() == page
+
+    client.close()
+
+
+def test_sync_client_exposes_shielded_output_tags() -> None:
+    wallet = Wallet()
+    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    items = [
+        ShieldedOutputTag(
+            id=1,
+            tx_hash="TX-1",
+            block_height=10,
+            tx_index=0,
+            contract="con_private",
+            function="deposit_shielded",
+            action="deposit",
+            output_index=0,
+            note_index=0,
+            commitment="0xaaa",
+            new_root="0xbbb",
+            payload_hash="0xccc",
+            tag_kind="sync_hint",
+            tag_value="tag-1",
+            created="2026-04-07T12:00:00Z",
+            raw={},
+        )
+    ]
+    client._async_client.list_shielded_output_tags = AsyncMock(return_value=items)
+    client._async_client.close = AsyncMock()
+
+    assert client.list_shielded_output_tags("tag-1") == items
+
+    client.close()
+
+
+def test_sync_client_exposes_shielded_wallet_history() -> None:
+    wallet = Wallet()
+    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    items = [
+        ShieldedWalletHistoryEntry(
+            event_id=1,
+            tx_hash="TX-1",
+            block_height=10,
+            tx_index=0,
+            contract="con_private",
+            function="transfer_shielded",
+            action="transfer",
+            output_index=0,
+            note_index=0,
+            commitment="0xaaa",
+            new_root="0xbbb",
+            payload_hash="0xccc",
+            output_payload="0xddd",
+            tag_kind="sync_hint",
+            tag_value="tag-1",
+            created="2026-04-07T12:00:00Z",
+            raw={},
+        )
+    ]
+    client._async_client.list_shielded_wallet_history = AsyncMock(
+        return_value=items
+    )
+    client._async_client.close = AsyncMock()
+
+    assert client.list_shielded_wallet_history("tag-1") == items
 
     client.close()
 

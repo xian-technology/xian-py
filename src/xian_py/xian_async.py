@@ -37,6 +37,8 @@ from xian_py.models import (
     LiveEvent,
     NodeStatus,
     PerformanceStatus,
+    ShieldedOutputTag,
+    ShieldedWalletHistoryEntry,
     StateEntry,
     TokenBalancePage,
     TransactionReceipt,
@@ -1362,6 +1364,53 @@ class XianAsync:
         if payload is None:
             return []
         raise XianException("Unexpected event list payload")
+
+    async def list_shielded_output_tags(
+        self,
+        tag_value: str,
+        *,
+        kind: str = "sync_hint",
+        limit: int = 100,
+        offset: int = 0,
+        after_id: int | None = None,
+    ) -> list[ShieldedOutputTag]:
+        path = f"/shielded_output_tags/{tag_value}/limit={limit}/kind={kind}"
+        if after_id is not None:
+            path = f"{path}/after_id={after_id}"
+        else:
+            path = f"{path}/offset={offset}"
+
+        payload = await self._abci_query_value(path)
+        if not isinstance(payload, dict):
+            raise XianException("Unexpected shielded output tag payload")
+
+        items = payload.get("items")
+        if not isinstance(items, list):
+            raise XianException("Unexpected shielded output tag item list")
+        return [ShieldedOutputTag.from_dict(item) for item in items]
+
+    async def list_shielded_wallet_history(
+        self,
+        tag_value: str,
+        *,
+        kind: str = "sync_hint",
+        limit: int = 100,
+        after_note_index: int = 0,
+    ) -> list[ShieldedWalletHistoryEntry]:
+        path = (
+            f"/shielded_wallet_history/{tag_value}/limit={limit}/kind={kind}"
+            f"/after_note_index={after_note_index}"
+        )
+        payload = await self._abci_query_value(path)
+        if not isinstance(payload, dict):
+            raise XianException("Unexpected shielded wallet history payload")
+
+        items = payload.get("items")
+        if not isinstance(items, list):
+            raise XianException(
+                "Unexpected shielded wallet history item list"
+            )
+        return [ShieldedWalletHistoryEntry.from_dict(item) for item in items]
 
     async def list_events(
         self,
