@@ -2343,6 +2343,59 @@ def test_xian_async_simulate_retries_transport_errors() -> None:
     assert simulate_tx_async.await_count == 2
 
 
+def test_xian_async_wait_for_tx_retries_transport_errors() -> None:
+    wallet = Wallet()
+    config = XianClientConfig(
+        retry=RetryPolicy(
+            max_attempts=2,
+            initial_delay_seconds=0.0,
+            max_delay_seconds=0.0,
+        )
+    )
+    client = XianAsync(
+        "http://node",
+        chain_id="xian-1",
+        wallet=wallet,
+        config=config,
+    )
+
+    payload = {
+        "result": {
+            "tx": {
+                "payload": {
+                    "contract": "currency",
+                    "function": "transfer",
+                }
+            },
+            "tx_result": {
+                "code": 0,
+                "data": {"status": 0, "result": "ok"},
+            },
+        }
+    }
+
+    async def run_wait() -> TransactionReceipt:
+        try:
+            return await client.wait_for_tx(
+                "abc123",
+                timeout_seconds=1.0,
+                poll_interval_seconds=0.0,
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr,
+        "wait_for_tx_async",
+        AsyncMock(side_effect=[TransportError("offline"), payload]),
+    ) as wait_for_tx_async:
+        receipt = asyncio.run(run_wait())
+
+    assert receipt.success is True
+    assert receipt.transaction["payload"]["function"] == "transfer"
+    assert wait_for_tx_async.await_count == 2
+
+
 def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:
     wallet = Wallet()
     config = XianClientConfig(

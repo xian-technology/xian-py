@@ -9,7 +9,7 @@ import aiohttp
 import pytest
 from xian_runtime_types.encoding import decode, encode
 
-from xian_py.exception import XianException
+from xian_py.exception import TransportError, XianException
 from xian_py.formating import format_dictionary
 from xian_py.transaction import (
     create_tx,
@@ -292,6 +292,44 @@ def test_wait_for_tx_async_returns_decoded_transaction_once_found() -> None:
 
     assert result["result"]["tx"]["payload"]["function"] == "transfer"
     assert result["result"]["tx_result"]["data"]["result"] == "ok"
+
+
+def test_wait_for_tx_async_retries_transient_transport_errors() -> None:
+    tx_payload = {
+        "payload": {
+            "contract": "currency",
+            "function": "transfer",
+            "kwargs": {"amount": 1, "to": "bob"},
+        }
+    }
+
+    with patch(
+        "xian_py.transaction.get_tx_async",
+        side_effect=[
+            TransportError("connection reset by peer"),
+            {
+                "result": {
+                    "tx": tx_payload,
+                    "tx_result": {
+                        "code": 0,
+                        "data": {"status": 0, "result": "ok"},
+                    },
+                }
+            },
+        ],
+    ) as get_tx_async:
+        result = asyncio.run(
+            wait_for_tx_async(
+                "http://node",
+                "abc123",
+                timeout_seconds=1.0,
+                poll_interval_seconds=0.0,
+            )
+        )
+
+    assert result["result"]["tx"]["payload"]["function"] == "transfer"
+    assert result["result"]["tx_result"]["data"]["result"] == "ok"
+    assert get_tx_async.await_count == 2
 
 
 def test_wait_for_tx_async_falls_back_to_recent_block_scan() -> None:

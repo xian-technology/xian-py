@@ -467,29 +467,38 @@ async def wait_for_tx_async(
     initial_block_scan_window = 8
 
     while True:
-        data = await get_tx_async(
-            node_url,
-            tx_hash,
-            session=session,
-        )
-        if "error" not in data:
-            return data
-
-        last_error = data["error"].get("data") or data["error"].get("message")
+        latest_height = None
         try:
-            status = await get_status_async(node_url, session=session)
-            latest_height_raw = (
-                status.get("result", {})
-                .get("sync_info", {})
-                .get("latest_block_height")
+            data = await get_tx_async(
+                node_url,
+                tx_hash,
+                session=session,
             )
-            latest_height = (
-                int(latest_height_raw)
-                if latest_height_raw is not None
-                else None
+        except TransportError as exc:
+            last_error = str(exc)
+        else:
+            if "error" not in data:
+                return data
+
+            last_error = data["error"].get("data") or data["error"].get(
+                "message"
             )
-        except Exception:
-            latest_height = None
+            try:
+                status = await get_status_async(node_url, session=session)
+                latest_height_raw = (
+                    status.get("result", {})
+                    .get("sync_info", {})
+                    .get("latest_block_height")
+                )
+                latest_height = (
+                    int(latest_height_raw)
+                    if latest_height_raw is not None
+                    else None
+                )
+            except TransportError as exc:
+                last_error = str(exc)
+            except Exception:
+                latest_height = None
 
         if latest_height is not None:
             scan_from = (
@@ -498,16 +507,20 @@ async def wait_for_tx_async(
                 else last_scanned_height + 1
             )
             if scan_from <= latest_height:
-                fallback = await _lookup_tx_in_recent_blocks_async(
-                    node_url,
-                    tx_hash,
-                    start_height=scan_from,
-                    end_height=latest_height,
-                    session=session,
-                )
-                if fallback is not None:
-                    return fallback
-                last_scanned_height = latest_height
+                try:
+                    fallback = await _lookup_tx_in_recent_blocks_async(
+                        node_url,
+                        tx_hash,
+                        start_height=scan_from,
+                        end_height=latest_height,
+                        session=session,
+                    )
+                except TransportError as exc:
+                    last_error = str(exc)
+                else:
+                    if fallback is not None:
+                        return fallback
+                    last_scanned_height = latest_height
 
         if get_running_loop().time() >= deadline:
             raise TxTimeoutError(
