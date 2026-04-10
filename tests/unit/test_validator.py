@@ -11,6 +11,7 @@ def seed():
     metadata["token_name"] = "Token"
     metadata["token_symbol"] = "TKN"
     metadata["token_logo_url"] = "https://example.invalid/logo.png"
+    metadata["token_logo_svg"] = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'></svg>"
     metadata["token_website"] = "https://example.invalid"
     metadata["total_supply"] = 0
     operator.set(ctx.caller)
@@ -84,6 +85,7 @@ def seed():
     metadata["token_name"] = "Token"
     metadata["token_symbol"] = "TKN"
     metadata["token_logo_url"] = "https://example.invalid/logo.png"
+    metadata["token_logo_svg"] = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'></svg>"
     metadata["token_website"] = "https://example.invalid"
 
 @export
