@@ -31,6 +31,7 @@ class ValidatorXSC001(ValidatorBase):
             "token_name",
             "token_symbol",
             "token_logo_url",
+            "token_logo_svg",
             "token_website",
         }
         self.found_metadata_fields: Set[str] = set()
