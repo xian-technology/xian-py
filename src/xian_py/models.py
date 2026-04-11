@@ -134,7 +134,8 @@ class ShieldedRelayerInfoPolicy:
     def from_dict(cls, raw: Mapping[str, Any]) -> "ShieldedRelayerInfoPolicy":
         raw_dict = dict(raw)
         return cls(
-            quote_ttl_seconds=_coerce_int(raw_dict.get("quote_ttl_seconds")) or 0,
+            quote_ttl_seconds=_coerce_int(raw_dict.get("quote_ttl_seconds"))
+            or 0,
             default_expiry_seconds=(
                 _coerce_int(raw_dict.get("default_expiry_seconds")) or 0
             ),
@@ -194,13 +195,14 @@ class ShieldedRelayerCatalogEntry:
                 "shielded relayer entry must define relayer_url/relayerUrl "
                 "or base_url/baseUrl"
             )
-        auth_token = (
-            _coerce_str(raw_dict.get("auth_token"))
-            or _coerce_str(raw_dict.get("authToken"))
+        auth_token = _coerce_str(raw_dict.get("auth_token")) or _coerce_str(
+            raw_dict.get("authToken")
         )
         priority = _coerce_int(raw_dict.get("priority"))
         return cls(
-            id=(_coerce_str(raw_dict.get("id")) or f"relayer-{index + 1}").strip(),
+            id=(
+                _coerce_str(raw_dict.get("id")) or f"relayer-{index + 1}"
+            ).strip(),
             relayer_url=relayer_url,
             auth_token=(auth_token.strip() or None) if auth_token else None,
             auth_scheme=(
@@ -226,7 +228,9 @@ class ShieldedRelayerCatalogEntry:
                 ),
                 default=False,
             ),
-            priority=priority if priority is not None and priority >= 0 else 100,
+            priority=priority
+            if priority is not None and priority >= 0
+            else 100,
             submission_kinds=_normalize_submission_kinds(
                 raw_dict.get(
                     "submission_kinds", raw_dict.get("submissionKinds")

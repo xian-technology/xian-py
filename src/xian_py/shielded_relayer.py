@@ -38,16 +38,12 @@ def _normalize_relayer_catalog(
     seen: set[str] = set()
     for entry in normalized:
         if entry.id in seen:
-            raise XianException(
-                f"duplicate shielded relayer id: {entry.id}"
-            )
+            raise XianException(f"duplicate shielded relayer id: {entry.id}")
         seen.add(entry.id)
     return normalized
 
 
-def _supports_kind(
-    relayer: ShieldedRelayerCatalogEntry, kind: str
-) -> bool:
+def _supports_kind(relayer: ShieldedRelayerCatalogEntry, kind: str) -> bool:
     return kind in relayer.submission_kinds
 
 
@@ -55,9 +51,7 @@ def _build_aggregate_transport_error(
     action: str,
     failures: list[tuple[ShieldedRelayerCatalogEntry, Exception]],
 ) -> TransportError:
-    detail = "; ".join(
-        f"{relayer.id}: {error}" for relayer, error in failures
-    )
+    detail = "; ".join(f"{relayer.id}: {error}" for relayer, error in failures)
     return TransportError(
         f"{action} failed for all candidate relayers: {detail}"
     )
@@ -278,9 +272,7 @@ class ShieldedRelayerAsyncPoolClient:
     def get_client(self, relayer_id: str) -> ShieldedRelayerAsyncClient:
         client = self._clients.get(relayer_id)
         if client is None:
-            raise XianException(
-                f"unknown shielded relayer id: {relayer_id}"
-            )
+            raise XianException(f"unknown shielded relayer id: {relayer_id}")
         return client
 
     async def get_info(
@@ -405,9 +397,7 @@ class ShieldedRelayerAsyncPoolClient:
     async def get_job(
         self, job_id: str, *, relayer_id: str | None = None
     ) -> ShieldedRelayerJobResult:
-        relayer = self._resolve_job_relayer(
-            "get_job", relayer_id=relayer_id
-        )
+        relayer = self._resolve_job_relayer("get_job", relayer_id=relayer_id)
         return ShieldedRelayerJobResult(
             relayer=relayer,
             job=await self.get_client(relayer.id).get_job(job_id),
@@ -428,9 +418,7 @@ class ShieldedRelayerAsyncPoolClient:
             return relayers
         if kind is None:
             raise XianException("no shielded relayers are configured")
-        raise XianException(
-            f"no shielded relayers are configured for {kind}"
-        )
+        raise XianException(f"no shielded relayers are configured for {kind}")
 
     def _resolve_submission_relayer(
         self, action: str, *, kind: str, relayer_id: str | None = None
@@ -464,9 +452,7 @@ class ShieldedRelayerAsyncPoolClient:
         self,
         action: str,
         candidates: list[ShieldedRelayerCatalogEntry],
-        load: Callable[
-            [ShieldedRelayerCatalogEntry], Any
-        ],
+        load: Callable[[ShieldedRelayerCatalogEntry], Any],
     ) -> Any:
         failures: list[tuple[ShieldedRelayerCatalogEntry, Exception]] = []
         for relayer in candidates:

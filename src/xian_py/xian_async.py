@@ -1407,9 +1407,7 @@ class XianAsync:
 
         items = payload.get("items")
         if not isinstance(items, list):
-            raise XianException(
-                "Unexpected shielded wallet history item list"
-            )
+            raise XianException("Unexpected shielded wallet history item list")
         return [ShieldedWalletHistoryEntry.from_dict(item) for item in items]
 
     async def list_events(

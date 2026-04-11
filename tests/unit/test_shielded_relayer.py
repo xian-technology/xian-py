@@ -6,10 +6,10 @@ import json
 from xian_py.exception import XianException
 from xian_py.models import (
     ShieldedRelayerInfo,
-    ShieldedRelayerJobResult,
     ShieldedRelayerJob,
-    ShieldedRelayerQuoteResult,
+    ShieldedRelayerJobResult,
     ShieldedRelayerQuote,
+    ShieldedRelayerQuoteResult,
 )
 from xian_py.shielded_relayer import (
     ShieldedRelayerAsyncClient,
@@ -246,17 +246,13 @@ def test_async_relayer_pool_client_fails_over_quote_requests() -> None:
                     "id": "relayer-b",
                     "relayer_url": "http://relayer-b",
                     "priority": 20,
-                    "submission_kinds": [
-                        "shielded_note_relay_transfer"
-                    ],
+                    "submission_kinds": ["shielded_note_relay_transfer"],
                 },
                 {
                     "id": "relayer-a",
                     "relayer_url": "http://relayer-a",
                     "priority": 10,
-                    "submission_kinds": [
-                        "shielded_note_relay_transfer"
-                    ],
+                    "submission_kinds": ["shielded_note_relay_transfer"],
                 },
             ],
             session=_FakeSession(handler=handler),
@@ -305,8 +301,7 @@ def test_async_relayer_pool_client_requires_explicit_routing_for_submit() -> (
             )
         except XianException as exc:
             assert (
-                str(exc)
-                == "submit_shielded_command requires relayer_id when "
+                str(exc) == "submit_shielded_command requires relayer_id when "
                 "multiple shielded relayers are configured"
             )
         else:

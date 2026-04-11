@@ -1482,7 +1482,9 @@ def test_sync_client_exposes_shielded_output_tags() -> None:
             raw={},
         )
     ]
-    client._async_client.list_shielded_output_tags = AsyncMock(return_value=items)
+    client._async_client.list_shielded_output_tags = AsyncMock(
+        return_value=items
+    )
     client._async_client.close = AsyncMock()
 
     assert client.list_shielded_output_tags("tag-1") == items
