@@ -322,8 +322,9 @@ class Xian:
     def submit_contract(
         self,
         name: str,
-        code: str,
+        code: str | None = None,
         args: dict = None,
+        deployment_artifacts: dict | None = None,
         chi: int | None = None,
         mode: str | None = None,
         wait_for_tx: bool | None = None,
@@ -337,6 +338,7 @@ class Xian:
                 name,
                 code,
                 args,
+                deployment_artifacts=deployment_artifacts,
                 chi=chi,
                 mode=mode,
                 wait_for_tx=wait_for_tx,

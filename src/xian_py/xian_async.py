@@ -1165,8 +1165,9 @@ class XianAsync:
     async def submit_contract(
         self,
         name: str,
-        code: str,
+        code: str | None = None,
         args: dict = None,
+        deployment_artifacts: dict | None = None,
         chi: int | None = None,
         mode: Literal["async", "checktx", "commit"] | None = None,
         wait_for_tx: bool | None = None,
@@ -1176,9 +1177,13 @@ class XianAsync:
         min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         """Submit a contract to the network."""
-        kwargs: dict[str, Any] = {"name": name, "code": code}
+        kwargs: dict[str, Any] = {"name": name}
+        if code is not None:
+            kwargs["code"] = code
         if args:
             kwargs["constructor_args"] = args
+        if deployment_artifacts is not None:
+            kwargs["deployment_artifacts"] = deployment_artifacts
 
         return await self.send_tx(
             "submission",
