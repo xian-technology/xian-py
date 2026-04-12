@@ -254,6 +254,72 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
     assert result.chi_supplied == 87
 
 
+def test_xian_async_submit_contract_forwards_deployment_artifacts() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    sentinel = object()
+
+    async def run_submit():
+        try:
+            return await client.submit_contract(
+                "con_probe",
+                code=None,
+                args={"value": 7},
+                deployment_artifacts={"format": "bundle-v1"},
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        client,
+        "send_tx",
+        AsyncMock(return_value=sentinel),
+    ) as send_tx:
+        result = asyncio.run(run_submit())
+
+    assert result is sentinel
+    assert send_tx.await_args.args == (
+        "submission",
+        "submit_contract",
+        {
+            "name": "con_probe",
+            "constructor_args": {"value": 7},
+            "deployment_artifacts": {"format": "bundle-v1"},
+        },
+    )
+
+
+def test_xian_submit_contract_forwards_deployment_artifacts() -> None:
+    wallet = Wallet()
+    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    sentinel = object()
+
+    try:
+        with patch.object(
+            client._async_client,
+            "submit_contract",
+            AsyncMock(return_value=sentinel),
+        ) as submit_contract:
+            result = client.submit_contract(
+                "con_probe",
+                code=None,
+                args={"value": 7},
+                deployment_artifacts={"format": "bundle-v1"},
+            )
+    finally:
+        client.close()
+
+    assert result is sentinel
+    assert submit_contract.await_args.args == (
+        "con_probe",
+        None,
+        {"value": 7},
+    )
+    assert submit_contract.await_args.kwargs["deployment_artifacts"] == {
+        "format": "bundle-v1"
+    }
+
+
 def test_xian_async_rejects_non_ed25519_wallets() -> None:
     with pytest.raises(TypeError, match="Ed25519 Xian account"):
         XianAsync(
