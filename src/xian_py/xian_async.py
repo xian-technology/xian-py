@@ -990,11 +990,15 @@ class XianAsync:
         if mode == "async":
             result["accepted"] = None
             if wait_for_tx and result["tx_hash"] is not None:
-                receipt = await self.wait_for_tx(
-                    result["tx_hash"],
-                    timeout_seconds=timeout_seconds,
-                    poll_interval_seconds=poll_interval_seconds,
-                )
+                try:
+                    receipt = await self.wait_for_tx(
+                        result["tx_hash"],
+                        timeout_seconds=timeout_seconds,
+                        poll_interval_seconds=poll_interval_seconds,
+                    )
+                except Exception:
+                    await self._invalidate_reserved_nonce(reserved_nonce)
+                    raise
                 result["receipt"] = receipt
                 result["finalized"] = True
             return TransactionSubmission.from_dict(result)
@@ -1006,11 +1010,17 @@ class XianAsync:
             return TransactionSubmission.from_dict(result)
 
         if wait_for_tx and result["tx_hash"] is not None:
-            receipt = await self.wait_for_tx(
-                result["tx_hash"],
-                timeout_seconds=timeout_seconds,
-                poll_interval_seconds=poll_interval_seconds,
-            )
+            try:
+                receipt = await self.wait_for_tx(
+                    result["tx_hash"],
+                    timeout_seconds=timeout_seconds,
+                    poll_interval_seconds=poll_interval_seconds,
+                )
+            except Exception:
+                # The tx may still commit later, but the local reservation is no
+                # longer trustworthy once finalization lookup fails.
+                await self._invalidate_reserved_nonce(reserved_nonce)
+                raise
             result["receipt"] = receipt
             result["finalized"] = True
 
@@ -1178,12 +1188,26 @@ class XianAsync:
     ) -> TransactionSubmission:
         """Submit a contract to the network."""
         kwargs: dict[str, Any] = {"name": name}
+        artifact_source = None
+        compact_artifacts = deployment_artifacts
+        if isinstance(deployment_artifacts, dict):
+            artifact_source = deployment_artifacts.get("source")
+            compact_artifacts = dict(deployment_artifacts)
+            compact_artifacts.pop("runtime_code", None)
+            compact_artifacts.pop("vm_ir_json", None)
+            hashes = compact_artifacts.get("hashes")
+            if isinstance(hashes, dict):
+                compact_hashes = dict(hashes)
+                compact_hashes.pop("runtime_code_sha256", None)
+                compact_hashes.pop("vm_ir_sha256", None)
+                compact_artifacts["hashes"] = compact_hashes
         if code is not None:
-            kwargs["code"] = code
+            if artifact_source is None:
+                kwargs["code"] = code
         if args:
             kwargs["constructor_args"] = args
-        if deployment_artifacts is not None:
-            kwargs["deployment_artifacts"] = deployment_artifacts
+        if compact_artifacts is not None:
+            kwargs["deployment_artifacts"] = compact_artifacts
 
         return await self.send_tx(
             "submission",

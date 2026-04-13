@@ -15,7 +15,7 @@ from xian_py.config import (
     WatcherConfig,
     XianClientConfig,
 )
-from xian_py.exception import SimulationError, TransportError
+from xian_py.exception import SimulationError, TransportError, TxTimeoutError
 from xian_py.models import (
     BdsStatus,
     DeveloperRewardSummary,
@@ -289,6 +289,56 @@ def test_xian_async_submit_contract_forwards_deployment_artifacts() -> None:
     )
 
 
+def test_xian_async_submit_contract_omits_duplicate_code_from_artifacts() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    sentinel = object()
+    source = "def foo():\n    return 1\n"
+
+    async def run_submit():
+        try:
+            return await client.submit_contract(
+                "con_probe",
+                code=source,
+                deployment_artifacts={
+                    "format": "bundle-v1",
+                    "source": source,
+                    "runtime_code": "compiled",
+                    "vm_ir_json": "{}",
+                    "hashes": {
+                        "source_sha256": "source",
+                        "runtime_code_sha256": "runtime",
+                        "vm_ir_sha256": "ir",
+                    },
+                },
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        client,
+        "send_tx",
+        AsyncMock(return_value=sentinel),
+    ) as send_tx:
+        result = asyncio.run(run_submit())
+
+    assert result is sentinel
+    assert send_tx.await_args.args == (
+        "submission",
+        "submit_contract",
+        {
+            "name": "con_probe",
+            "deployment_artifacts": {
+                "format": "bundle-v1",
+                "source": source,
+                "hashes": {
+                    "source_sha256": "source",
+                },
+            },
+        },
+    )
+
+
 def test_xian_submit_contract_forwards_deployment_artifacts() -> None:
     wallet = Wallet()
     client = Xian("http://node", chain_id="xian-1", wallet=wallet)
@@ -550,6 +600,64 @@ def test_xian_async_send_tx_can_wait_for_finalized_receipt() -> None:
     assert result.finalized is True
     assert result.receipt is not None
     assert result.receipt.success is True
+
+
+def test_xian_async_send_tx_invalidates_reserved_nonce_after_wait_timeout() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    observed_nonces: list[int] = []
+
+    def _capture_tx(payload: dict, wallet: Wallet) -> dict:
+        observed_nonces.append(payload["nonce"])
+        return {"signed": payload["nonce"]}
+
+    async def run_sends() -> TransactionSubmission:
+        try:
+            with pytest.raises(TxTimeoutError):
+                await client.send_tx(
+                    "currency",
+                    "transfer",
+                    {"amount": 1, "to": wallet.public_key},
+                    chi=100,
+                    wait_for_tx=True,
+                    timeout_seconds=1.0,
+                    poll_interval_seconds=0.0,
+                )
+            return await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+                chi=100,
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr,
+        "get_nonce_async",
+        AsyncMock(side_effect=[11, 11]),
+    ) as get_nonce_async:
+        with patch.object(tr, "create_tx", side_effect=_capture_tx):
+            with patch.object(
+                tr,
+                "broadcast_tx_wait_async",
+                AsyncMock(
+                    side_effect=[
+                        {"result": {"code": 0, "hash": "timed-out"}},
+                        {"result": {"code": 0, "hash": "recovered"}},
+                    ]
+                ),
+            ):
+                with patch.object(
+                    client,
+                    "wait_for_tx",
+                    AsyncMock(side_effect=TxTimeoutError("not found")),
+                ):
+                    succeeded = asyncio.run(run_sends())
+
+    assert succeeded.accepted is True
+    assert observed_nonces == [11, 11]
+    assert get_nonce_async.await_count == 2
 
 
 def test_xian_async_send_tx_async_mode_reports_submission_without_checktx() -> (
