@@ -331,8 +331,10 @@ def test_xian_async_submit_contract_omits_duplicate_code_from_artifacts() -> Non
             "deployment_artifacts": {
                 "format": "bundle-v1",
                 "source": source,
+                "vm_ir_json": "{}",
                 "hashes": {
                     "source_sha256": "source",
+                    "vm_ir_sha256": "ir",
                 },
             },
         },

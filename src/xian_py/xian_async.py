@@ -1194,12 +1194,10 @@ class XianAsync:
             artifact_source = deployment_artifacts.get("source")
             compact_artifacts = dict(deployment_artifacts)
             compact_artifacts.pop("runtime_code", None)
-            compact_artifacts.pop("vm_ir_json", None)
             hashes = compact_artifacts.get("hashes")
             if isinstance(hashes, dict):
                 compact_hashes = dict(hashes)
                 compact_hashes.pop("runtime_code_sha256", None)
-                compact_hashes.pop("vm_ir_sha256", None)
                 compact_artifacts["hashes"] = compact_hashes
         if code is not None:
             if artifact_source is None:
