@@ -990,11 +990,15 @@ class XianAsync:
         if mode == "async":
             result["accepted"] = None
             if wait_for_tx and result["tx_hash"] is not None:
-                receipt = await self.wait_for_tx(
-                    result["tx_hash"],
-                    timeout_seconds=timeout_seconds,
-                    poll_interval_seconds=poll_interval_seconds,
-                )
+                try:
+                    receipt = await self.wait_for_tx(
+                        result["tx_hash"],
+                        timeout_seconds=timeout_seconds,
+                        poll_interval_seconds=poll_interval_seconds,
+                    )
+                except Exception:
+                    await self._invalidate_reserved_nonce(reserved_nonce)
+                    raise
                 result["receipt"] = receipt
                 result["finalized"] = True
             return TransactionSubmission.from_dict(result)
@@ -1006,11 +1010,17 @@ class XianAsync:
             return TransactionSubmission.from_dict(result)
 
         if wait_for_tx and result["tx_hash"] is not None:
-            receipt = await self.wait_for_tx(
-                result["tx_hash"],
-                timeout_seconds=timeout_seconds,
-                poll_interval_seconds=poll_interval_seconds,
-            )
+            try:
+                receipt = await self.wait_for_tx(
+                    result["tx_hash"],
+                    timeout_seconds=timeout_seconds,
+                    poll_interval_seconds=poll_interval_seconds,
+                )
+            except Exception:
+                # The tx may still commit later, but the local reservation is no
+                # longer trustworthy once finalization lookup fails.
+                await self._invalidate_reserved_nonce(reserved_nonce)
+                raise
             result["receipt"] = receipt
             result["finalized"] = True
 

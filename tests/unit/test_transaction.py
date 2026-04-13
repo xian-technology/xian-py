@@ -12,6 +12,9 @@ from xian_runtime_types.encoding import decode, encode
 from xian_py.exception import TransportError, XianException
 from xian_py.formating import format_dictionary
 from xian_py.transaction import (
+    broadcast_tx_commit_async,
+    broadcast_tx_nowait_async,
+    broadcast_tx_wait_async,
     create_tx,
     get_nonce_async,
     simulate_tx_async,
@@ -53,6 +56,7 @@ class _FakeClientSession:
         self.get_responses = list(get_responses or [])
         self.post_responses = list(post_responses or [])
         self.calls: list[tuple[str, str]] = []
+        self.call_kwargs: list[dict[str, object]] = []
 
     async def __aenter__(self):
         return self
@@ -60,12 +64,14 @@ class _FakeClientSession:
     async def __aexit__(self, exc_type, exc, tb):
         return False
 
-    def get(self, url: str) -> _FakeResponse:
+    def get(self, url: str, **kwargs) -> _FakeResponse:
         self.calls.append(("get", url))
+        self.call_kwargs.append(kwargs)
         return self.get_responses.pop(0)
 
-    def post(self, url: str) -> _FakeResponse:
+    def post(self, url: str, **kwargs) -> _FakeResponse:
         self.calls.append(("post", url))
+        self.call_kwargs.append(kwargs)
         return self.post_responses.pop(0)
 
 
@@ -235,6 +241,45 @@ def test_create_tx_rejects_invalid_payload() -> None:
 
     with pytest.raises(XianException, match="Invalid payload provided"):
         create_tx({"contract": "currency"}, wallet)
+
+
+@pytest.mark.parametrize(
+    ("broadcast_fn", "path"),
+    [
+        (broadcast_tx_wait_async, "/broadcast_tx_sync"),
+        (broadcast_tx_nowait_async, "/broadcast_tx_async"),
+        (broadcast_tx_commit_async, "/broadcast_tx_commit"),
+    ],
+)
+def test_broadcast_tx_async_posts_tx_in_request_body(
+    broadcast_fn, path: str
+) -> None:
+    fake_session = _FakeClientSession(
+        post_responses=[_FakeResponse({"result": {"hash": "abc123"}})]
+    )
+    wallet = Wallet()
+    tx = create_tx(
+        {
+            "sender": wallet.public_key,
+            "nonce": 1,
+            "chi_supplied": 25,
+            "contract": "currency",
+            "function": "transfer",
+            "kwargs": {"to": wallet.public_key, "amount": 5},
+            "chain_id": "xian-local-1",
+        },
+        wallet,
+    )
+
+    with patch(
+        "xian_py.transaction.aiohttp.ClientSession", return_value=fake_session
+    ):
+        asyncio.run(broadcast_fn("http://node", tx))
+
+    assert fake_session.calls == [("post", f"http://node{path}")]
+    assert fake_session.call_kwargs == [
+        {"data": {"tx": f'"{json.dumps(tx).encode().hex()}"'}}
+    ]
 
 
 def test_wait_for_tx_async_returns_decoded_transaction_once_found() -> None:

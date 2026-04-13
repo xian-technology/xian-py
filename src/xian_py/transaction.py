@@ -47,6 +47,7 @@ async def request_json_async(
     *,
     session: aiohttp.ClientSession | None = None,
     raise_for_status: bool = False,
+    request_kwargs: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if session is None:
         async with aiohttp.ClientSession() as owned_session:
@@ -55,13 +56,15 @@ async def request_json_async(
                 url,
                 session=owned_session,
                 raise_for_status=raise_for_status,
+                request_kwargs=request_kwargs,
             )
 
+    request_kwargs = dict(request_kwargs or {})
     requester = getattr(session, "request", None)
     if requester is not None:
-        request_context = requester(method, url)
+        request_context = requester(method, url, **request_kwargs)
     else:
-        request_context = getattr(session, method.lower())(url)
+        request_context = getattr(session, method.lower())(url, **request_kwargs)
 
     try:
         async with request_context as response:
@@ -300,8 +303,9 @@ async def broadcast_tx_commit_async(
     try:
         data = await request_json_async(
             "POST",
-            f'{node_url}/broadcast_tx_commit?tx="{payload}"',
+            f"{node_url}/broadcast_tx_commit",
             session=session,
+            request_kwargs={"data": {"tx": f'"{payload}"'}},
         )
     except XianException:
         raise
@@ -333,8 +337,9 @@ async def broadcast_tx_wait_async(
     try:
         data = await request_json_async(
             "POST",
-            f'{node_url}/broadcast_tx_sync?tx="{payload}"',
+            f"{node_url}/broadcast_tx_sync",
             session=session,
+            request_kwargs={"data": {"tx": f'"{payload}"'}},
         )
     except XianException:
         raise
@@ -369,9 +374,10 @@ async def broadcast_tx_nowait_async(
     try:
         return await request_json_async(
             "POST",
-            f'{node_url}/broadcast_tx_async?tx="{payload}"',
+            f"{node_url}/broadcast_tx_async",
             session=session,
             raise_for_status=True,
+            request_kwargs={"data": {"tx": f'"{payload}"'}},
         )
     except XianException:
         raise
