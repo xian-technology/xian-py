@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import hashlib
 import json
 import math
 import re
@@ -584,6 +585,20 @@ class XianAsync:
             return True
         return False
 
+    @staticmethod
+    def _is_duplicate_tx_log(message: object) -> bool:
+        if not isinstance(message, str):
+            return False
+        normalized = message.lower()
+        return (
+            "tx already exists in cache" in normalized
+            or "tx already exists in mempool" in normalized
+        )
+
+    @staticmethod
+    def _local_tx_hash(tx: dict[str, Any]) -> str:
+        return hashlib.sha256(json.dumps(tx).encode("utf-8")).hexdigest().upper()
+
     async def _abci_query_value(self, path: str) -> Any:
         data = await self._retry_read(
             lambda: tr.abci_query_async(
@@ -910,6 +925,7 @@ class XianAsync:
         }
 
         tx = tr.create_tx(payload, self.wallet)
+        local_tx_hash = self._local_tx_hash(tx)
 
         try:
 
@@ -952,10 +968,34 @@ class XianAsync:
         }
 
         if "error" in data:
-            await self._invalidate_reserved_nonce(reserved_nonce)
+            duplicate_tx = self._is_duplicate_tx_log(
+                data["error"].get("data") or data["error"].get("message")
+            )
             result["message"] = data["error"].get("data") or data["error"].get(
                 "message"
             )
+            if duplicate_tx:
+                result["submitted"] = True
+                result["accepted"] = True
+                result["tx_hash"] = (
+                    data.get("result", {}).get("hash")
+                    if isinstance(data.get("result"), dict)
+                    else local_tx_hash
+                )
+                if wait_for_tx and result["tx_hash"] is not None:
+                    try:
+                        receipt = await self.wait_for_tx(
+                            result["tx_hash"],
+                            timeout_seconds=timeout_seconds,
+                            poll_interval_seconds=poll_interval_seconds,
+                        )
+                    except Exception:
+                        await self._invalidate_reserved_nonce(reserved_nonce)
+                        raise
+                    result["receipt"] = receipt
+                    result["finalized"] = True
+                return TransactionSubmission.from_dict(result)
+            await self._invalidate_reserved_nonce(reserved_nonce)
             return TransactionSubmission.from_dict(result)
 
         result["submitted"] = True
@@ -969,8 +1009,11 @@ class XianAsync:
                 or {}
             )
             commit_height = str(commit_result.get("height") or "0")
-            result["tx_hash"] = commit_result.get("hash")
+            result["tx_hash"] = commit_result.get("hash") or local_tx_hash
             result["accepted"] = check_tx.get("code", 1) == 0
+            duplicate_tx = self._is_duplicate_tx_log(check_tx.get("log"))
+            if duplicate_tx:
+                result["accepted"] = True
             result["finalized"] = (
                 result["accepted"]
                 and deliver_tx.get("code", 1) == 0
@@ -979,6 +1022,8 @@ class XianAsync:
             if not result["accepted"]:
                 await self._invalidate_reserved_nonce(reserved_nonce)
                 result["message"] = check_tx.get("log") or "CheckTx failed"
+            elif duplicate_tx:
+                result["message"] = check_tx.get("log")
             elif not result["finalized"]:
                 result["message"] = deliver_tx.get("log") or (
                     "Transaction was not finalized"
@@ -986,7 +1031,7 @@ class XianAsync:
             return TransactionSubmission.from_dict(result)
 
         checktx_result = data.get("result", {})
-        result["tx_hash"] = checktx_result.get("hash")
+        result["tx_hash"] = checktx_result.get("hash") or local_tx_hash
         if mode == "async":
             result["accepted"] = None
             if wait_for_tx and result["tx_hash"] is not None:
@@ -1004,10 +1049,15 @@ class XianAsync:
             return TransactionSubmission.from_dict(result)
 
         result["accepted"] = checktx_result.get("code", 1) == 0
+        duplicate_tx = self._is_duplicate_tx_log(checktx_result.get("log"))
+        if duplicate_tx:
+            result["accepted"] = True
         if not result["accepted"]:
             await self._invalidate_reserved_nonce(reserved_nonce)
             result["message"] = checktx_result.get("log") or "CheckTx failed"
             return TransactionSubmission.from_dict(result)
+        if duplicate_tx:
+            result["message"] = checktx_result.get("log")
 
         if wait_for_tx and result["tx_hash"] is not None:
             try:
@@ -1175,8 +1225,9 @@ class XianAsync:
     async def submit_contract(
         self,
         name: str,
-        code: str,
+        code: str | None = None,
         args: dict = None,
+        deployment_artifacts: dict | None = None,
         chi: int | None = None,
         mode: Literal["async", "checktx", "commit"] | None = None,
         wait_for_tx: bool | None = None,
@@ -1186,9 +1237,25 @@ class XianAsync:
         min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         """Submit a contract to the network."""
-        kwargs: dict[str, Any] = {"name": name, "code": code}
+        kwargs: dict[str, Any] = {"name": name}
+        artifact_source = None
+        compact_artifacts = deployment_artifacts
+        if isinstance(deployment_artifacts, dict):
+            artifact_source = deployment_artifacts.get("source")
+            compact_artifacts = dict(deployment_artifacts)
+            compact_artifacts.pop("runtime_code", None)
+            hashes = compact_artifacts.get("hashes")
+            if isinstance(hashes, dict):
+                compact_hashes = dict(hashes)
+                compact_hashes.pop("runtime_code_sha256", None)
+                compact_artifacts["hashes"] = compact_hashes
+        if code is not None:
+            if artifact_source is None:
+                kwargs["code"] = code
         if args:
             kwargs["constructor_args"] = args
+        if compact_artifacts is not None:
+            kwargs["deployment_artifacts"] = compact_artifacts
 
         return await self.send_tx(
             "submission",
