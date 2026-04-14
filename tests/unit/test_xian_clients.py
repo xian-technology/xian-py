@@ -604,6 +604,174 @@ def test_xian_async_send_tx_can_wait_for_finalized_receipt() -> None:
     assert result.receipt.success is True
 
 
+def test_xian_async_send_tx_treats_duplicate_cache_checktx_as_accepted() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+
+    async def run_send() -> TransactionSubmission:
+        try:
+            return await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+                chi=100,
+                wait_for_tx=True,
+                timeout_seconds=1.0,
+                poll_interval_seconds=0.0,
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr,
+        "get_nonce_async",
+        AsyncMock(return_value=11),
+    ):
+        with patch.object(
+            tr,
+            "broadcast_tx_wait_async",
+            AsyncMock(
+                return_value={
+                    "result": {
+                        "code": 32,
+                        "hash": "abc123",
+                        "log": "tx already exists in cache",
+                    }
+                }
+            ),
+        ):
+            with patch.object(
+                client,
+                "wait_for_tx",
+                AsyncMock(
+                    return_value=TransactionReceipt.from_lookup(
+                        {
+                            "success": True,
+                            "result": {
+                                "hash": "abc123",
+                                "height": "12",
+                                "index": 0,
+                                "tx_result": {"code": 0, "data": {"result": "ok"}},
+                            },
+                            "execution": {"result": "ok"},
+                        }
+                    )
+                ),
+            ) as wait_for_tx:
+                result = asyncio.run(run_send())
+
+    wait_for_tx.assert_awaited_once()
+    assert result.submitted is True
+    assert result.accepted is True
+    assert result.finalized is True
+    assert result.message == "tx already exists in cache"
+
+
+def test_xian_async_send_tx_treats_duplicate_cache_rpc_error_as_accepted() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+
+    async def run_send() -> TransactionSubmission:
+        try:
+            return await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+                chi=100,
+                wait_for_tx=False,
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr,
+        "get_nonce_async",
+        AsyncMock(return_value=11),
+    ):
+        with patch.object(
+            tr,
+            "broadcast_tx_wait_async",
+            AsyncMock(
+                return_value={
+                    "error": {
+                        "data": "tx already exists in cache",
+                        "message": "broadcast failed",
+                    }
+                }
+            ),
+        ):
+            result = asyncio.run(run_send())
+
+    assert result.submitted is True
+    assert result.accepted is True
+    assert result.finalized is False
+    assert result.message == "tx already exists in cache"
+    assert result.tx_hash is not None
+
+
+def test_xian_async_send_tx_waits_for_duplicate_cache_rpc_error_by_local_hash() -> (
+    None
+):
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+
+    async def run_send() -> TransactionSubmission:
+        try:
+            return await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+                chi=100,
+                wait_for_tx=True,
+                timeout_seconds=1.0,
+                poll_interval_seconds=0.0,
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr,
+        "get_nonce_async",
+        AsyncMock(return_value=11),
+    ):
+        with patch.object(
+            tr,
+            "broadcast_tx_wait_async",
+            AsyncMock(
+                return_value={
+                    "error": {
+                        "data": "tx already exists in cache",
+                        "message": "broadcast failed",
+                    }
+                }
+            ),
+        ):
+            with patch.object(
+                client,
+                "wait_for_tx",
+                AsyncMock(
+                    return_value=TransactionReceipt.from_lookup(
+                        {
+                            "result": {
+                                "hash": "abc123",
+                                "height": "12",
+                                "index": 0,
+                                "tx_result": {"code": 0, "data": {"result": "ok"}},
+                            },
+                            "execution": {"result": "ok"},
+                        }
+                    )
+                ),
+            ) as wait_for_tx:
+                result = asyncio.run(run_send())
+
+    wait_for_tx.assert_awaited_once()
+    assert result.submitted is True
+    assert result.accepted is True
+    assert result.finalized is True
+    assert result.tx_hash is not None
+
+
 def test_xian_async_send_tx_invalidates_reserved_nonce_after_wait_timeout() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
