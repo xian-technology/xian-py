@@ -603,7 +603,6 @@ def test_xian_async_send_tx_can_wait_for_finalized_receipt() -> None:
     assert result.receipt is not None
     assert result.receipt.success is True
 
-
 def test_xian_async_send_tx_treats_duplicate_cache_checktx_as_accepted() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
