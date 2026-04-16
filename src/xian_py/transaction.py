@@ -64,7 +64,9 @@ async def request_json_async(
     if requester is not None:
         request_context = requester(method, url, **request_kwargs)
     else:
-        request_context = getattr(session, method.lower())(url, **request_kwargs)
+        request_context = getattr(session, method.lower())(
+            url, **request_kwargs
+        )
 
     try:
         async with request_context as response:

@@ -597,7 +597,9 @@ class XianAsync:
 
     @staticmethod
     def _local_tx_hash(tx: dict[str, Any]) -> str:
-        return hashlib.sha256(json.dumps(tx).encode("utf-8")).hexdigest().upper()
+        return (
+            hashlib.sha256(json.dumps(tx).encode("utf-8")).hexdigest().upper()
+        )
 
     async def _abci_query_value(self, path: str) -> Any:
         data = await self._retry_read(
