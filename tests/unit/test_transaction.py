@@ -243,6 +243,11 @@ def test_create_tx_rejects_invalid_payload() -> None:
         create_tx({"contract": "currency"}, wallet)
 
 
+def test_format_dictionary_rejects_non_string_keys() -> None:
+    with pytest.raises(TypeError, match="Non-string key types not allowed"):
+        format_dictionary({1: "invalid"})
+
+
 @pytest.mark.parametrize(
     ("broadcast_fn", "path"),
     [

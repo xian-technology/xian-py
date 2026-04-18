@@ -65,6 +65,11 @@ By default the SDK derives the websocket endpoint from the RPC URL, for example
 `http://127.0.0.1:26657` -> `ws://127.0.0.1:26657/websocket`. If you need an
 override, set `WatcherConfig(websocket_url="ws://rpc-host:26657/websocket")`.
 
+If you want visibility into transport retries, attach a callback to
+`RetryPolicy(on_retry=...)`. The callback receives a typed `RetryEvent`
+containing the operation kind, failed attempt number, next backoff delay, and
+the triggering exception.
+
 ## Principles
 
 - The SDK keeps sync and async clients aligned so the same concepts work in

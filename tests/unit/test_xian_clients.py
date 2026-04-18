@@ -10,6 +10,7 @@ from xian_runtime_types.decimal import ContractingDecimal
 
 import xian_py.transaction as tr
 from xian_py.config import (
+    RetryEvent,
     RetryPolicy,
     SubmissionConfig,
     WatcherConfig,
@@ -2754,6 +2755,107 @@ def test_xian_async_wait_for_tx_retries_transport_errors() -> None:
     assert receipt.success is True
     assert receipt.transaction["payload"]["function"] == "transfer"
     assert wait_for_tx_async.await_count == 2
+
+
+def test_xian_async_retry_callback_reports_read_retries() -> None:
+    wallet = Wallet()
+    events: list[RetryEvent] = []
+    config = XianClientConfig(
+        retry=RetryPolicy(
+            max_attempts=2,
+            initial_delay_seconds=0.125,
+            max_delay_seconds=1.0,
+            on_retry=events.append,
+        )
+    )
+    client = XianAsync("http://node", wallet=wallet, config=config)
+
+    async def run_status() -> NodeStatus:
+        try:
+            return await client.get_node_status()
+        finally:
+            await client.close()
+
+    payload = {
+        "result": {
+            "node_info": {
+                "id": "NODE-1",
+                "moniker": "validator-1",
+                "network": "xian-testnet",
+            },
+            "sync_info": {
+                "latest_block_height": "12",
+                "latest_block_hash": "BLOCK-12",
+                "latest_app_hash": "APP-12",
+                "latest_block_time": "2026-03-23T12:00:00Z",
+                "catching_up": False,
+            },
+        }
+    }
+
+    with patch.object(
+        tr,
+        "request_json_async",
+        AsyncMock(side_effect=[TransportError("offline"), payload]),
+    ):
+        asyncio.run(run_status())
+
+    assert len(events) == 1
+    assert events[0].operation == "read"
+    assert events[0].attempt == 1
+    assert events[0].max_attempts == 2
+    assert events[0].next_delay_seconds == pytest.approx(0.125)
+    assert isinstance(events[0].error, TransportError)
+
+
+def test_xian_async_retry_callback_reports_broadcast_retries() -> None:
+    wallet = Wallet()
+    events: list[RetryEvent] = []
+    config = XianClientConfig(
+        retry=RetryPolicy(
+            max_attempts=2,
+            initial_delay_seconds=0.25,
+            max_delay_seconds=1.0,
+            on_retry=events.append,
+        ),
+        submission=SubmissionConfig(mode="async"),
+    )
+    client = XianAsync(
+        "http://node",
+        chain_id="xian-1",
+        wallet=wallet,
+        config=config,
+    )
+
+    async def run_send() -> TransactionSubmission:
+        try:
+            return await client.send_tx(
+                contract="currency",
+                function="transfer",
+                kwargs={"to": "bob", "amount": 1},
+                nonce=7,
+                chi=25,
+                mode="async",
+                wait_for_tx=False,
+            )
+        finally:
+            await client.close()
+
+    payload = {"result": {"hash": "ABC123", "code": 0}}
+    with patch.object(
+        tr,
+        "broadcast_tx_nowait_async",
+        AsyncMock(side_effect=[TransportError("offline"), payload]),
+    ):
+        receipt = asyncio.run(run_send())
+
+    assert receipt.submitted is True
+    assert len(events) == 1
+    assert events[0].operation == "broadcast"
+    assert events[0].attempt == 1
+    assert events[0].max_attempts == 2
+    assert events[0].next_delay_seconds == pytest.approx(0.25)
+    assert isinstance(events[0].error, TransportError)
 
 
 def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:

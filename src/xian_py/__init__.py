@@ -11,6 +11,7 @@ from xian_py.application_clients import (
     TokenClient,
 )
 from xian_py.config import (
+    RetryEvent,
     RetryPolicy,
     SubmissionConfig,
     TransportConfig,
@@ -90,6 +91,7 @@ __all__ = [
     "PerformanceStatus",
     "RpcError",
     "RetryPolicy",
+    "RetryEvent",
     "ShieldedRelayerAsyncClient",
     "ShieldedRelayerAsyncPoolClient",
     "ShieldedRelayerCatalogEntry",

@@ -1,6 +1,7 @@
 import ast
 import asyncio
 import hashlib
+import inspect
 import json
 import math
 import re
@@ -31,6 +32,7 @@ from xian_py.application_clients import (
     AsyncTokenClient,
 )
 from xian_py.config import (
+    RetryEvent,
     SubmissionConfig,
     XianClientConfig,
 )
@@ -341,6 +343,35 @@ class XianAsync:
             self.chain_id = await self.get_chain_id()
             self._chain_id_set = True
 
+    async def _emit_retry_event(
+        self,
+        *,
+        operation: Literal["read", "broadcast"],
+        attempt: int,
+        max_attempts: int,
+        next_delay_seconds: float,
+        error: Exception,
+    ) -> None:
+        callback = self.config.retry.on_retry
+        if callback is None:
+            return
+
+        event = RetryEvent(
+            operation=operation,
+            attempt=attempt,
+            max_attempts=max_attempts,
+            next_delay_seconds=max(next_delay_seconds, 0.0),
+            error=error,
+        )
+        try:
+            result = callback(event)
+            if inspect.isawaitable(result):
+                await result
+        except Exception:
+            # Retry callbacks are observability hooks and should not change the
+            # retry outcome if the handler itself fails.
+            return
+
     async def _retry_read(self, operation):
         retry = self.config.retry
         attempts = max(retry.max_attempts, 1)
@@ -355,6 +386,13 @@ class XianAsync:
                     or attempt >= attempts
                 ):
                     raise
+                await self._emit_retry_event(
+                    operation="read",
+                    attempt=attempt,
+                    max_attempts=attempts,
+                    next_delay_seconds=delay,
+                    error=exc,
+                )
                 if delay > 0:
                     await asyncio.sleep(delay)
                 delay = min(
@@ -377,6 +415,13 @@ class XianAsync:
                     or attempt >= attempts
                 ):
                     raise
+                await self._emit_retry_event(
+                    operation="broadcast",
+                    attempt=attempt,
+                    max_attempts=attempts,
+                    next_delay_seconds=delay,
+                    error=exc,
+                )
                 if delay > 0:
                     await asyncio.sleep(delay)
                 delay = min(

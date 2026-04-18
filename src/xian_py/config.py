@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Awaitable, Callable, Literal
 
 
 @dataclass(frozen=True)
@@ -14,6 +14,18 @@ class TransportConfig:
 
 
 @dataclass(frozen=True)
+class RetryEvent:
+    operation: Literal["read", "broadcast"]
+    attempt: int
+    max_attempts: int
+    next_delay_seconds: float
+    error: Exception
+
+
+RetryCallback = Callable[[RetryEvent], object | Awaitable[object]]
+
+
+@dataclass(frozen=True)
 class RetryPolicy:
     max_attempts: int = 3
     initial_delay_seconds: float = 0.25
@@ -21,6 +33,7 @@ class RetryPolicy:
     backoff_multiplier: float = 2.0
     retry_transport_errors: bool = True
     retry_rpc_errors: bool = False
+    on_retry: RetryCallback | None = None
 
 
 @dataclass(frozen=True)
