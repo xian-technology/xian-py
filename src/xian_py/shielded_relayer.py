@@ -68,6 +68,7 @@ class ShieldedRelayerAsyncClient:
         self.relayer_url = _strip_trailing_slash(relayer_url)
         self.auth_token = auth_token.strip() if auth_token else None
         self._session = session
+        self._owns_session = session is None
 
     async def __aenter__(self) -> "ShieldedRelayerAsyncClient":
         return self
@@ -79,10 +80,15 @@ class ShieldedRelayerAsyncClient:
     def session(self) -> aiohttp.ClientSession:
         if self._session is None:
             self._session = aiohttp.ClientSession()
+            self._owns_session = True
         return self._session
 
     async def close(self) -> None:
-        if self._session is not None and not self._session.closed:
+        if (
+            self._owns_session
+            and self._session is not None
+            and not self._session.closed
+        ):
             await self._session.close()
 
     async def _request_json(

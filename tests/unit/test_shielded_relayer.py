@@ -218,6 +218,85 @@ def test_async_relayer_client_submits_and_reads_job() -> None:
     asyncio.run(run())
 
 
+def test_async_relayer_client_does_not_close_caller_owned_session() -> None:
+    async def run() -> None:
+        session = _FakeSession(
+            [
+                _FakeResponse(
+                    {
+                        "service": "xian-shielded-relayer",
+                        "protocol_version": "v1",
+                        "available": True,
+                        "chain_id": "xian-testnet-1",
+                        "relayer_account": "abcd",
+                        "submission_mode": "checktx",
+                        "wait_for_tx": True,
+                        "capabilities": {
+                            "shielded_note_relay_transfer": True,
+                            "shielded_command": True,
+                        },
+                        "policy": {
+                            "quote_ttl_seconds": 30,
+                            "default_expiry_seconds": 120,
+                            "max_expiry_seconds": 600,
+                            "min_note_relayer_fee": 1,
+                            "min_command_relayer_fee": 2,
+                            "allowed_note_contracts": ["con_private_usd"],
+                            "allowed_command_contracts": [
+                                "con_shielded_commands"
+                            ],
+                            "allowed_command_targets": ["con_dex"],
+                        },
+                    }
+                ),
+                _FakeResponse(
+                    {
+                        "service": "xian-shielded-relayer",
+                        "protocol_version": "v1",
+                        "available": True,
+                        "chain_id": "xian-testnet-1",
+                        "relayer_account": "abcd",
+                        "submission_mode": "checktx",
+                        "wait_for_tx": True,
+                        "capabilities": {
+                            "shielded_note_relay_transfer": True,
+                            "shielded_command": True,
+                        },
+                        "policy": {
+                            "quote_ttl_seconds": 30,
+                            "default_expiry_seconds": 120,
+                            "max_expiry_seconds": 600,
+                            "min_note_relayer_fee": 1,
+                            "min_command_relayer_fee": 2,
+                            "allowed_note_contracts": ["con_private_usd"],
+                            "allowed_command_contracts": [
+                                "con_shielded_commands"
+                            ],
+                            "allowed_command_targets": ["con_dex"],
+                        },
+                    }
+                ),
+            ]
+        )
+
+        async with ShieldedRelayerAsyncClient(
+            "http://127.0.0.1:38888",
+            session=session,
+        ) as client:
+            await client.get_info()
+
+        assert session.closed is False
+
+        follow_up = ShieldedRelayerAsyncClient(
+            "http://127.0.0.1:38888",
+            session=session,
+        )
+        await follow_up.get_info()
+        assert session.closed is False
+
+    asyncio.run(run())
+
+
 def test_async_relayer_pool_client_fails_over_quote_requests() -> None:
     async def run() -> None:
         def handler(method: str, url: str, kwargs: dict) -> _FakeResponse:
@@ -266,6 +345,88 @@ def test_async_relayer_pool_client_fails_over_quote_requests() -> None:
         assert isinstance(result, ShieldedRelayerQuoteResult)
         assert result.relayer.id == "relayer-b"
         assert result.quote.relayer_fee == 4
+
+    asyncio.run(run())
+
+
+def test_async_relayer_pool_client_does_not_close_caller_owned_session() -> None:
+    async def run() -> None:
+        session = _FakeSession(
+            [
+                _FakeResponse(
+                    {
+                        "service": "xian-shielded-relayer",
+                        "protocol_version": "v1",
+                        "available": True,
+                        "chain_id": "xian-testnet-1",
+                        "relayer_account": "abcd",
+                        "submission_mode": "checktx",
+                        "wait_for_tx": True,
+                        "capabilities": {
+                            "shielded_note_relay_transfer": True,
+                            "shielded_command": True,
+                        },
+                        "policy": {
+                            "quote_ttl_seconds": 30,
+                            "default_expiry_seconds": 120,
+                            "max_expiry_seconds": 600,
+                            "min_note_relayer_fee": 1,
+                            "min_command_relayer_fee": 2,
+                            "allowed_note_contracts": ["con_private_usd"],
+                            "allowed_command_contracts": [
+                                "con_shielded_commands"
+                            ],
+                            "allowed_command_targets": ["con_dex"],
+                        },
+                    }
+                ),
+                _FakeResponse(
+                    {
+                        "service": "xian-shielded-relayer",
+                        "protocol_version": "v1",
+                        "available": True,
+                        "chain_id": "xian-testnet-1",
+                        "relayer_account": "abcd",
+                        "submission_mode": "checktx",
+                        "wait_for_tx": True,
+                        "capabilities": {
+                            "shielded_note_relay_transfer": True,
+                            "shielded_command": True,
+                        },
+                        "policy": {
+                            "quote_ttl_seconds": 30,
+                            "default_expiry_seconds": 120,
+                            "max_expiry_seconds": 600,
+                            "min_note_relayer_fee": 1,
+                            "min_command_relayer_fee": 2,
+                            "allowed_note_contracts": ["con_private_usd"],
+                            "allowed_command_contracts": [
+                                "con_shielded_commands"
+                            ],
+                            "allowed_command_targets": ["con_dex"],
+                        },
+                    }
+                ),
+            ]
+        )
+        pool = ShieldedRelayerAsyncPoolClient(
+            [
+                {
+                    "id": "relayer-a",
+                    "relayer_url": "http://127.0.0.1:38888",
+                    "submission_kinds": ["shielded_note_relay_transfer"],
+                }
+            ],
+            session=session,
+        )
+
+        async with pool:
+            await pool.get_info(relayer_id="relayer-a")
+
+        assert session.closed is False
+
+        await pool.get_info(relayer_id="relayer-a")
+        assert session.closed is False
 
     asyncio.run(run())
 
