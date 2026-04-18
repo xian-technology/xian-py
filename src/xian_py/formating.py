@@ -60,7 +60,8 @@ def dict_has_keys(d: dict, keys: set):
 
 def format_dictionary(d: dict) -> dict:
     for k, v in d.items():
-        assert type(k) is str, "Non-string key types not allowed."
+        if type(k) is not str:
+            raise TypeError("Non-string key types not allowed.")
         if type(v) is list:
             for i in range(len(v)):
                 if isinstance(v[i], dict):
