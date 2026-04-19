@@ -39,7 +39,7 @@ def key_is_formatted(s: str):
 
 
 def cid_id_formatted(s: str):
-    return type(s) is str
+    return type(s) is str and s != ""
 
 
 TRANSACTION_PAYLOAD_RULES = {

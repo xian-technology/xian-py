@@ -243,6 +243,24 @@ def test_create_tx_rejects_invalid_payload() -> None:
         create_tx({"contract": "currency"}, wallet)
 
 
+def test_create_tx_rejects_empty_chain_id() -> None:
+    wallet = Wallet()
+
+    with pytest.raises(XianException, match="Invalid payload provided"):
+        create_tx(
+            {
+                "sender": wallet.public_key,
+                "nonce": 1,
+                "chi_supplied": 25,
+                "contract": "currency",
+                "function": "transfer",
+                "kwargs": {"to": wallet.public_key, "amount": 5},
+                "chain_id": "",
+            },
+            wallet,
+        )
+
+
 def test_format_dictionary_rejects_non_string_keys() -> None:
     with pytest.raises(TypeError, match="Non-string key types not allowed"):
         format_dictionary({1: "invalid"})
