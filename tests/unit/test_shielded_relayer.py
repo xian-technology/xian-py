@@ -349,7 +349,9 @@ def test_async_relayer_pool_client_fails_over_quote_requests() -> None:
     asyncio.run(run())
 
 
-def test_async_relayer_pool_client_does_not_close_caller_owned_session() -> None:
+def test_async_relayer_pool_client_does_not_close_caller_owned_session() -> (
+    None
+):
     async def run() -> None:
         session = _FakeSession(
             [
