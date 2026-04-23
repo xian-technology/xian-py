@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from xian_py.exception import XianException
+from xian_py.exception import TransportError, XianException
 from xian_py.models import (
     ShieldedRelayerInfo,
     ShieldedRelayerJob,
@@ -537,3 +537,104 @@ def test_async_relayer_pool_client_routes_single_submit_without_relayer_id() -> 
         assert result.job.job_id == "job-2"
 
     asyncio.run(run())
+
+
+def test_async_relayer_client_raises_transport_error_for_http_error() -> None:
+    async def run() -> None:
+        client = ShieldedRelayerAsyncClient(
+            "http://relayer",
+            session=_FakeSession(
+                [_FakeResponse({"error": "unauthorized"}, status=401)]
+            ),
+        )
+
+        try:
+            await client.get_info()
+        except TransportError as exc:
+            assert str(exc) == "unauthorized"
+        else:
+            raise AssertionError("expected relayer HTTP error")
+
+    asyncio.run(run())
+
+
+def test_async_relayer_client_rejects_non_object_response() -> None:
+    class _ListResponse(_FakeResponse):
+        async def json(self):
+            return []
+
+    async def run() -> None:
+        client = ShieldedRelayerAsyncClient(
+            "http://relayer",
+            session=_FakeSession([_ListResponse({})]),
+        )
+
+        try:
+            await client.get_info()
+        except TransportError as exc:
+            assert str(exc) == "expected object response"
+        else:
+            raise AssertionError("expected non-object response failure")
+
+    asyncio.run(run())
+
+
+def test_async_relayer_pool_client_reports_all_failures() -> None:
+    async def run() -> None:
+        def handler(method: str, url: str, kwargs: dict) -> _FakeResponse:
+            raise RuntimeError(f"down: {url}")
+
+        pool = ShieldedRelayerAsyncPoolClient(
+            [
+                {
+                    "id": "relayer-a",
+                    "relayer_url": "http://relayer-a",
+                    "priority": 10,
+                    "submission_kinds": ["shielded_note_relay_transfer"],
+                },
+                {
+                    "id": "relayer-b",
+                    "relayer_url": "http://relayer-b",
+                    "priority": 20,
+                    "submission_kinds": ["shielded_note_relay_transfer"],
+                },
+            ],
+            session=_FakeSession(handler=handler),
+        )
+
+        try:
+            await pool.get_quote(
+                kind="shielded_note_relay_transfer",
+                contract="con_private_usd",
+            )
+        except TransportError as exc:
+            message = str(exc)
+            assert "get_quote failed for all candidate relayers" in message
+            assert "relayer-a:" in message
+            assert "relayer-b:" in message
+        else:
+            raise AssertionError("expected aggregate relayer failure")
+
+    asyncio.run(run())
+
+
+def test_async_relayer_pool_client_rejects_duplicate_relayer_ids() -> None:
+    try:
+        ShieldedRelayerAsyncPoolClient(
+            [
+                {
+                    "id": "relayer-a",
+                    "relayer_url": "http://relayer-a",
+                    "submission_kinds": ["shielded_command"],
+                },
+                {
+                    "id": "relayer-a",
+                    "relayer_url": "http://relayer-b",
+                    "submission_kinds": ["shielded_command"],
+                },
+            ]
+        )
+    except XianException as exc:
+        assert str(exc) == "duplicate shielded relayer id: relayer-a"
+    else:
+        raise AssertionError("expected duplicate relayer id rejection")

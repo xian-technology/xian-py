@@ -166,20 +166,23 @@ class TestProjectorHelpers(unittest.TestCase):
 
     def test_sqlite_projection_state_round_trips_cursors(self) -> None:
         connection = sqlite3.connect(":memory:")
-        connection.row_factory = sqlite3.Row
-        state = SQLiteProjectionState(connection)
+        try:
+            connection.row_factory = sqlite3.Row
+            state = SQLiteProjectionState(connection)
 
-        with connection:
-            state.init_schema()
-            state.set_int("cursor:Issue", 10)
-            state.set_int("cursor:Transfer", 12)
+            with connection:
+                state.init_schema()
+                state.set_int("cursor:Issue", 10)
+                state.set_int("cursor:Transfer", 12)
 
-        assert state.get_int("cursor:Issue") == 10
-        assert state.get_int("cursor:Missing") == 0
-        assert state.list_ints(
-            prefix="cursor:",
-            strip_prefix="cursor:",
-        ) == {"Issue": 10, "Transfer": 12}
+            assert state.get_int("cursor:Issue") == 10
+            assert state.get_int("cursor:Missing") == 0
+            assert state.list_ints(
+                prefix="cursor:",
+                strip_prefix="cursor:",
+            ) == {"Issue": 10, "Transfer": 12}
+        finally:
+            connection.close()
 
 
 class TestEventProjector(unittest.IsolatedAsyncioTestCase):

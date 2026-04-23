@@ -23,6 +23,23 @@ def test_wallet_keys_are_valid_hex_strings() -> None:
     assert Wallet.is_valid_key("not-a-key") is False
 
 
+def test_wallet_reconstructs_from_private_key() -> None:
+    wallet = Wallet()
+    restored = Wallet(wallet.private_key)
+    message = "restore-check"
+
+    assert restored.private_key == wallet.private_key
+    assert restored.public_key == wallet.public_key
+    assert wallet.verify_msg(message, restored.sign_msg(message)) is True
+
+
+def test_ethereum_address_validation_accepts_prefixed_and_plain_hex() -> None:
+    assert wallet_module.EthereumWallet.is_valid_key("0x" + "a" * 40) is True
+    assert wallet_module.EthereumWallet.is_valid_key("b" * 40) is True
+    assert wallet_module.EthereumWallet.is_valid_key("0x" + "g" * 40) is False
+    assert wallet_module.EthereumWallet.is_valid_key("0x" + "a" * 39) is False
+
+
 def test_hd_wallet_requires_optional_dependency(monkeypatch) -> None:
     monkeypatch.setattr(
         wallet_module,

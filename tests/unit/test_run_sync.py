@@ -24,3 +24,22 @@ def test_run_sync_raises_when_called_inside_running_loop() -> None:
             awaitable.close()
 
     asyncio.run(invoke())
+
+
+def test_run_sync_can_use_background_thread_inside_running_loop() -> None:
+    async def invoke() -> int:
+        return run_sync(_add(4, 6), allow_thread=True)
+
+    assert asyncio.run(invoke()) == 10
+
+
+def test_run_sync_reraises_background_thread_exception() -> None:
+    async def fail() -> None:
+        await asyncio.sleep(0)
+        raise ValueError("boom")
+
+    async def invoke() -> None:
+        with pytest.raises(ValueError, match="boom"):
+            run_sync(fail(), allow_thread=True)
+
+    asyncio.run(invoke())
