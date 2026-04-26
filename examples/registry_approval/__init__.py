@@ -1,1 +1,1 @@
-"""Registry / Approval solution-pack examples."""
+"""Registry / Approval solution examples."""

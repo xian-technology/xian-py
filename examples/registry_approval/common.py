@@ -57,7 +57,7 @@ def records_source_path() -> Path:
     return (
         workspace_root
         / "xian-configs"
-        / "solution-packs"
+        / "solutions"
         / "registry-approval"
         / "contracts"
         / "registry_records.s.py"
@@ -73,7 +73,7 @@ def approval_source_path() -> Path:
     return (
         workspace_root
         / "xian-configs"
-        / "solution-packs"
+        / "solutions"
         / "registry-approval"
         / "contracts"
         / "registry_approval.s.py"

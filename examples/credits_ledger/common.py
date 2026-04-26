@@ -47,7 +47,7 @@ def contract_source_path() -> Path:
     return (
         workspace_root
         / "xian-configs"
-        / "solution-packs"
+        / "solutions"
         / "credits-ledger"
         / "contracts"
         / "credits_ledger.s.py"

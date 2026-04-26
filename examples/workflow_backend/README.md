@@ -3,7 +3,7 @@
 ## Purpose
 
 This folder contains the SDK-side integration examples for the Workflow
-Backend solution pack and the deeper reference-app slice built on top of it.
+Backend solution and the deeper reference-app slice built on top of it.
 
 ## Files
 

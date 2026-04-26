@@ -3,8 +3,7 @@
 ## Purpose
 
 This folder contains the SDK-side integration examples for the Credits Ledger
-solution pack and the first deeper reference-application slice built on top of
-it.
+solution and the first deeper reference-application slice built on top of it.
 
 ## Files
 

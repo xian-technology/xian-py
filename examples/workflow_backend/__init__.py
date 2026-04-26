@@ -1,1 +1,1 @@
-"""Workflow Backend solution-pack examples."""
+"""Workflow Backend solution examples."""

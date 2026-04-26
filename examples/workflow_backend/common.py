@@ -49,7 +49,7 @@ def workflow_source_path() -> Path:
     return (
         workspace_root
         / "xian-configs"
-        / "solution-packs"
+        / "solutions"
         / "workflow-backend"
         / "contracts"
         / "job_workflow.s.py"

@@ -1,1 +1,1 @@
-"""Credits Ledger solution-pack examples."""
+"""Credits Ledger solution examples."""
