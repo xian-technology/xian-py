@@ -20,14 +20,16 @@ pip install xian-tech-py
 Read state and submit a transaction with the synchronous client:
 
 ```python
+import os
+
 from xian_py import Wallet, Xian
 
-wallet = Wallet()
+wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
 
-with Xian("http://127.0.0.1:26657") as client:
+with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
     balance = client.token().balance_of(wallet.public_key)
-    receipt = client.token().transfer("bob", 5, wallet=wallet, mode="checktx")
-    print(balance, receipt.code)
+    submission = client.token().transfer("bob", 5, mode="checktx")
+    print(balance, submission.accepted)
 ```
 
 Watch indexed events with the async client:
@@ -79,6 +81,272 @@ Optional extras:
 pip install "xian-tech-py[app]"   # FastAPI examples
 pip install "xian-tech-py[eth]"   # Ethereum-style key helpers
 pip install "xian-tech-py[hd]"    # HD-wallet derivation
+```
+
+## SDK Cookbook
+
+The examples below assume a running node at `http://127.0.0.1:26657`.
+Use `xian-stack` or `xian-cli` to start a local node, then pass the same RPC
+URL into the SDK.
+
+Create or import a wallet:
+
+```python
+import os
+
+from xian_py import Wallet
+from xian_py.wallet import HDWallet
+
+# Generate a fresh Ed25519 account.
+wallet = Wallet()
+print(wallet.public_key)
+
+# Restore an existing account from a hex private key.
+wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
+
+# Optional HD-wallet derivation. Requires: pip install "xian-tech-py[hd]".
+hd = HDWallet()
+derived_wallet = hd.get_wallet([44, 734, 0, 0, 0])
+```
+
+Inspect node and indexer health:
+
+```python
+from xian_py import Xian
+
+with Xian("http://127.0.0.1:26657") as client:
+    status = client.get_node_status()
+    bds = client.get_bds_status()
+    print(status.network, status.latest_block_height, status.catching_up)
+    print(bds.indexed_height, bds.height_lag, bds.alerts)
+```
+
+Read state, simulate a call, and retrieve contract source:
+
+```python
+from xian_py import Xian
+
+address = "bob"
+
+with Xian("http://127.0.0.1:26657") as client:
+    balance = client.token().balance_of(address)
+    raw_balance = client.state_key("currency", "balances", address).get()
+    simulated = client.contract("currency").simulate(
+        "balance_of",
+        address=address,
+    )
+    source = client.contract("currency").get_source()
+    runtime_code = client.contract("currency").get_code()
+    print(balance, raw_balance, simulated["result"])
+```
+
+Estimate chi, submit a transaction, and wait for finality:
+
+```python
+import os
+
+from xian_py import Wallet, Xian
+
+wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
+
+with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
+    estimate = client.estimate_chi(
+        "currency",
+        "transfer",
+        {"to": "bob", "amount": 5},
+    )
+    submission = client.token().transfer(
+        "bob",
+        5,
+        chi=estimate["suggested"],
+        mode="checktx",
+        wait_for_tx=True,
+    )
+    print(submission.tx_hash, submission.accepted, submission.finalized)
+    if submission.receipt:
+        print(submission.receipt.success)
+```
+
+Submit a contract from source:
+
+```python
+import os
+
+from xian_py import Wallet, Xian
+
+wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
+source = """
+counter = Variable()
+
+@construct
+def seed():
+    counter.set(0)
+
+@export
+def increment():
+    counter.set(counter.get() + 1)
+    return counter.get()
+"""
+
+with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
+    deployed = client.submit_contract(
+        "con_counter",
+        source,
+        mode="checktx",
+        wait_for_tx=True,
+    )
+    result = client.contract("con_counter").send(
+        "increment",
+        mode="checktx",
+        wait_for_tx=True,
+    )
+    print(deployed.tx_hash, result.tx_hash)
+```
+
+Query BDS-backed history:
+
+```python
+from xian_py import Xian
+
+address = "bob"
+
+with Xian("http://127.0.0.1:26657") as client:
+    recent_blocks = client.list_blocks(limit=5)
+    token_balances = client.get_token_balances(address, include_zero=False)
+    currency_txs = client.list_txs_by_contract("currency", limit=20)
+    transfer_events = client.list_events("currency", "Transfer", after_id=0)
+    balance_history = client.get_state_history(f"currency.balances:{address}")
+    print(
+        len(recent_blocks),
+        token_balances.total,
+        len(currency_txs),
+        len(transfer_events),
+        len(balance_history),
+    )
+```
+
+Use the async client in a service or worker:
+
+```python
+import asyncio
+import os
+
+from xian_py import Wallet, XianAsync
+
+
+async def main() -> None:
+    wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
+    async with XianAsync("http://127.0.0.1:26657", wallet=wallet) as client:
+        chain_id = await client.get_chain_id()
+        balance = await client.token().balance_of(wallet.public_key)
+        submission = await client.token().transfer(
+            "bob",
+            5,
+            mode="checktx",
+            wait_for_tx=True,
+        )
+        print(chain_id, balance, submission.tx_hash)
+
+
+asyncio.run(main())
+```
+
+Build a resumable SQLite projection:
+
+```python
+import asyncio
+import sqlite3
+
+from xian_py import (
+    EventProjector,
+    EventSource,
+    SQLiteProjectionState,
+    XianAsync,
+    merged_event_payload,
+)
+
+
+async def main() -> None:
+    connection = sqlite3.connect("projection.db")
+    connection.row_factory = sqlite3.Row
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS transfers "
+        "(event_id INTEGER PRIMARY KEY, tx_hash TEXT, amount TEXT)"
+    )
+    state = SQLiteProjectionState(connection)
+    state.init_schema()
+
+    source = EventSource("currency", "Transfer")
+
+    async def apply_transfer(event, _hydrated):
+        payload = merged_event_payload(event)
+        connection.execute(
+            "INSERT OR IGNORE INTO transfers VALUES (?, ?, ?)",
+            (event.id, event.tx_hash, str(payload.get("amount"))),
+        )
+        state.set_int(source.key, event.id or 0)
+        connection.commit()
+        return True
+
+    async with XianAsync("http://127.0.0.1:26657") as client:
+        projector = EventProjector(
+            client=client,
+            event_sources=[source],
+            get_cursor=lambda event_source: state.get_int(event_source.key),
+            apply_event=apply_transfer,
+        )
+        await projector.sync_once()
+
+
+asyncio.run(main())
+```
+
+Tune retries, transaction defaults, and watcher behavior:
+
+```python
+from xian_py import (
+    RetryEvent,
+    RetryPolicy,
+    SubmissionConfig,
+    WatcherConfig,
+    Xian,
+    XianClientConfig,
+)
+
+
+def log_retry(event: RetryEvent) -> None:
+    print(
+        event.operation,
+        event.attempt,
+        event.max_attempts,
+        event.next_delay_seconds,
+        event.error,
+    )
+
+
+config = XianClientConfig(
+    retry=RetryPolicy(max_attempts=5, on_retry=log_retry),
+    submission=SubmissionConfig(mode="checktx", wait_for_tx=True),
+    watcher=WatcherConfig(mode="auto", batch_limit=250),
+)
+
+with Xian("http://127.0.0.1:26657", config=config) as client:
+    print(client.get_chain_id())
+```
+
+Talk to a shielded relayer:
+
+```python
+from xian_py import ShieldedRelayerClient
+
+with ShieldedRelayerClient("http://127.0.0.1:38480") as relayer:
+    info = relayer.get_info()
+    quote = relayer.get_quote(
+        kind="shielded_command",
+        contract="shielded_note_token",
+        target_contract="currency",
+    )
+    print(info.available, quote.relayer_fee, quote.expires_at)
 ```
 
 ## Principles
