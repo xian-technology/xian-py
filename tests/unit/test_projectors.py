@@ -414,6 +414,7 @@ class TestEventProjector(unittest.IsolatedAsyncioTestCase):
             event_sources=event_sources,
             get_cursor=lambda _source: 0,
             apply_event=lambda _event, _hydrated: True,
+            poll_interval_seconds=30.0,
         )
 
         task = asyncio.create_task(projector.run_forever())
