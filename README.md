@@ -9,6 +9,22 @@ read models.
 The published PyPI package is `xian-tech-py`. The import package remains
 `xian_py`.
 
+## SDK Shape
+
+```mermaid
+flowchart LR
+  App["Application or worker"] --> Sync["Xian sync client"]
+  App --> Async["XianAsync client"]
+  Sync --> RPC["Node RPC"]
+  Async --> RPC
+  Async --> WS["CometBFT websocket"]
+  Sync --> BDS["Indexed BDS APIs"]
+  Async --> BDS
+  BDS --> Projector["EventProjector and cursors"]
+  Wallet["Wallet"] --> Sync
+  Wallet --> Async
+```
+
 ## Quick Start
 
 Install the SDK:

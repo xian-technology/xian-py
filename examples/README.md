@@ -26,6 +26,18 @@ into ordinary software workflows.
 - how to build a local SQLite projection from BDS-backed events
 - how to combine authoritative on-chain reads with projected application views
 
+```mermaid
+flowchart LR
+  Node["Xian node"] --> SDK["xian-py"]
+  SDK --> API["FastAPI service"]
+  SDK --> Worker["Event worker"]
+  SDK --> Admin["Admin job"]
+  Worker --> Projection["SQLite projection"]
+  API --> Projection
+  API --> Reads["Authoritative contract reads"]
+  Admin --> Writes["Contract setup and admin writes"]
+```
+
 ## Notes
 
 - These examples are intentionally thin and build on the public SDK surface.

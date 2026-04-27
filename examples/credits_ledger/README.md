@@ -69,3 +69,13 @@ uv run python examples/credits_ledger/projector_worker.py
 The projector backfills from indexed BDS events on first start and maintains a
 local SQLite read model that the API service can query for recent activity and
 summary views.
+
+```mermaid
+flowchart LR
+  Admin["admin_job.py"] --> Ledger["Credits ledger contract"]
+  API["api_service.py"] --> Ledger
+  Ledger --> Events["Issue, Transfer, and Burn events"]
+  Events --> Projector["projector_worker.py"]
+  Projector --> Projection["SQLite activity and summary projection"]
+  API --> Projection
+```

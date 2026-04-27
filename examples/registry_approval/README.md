@@ -73,3 +73,16 @@ uv run python examples/registry_approval/projector_worker.py
 The projector backfills from indexed BDS events and uses authoritative
 contract reads to hydrate richer proposal and record views into a local SQLite
 database.
+
+```mermaid
+flowchart LR
+  Admin["admin_job.py"] --> Registry["Registry contract"]
+  Admin --> Approval["Approval contract"]
+  API["api_service.py"] --> Registry
+  API --> Approval
+  Registry --> Events["Indexed registry events"]
+  Approval --> Events
+  Events --> Projector["projector_worker.py"]
+  Projector --> Projection["SQLite proposal and record projection"]
+  API --> Projection
+```

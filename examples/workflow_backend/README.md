@@ -73,3 +73,15 @@ uv run python examples/workflow_backend/projector_worker.py
 The processor worker handles submitted workflow items. The projector backfills
 from indexed BDS events and keeps a local SQLite queue/activity view in sync
 using authoritative `get_item` reads for hydration.
+
+```mermaid
+flowchart LR
+  API["api_service.py"] --> Contract["Workflow contract"]
+  Contract --> Events["Indexed workflow events"]
+  Events --> Processor["processor_worker.py"]
+  Events --> Projector["projector_worker.py"]
+  Processor --> Contract
+  Projector --> Projection["SQLite queue and activity projection"]
+  API --> Projection
+  Admin["admin_job.py"] --> Contract
+```
