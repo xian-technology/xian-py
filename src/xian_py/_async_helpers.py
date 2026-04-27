@@ -21,7 +21,7 @@ from xian_py.wallet import Wallet
 def _coerce_int(value: Any) -> int | None:
     try:
         return int(value) if value is not None else None
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 

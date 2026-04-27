@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import secrets
 from functools import lru_cache
 
@@ -25,36 +27,32 @@ def _require_ethereum_support() -> None:
 
 
 @lru_cache(maxsize=1)
-def _load_bip_utils() -> dict[str, object]:
+def _load_mnemonic_library():
     try:
-        from bip_utils import (
-            Bip32Secp256k1,
-            Bip32Slip10Ed25519,
-            Bip39MnemonicGenerator,
-            Bip39SeedGenerator,
-            Bip39WordsNum,
-            Bip44,
-            Bip44Changes,
-            Bip44Coins,
-        )
-        from bip_utils.utils.mnemonic import Mnemonic
+        from mnemonic import Mnemonic
     except ImportError as exc:
         raise ImportError(
             "HD wallet support requires the optional 'hd' dependency group; "
             "install with 'pip install xian-tech-py[hd]'"
         ) from exc
+    return Mnemonic
 
-    return {
-        "Bip32Secp256k1": Bip32Secp256k1,
-        "Bip32Slip10Ed25519": Bip32Slip10Ed25519,
-        "Bip39MnemonicGenerator": Bip39MnemonicGenerator,
-        "Bip39SeedGenerator": Bip39SeedGenerator,
-        "Bip39WordsNum": Bip39WordsNum,
-        "Bip44": Bip44,
-        "Bip44Changes": Bip44Changes,
-        "Bip44Coins": Bip44Coins,
-        "Mnemonic": Mnemonic,
-    }
+
+def _derive_slip10_ed25519_private_key(
+    seed: bytes, derivation_path: list[int]
+) -> str:
+    digest = hmac.new(b"ed25519 seed", seed, hashlib.sha512).digest()
+    private_key = digest[:32]
+    chain_code = digest[32:]
+
+    for index in derivation_path:
+        hardened_index = index + 0x80000000
+        data = b"\x00" + private_key + hardened_index.to_bytes(4, "big")
+        digest = hmac.new(chain_code, data, hashlib.sha512).digest()
+        private_key = digest[:32]
+        chain_code = digest[32:]
+
+    return private_key.hex()
 
 
 # TODO: Unify this function with the method with the same name from 'Wallet' class
@@ -150,68 +148,42 @@ class EthereumWallet:
 
 class HDWallet:
     def __init__(self, mnemonic: str = None):
-        bip_utils = _load_bip_utils()
-        mnemonic_type = bip_utils["Mnemonic"]
-        words_num = bip_utils["Bip39WordsNum"]
-        mnemonic_generator = bip_utils["Bip39MnemonicGenerator"]
-        seed_generator = bip_utils["Bip39SeedGenerator"]
-        ed25519_key = bip_utils["Bip32Slip10Ed25519"]
-        secp256k1_key = bip_utils["Bip32Secp256k1"]
+        mnemonic_type = _load_mnemonic_library()
+        mnemonic_library = mnemonic_type("english")
 
         if mnemonic:
-            self.mnemonic = mnemonic_type(mnemonic.split())
+            if not mnemonic_library.check(mnemonic):
+                raise ValueError("invalid BIP39 mnemonic")
+            self.mnemonic = mnemonic
         else:
-            self.mnemonic = mnemonic_generator().FromWordsNumber(
-                words_num.WORDS_NUM_24
-            )
+            self.mnemonic = mnemonic_library.generate(strength=256)
 
-        self.seed_bytes = seed_generator(self.mnemonic).Generate()
-
-        # Initialize ED25519 master key
-        self.ed25519_master_key = ed25519_key.FromSeed(self.seed_bytes)
-
-        # Only initialize secp256k1 if ethereum support is installed
-        if ETHEREUM_SUPPORT:
-            self.secp256k1_master_key = secp256k1_key.FromSeed(self.seed_bytes)
+        self.seed_bytes = mnemonic_type.to_seed(self.mnemonic)
 
     @property
     def mnemonic_str(self) -> str:
         """Returns the mnemonic seed as a string"""
-        return str(self.mnemonic)
+        return self.mnemonic
 
     @property
     def mnemonic_lst(self) -> list[str]:
         """Returns the mnemonic seed as a list of strings"""
-        return str(self.mnemonic).split()
+        return self.mnemonic.split()
 
     def get_wallet(self, derivation_path):
         """Get ED25519 wallet for custom derivation path"""
-        child_key = self.ed25519_master_key
-        for index in derivation_path:
-            # Automatically harden the index
-            hardened_index = index + 0x80000000
-            child_key = child_key.ChildKey(hardened_index)
-        private_key_hex = child_key.PrivateKey().Raw().ToHex()
+        private_key_hex = _derive_slip10_ed25519_private_key(
+            self.seed_bytes, derivation_path
+        )
         return Wallet(private_key=private_key_hex)
 
     def get_ethereum_wallet(self, account_idx: int = 0):
         """Get Ethereum wallet for specific account index"""
-        if not ETHEREUM_SUPPORT:
-            raise ImportError(
-                "Ethereum support not installed. Install with 'pip install xian-tech-py[eth]'"
-            )
-
-        bip_utils = _load_bip_utils()
-        bip44 = bip_utils["Bip44"]
-        bip44_changes = bip_utils["Bip44Changes"]
-        bip44_coins = bip_utils["Bip44Coins"]
-        bip44_ctx = bip44.FromSeed(self.seed_bytes, bip44_coins.ETHEREUM)
-        account_keys = (
-            bip44_ctx.Purpose()
-            .Coin()
-            .Account(0)
-            .Change(bip44_changes.CHAIN_EXT)
+        _require_ethereum_support()
+        Account.enable_unaudited_hdwallet_features()
+        account = Account.from_mnemonic(
+            self.mnemonic,
+            account_path=f"m/44'/60'/0'/0/{account_idx}",
         )
-        eth_child_key = account_keys.AddressIndex(account_idx)
-        private_key_hex = eth_child_key.PrivateKey().Raw().ToHex()
+        private_key_hex = account.key.hex()
         return EthereumWallet(private_key=private_key_hex)

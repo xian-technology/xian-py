@@ -43,11 +43,11 @@ def test_ethereum_address_validation_accepts_prefixed_and_plain_hex() -> None:
 def test_hd_wallet_requires_optional_dependency(monkeypatch) -> None:
     monkeypatch.setattr(
         wallet_module,
-        "_load_bip_utils",
-        lambda: (_ for _ in ()).throw(ImportError("missing bip_utils")),
+        "_load_mnemonic_library",
+        lambda: (_ for _ in ()).throw(ImportError("missing mnemonic")),
     )
 
-    with pytest.raises(ImportError, match="missing bip_utils"):
+    with pytest.raises(ImportError, match="missing mnemonic"):
         wallet_module.HDWallet()
 
 

@@ -25,7 +25,7 @@ def _coerce_int(value: Any) -> int | None:
         return None
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -412,7 +412,7 @@ class NodeStatus:
             latest_height = (
                 int(latest_height) if latest_height is not None else None
             )
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             latest_height = None
 
         catching_up = sync_info.get("catching_up")
@@ -525,7 +525,7 @@ class TokenBalance:
                 if last_block_height is not None
                 else None
             )
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             last_block_height = None
 
         balance = raw_dict.get("balance")
