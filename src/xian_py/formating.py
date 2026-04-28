@@ -1,10 +1,30 @@
 import re
 
+MIN_JSON_INTEGER = -(2**63)
+MAX_JSON_INTEGER = 2**64 - 1
 
-def kwargs_are_formatted(k: dict):
-    for k in k.keys():
-        if not identifier_is_formatted(k):
+
+def kwargs_are_formatted(kwargs: dict):
+    if not isinstance(kwargs, dict):
+        return False
+    for key in kwargs.keys():
+        if not identifier_is_formatted(key):
             return False
+    return json_value_is_formatted(kwargs)
+
+
+def json_value_is_formatted(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str) or not json_value_is_formatted(item):
+                return False
+        return True
+    if isinstance(value, list):
+        return all(json_value_is_formatted(item) for item in value)
+    if type(value) is int:
+        return MIN_JSON_INTEGER <= value <= MAX_JSON_INTEGER
+    if isinstance(value, float):
+        return False
     return True
 
 
@@ -23,7 +43,7 @@ def number_is_formatted(i: int):
         return False
     if i < 0:
         return False
-    return True
+    return i <= MAX_JSON_INTEGER
 
 
 def key_is_formatted(s: str):
@@ -78,7 +98,11 @@ def recurse_rules(d: dict, rule: dict):
     for key, subrule in rule.items():
         arg = d[key]
 
-        if type(arg) is dict:
+        if callable(subrule):
+            if not subrule(arg):
+                return False
+
+        elif type(arg) is dict:
             if not recurse_rules(arg, subrule):
                 return False
 
@@ -87,9 +111,8 @@ def recurse_rules(d: dict, rule: dict):
                 if not recurse_rules(a, subrule):
                     return False
 
-        elif callable(subrule):
-            if not subrule(arg):
-                return False
+        else:
+            return False
 
     return True
 

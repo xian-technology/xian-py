@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import aiohttp
 import pytest
-from xian_runtime_types.encoding import decode, encode
+from xian_runtime_types.decimal import ContractingDecimal
 
 from xian_py.exception import TransportError, XianException
 from xian_py.formating import format_dictionary
@@ -15,6 +15,7 @@ from xian_py.transaction import (
     broadcast_tx_commit_async,
     broadcast_tx_nowait_async,
     broadcast_tx_wait_async,
+    canonical_json,
     create_tx,
     get_nonce_async,
     simulate_tx_async,
@@ -228,12 +229,130 @@ def test_create_tx_formats_payload_and_signs_it() -> None:
     tx = create_tx(payload, wallet)
 
     expected_payload = format_dictionary(payload)
-    canonical_payload = encode(decode(encode(expected_payload)))
+    canonical_payload = canonical_json(expected_payload)
     signature = tx["metadata"]["signature"]
 
     assert tx["payload"] == expected_payload
     assert wallet.verify_msg(canonical_payload, signature) is True
     assert wallet.verify_msg(json.dumps(expected_payload), signature) is False
+
+
+def test_create_tx_signs_unicode_with_clean_canonical_json() -> None:
+    wallet = Wallet()
+    payload = {
+        "sender": wallet.public_key,
+        "nonce": 1,
+        "chi_supplied": 25,
+        "contract": "currency",
+        "function": "transfer",
+        "kwargs": {"memo": "snowman: \u2603", "to": wallet.public_key},
+        "chain_id": "xian-local-1",
+    }
+
+    tx = create_tx(payload, wallet)
+    signature = tx["metadata"]["signature"]
+
+    assert wallet.verify_msg(canonical_json(tx["payload"]), signature) is True
+
+
+def test_create_tx_normalizes_runtime_kwargs_before_signing() -> None:
+    wallet = Wallet()
+    payload = {
+        "sender": wallet.public_key,
+        "nonce": 1,
+        "chi_supplied": 25,
+        "contract": "currency",
+        "function": "transfer",
+        "kwargs": {
+            "amount": ContractingDecimal("0.5"),
+            "raw": b"abc",
+            "units": 2**80,
+            "to": wallet.public_key,
+        },
+        "chain_id": "xian-local-1",
+    }
+
+    tx = create_tx(payload, wallet)
+
+    assert tx["payload"]["kwargs"]["amount"] == {"__fixed__": "0.5"}
+    assert tx["payload"]["kwargs"]["raw"] == {"__bytes__": "616263"}
+    assert tx["payload"]["kwargs"]["units"] == {"__big_int__": str(2**80)}
+    assert wallet.verify_msg(
+        canonical_json(tx["payload"]),
+        tx["metadata"]["signature"],
+    )
+
+
+def test_create_tx_rejects_float_kwargs() -> None:
+    wallet = Wallet()
+
+    with pytest.raises(XianException, match="Invalid payload provided"):
+        create_tx(
+            {
+                "sender": wallet.public_key,
+                "nonce": 1,
+                "chi_supplied": 25,
+                "contract": "currency",
+                "function": "transfer",
+                "kwargs": {"amount": 1.5, "to": wallet.public_key},
+                "chain_id": "xian-local-1",
+            },
+            wallet,
+        )
+
+
+def test_create_tx_rejects_non_object_kwargs() -> None:
+    wallet = Wallet()
+
+    with pytest.raises(XianException, match="Invalid payload provided"):
+        create_tx(
+            {
+                "sender": wallet.public_key,
+                "nonce": 1,
+                "chi_supplied": 25,
+                "contract": "currency",
+                "function": "transfer",
+                "kwargs": [],
+                "chain_id": "xian-local-1",
+            },
+            wallet,
+        )
+
+
+def test_create_tx_rejects_boolean_integer_fields() -> None:
+    wallet = Wallet()
+
+    with pytest.raises(XianException, match="Invalid payload provided"):
+        create_tx(
+            {
+                "sender": wallet.public_key,
+                "nonce": True,
+                "chi_supplied": 25,
+                "contract": "currency",
+                "function": "transfer",
+                "kwargs": {"amount": 1, "to": wallet.public_key},
+                "chain_id": "xian-local-1",
+            },
+            wallet,
+        )
+
+
+def test_create_tx_rejects_overflowing_integer_fields() -> None:
+    wallet = Wallet()
+
+    with pytest.raises(XianException, match="Invalid payload provided"):
+        create_tx(
+            {
+                "sender": wallet.public_key,
+                "nonce": 2**64,
+                "chi_supplied": 25,
+                "contract": "currency",
+                "function": "transfer",
+                "kwargs": {"amount": 1, "to": wallet.public_key},
+                "chain_id": "xian-local-1",
+            },
+            wallet,
+        )
 
 
 def test_create_tx_rejects_invalid_payload() -> None:

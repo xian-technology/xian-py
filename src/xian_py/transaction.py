@@ -12,10 +12,11 @@ import hashlib
 import json
 from asyncio import get_running_loop, sleep
 from base64 import b64decode
+from copy import deepcopy
 from typing import Any
 
 import aiohttp
-from xian_runtime_types.encoding import decode, encode
+from xian_runtime_types.encoding import encode
 
 from xian_py.async_utils import sync_wrapper
 from xian_py.exception import (
@@ -186,6 +187,22 @@ async def get_tx_async(
 get_tx = sync_wrapper(get_tx_async)
 
 
+def canonical_json(value: dict) -> str:
+    return json.dumps(
+        format_dictionary(deepcopy(value)),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def normalize_transaction_payload(payload: dict) -> dict:
+    payload = format_dictionary(deepcopy(payload))
+    if "kwargs" in payload:
+        payload["kwargs"] = json.loads(encode(payload["kwargs"]))
+        payload = format_dictionary(payload)
+    return payload
+
+
 async def simulate_tx_async(
     node_url: str,
     payload: dict,
@@ -272,18 +289,17 @@ def create_tx(payload: dict, wallet: Wallet) -> dict:
     :param wallet: Wallet object with public and private key
     :return: Encoded transaction data
     """
-    payload = format_dictionary(payload)
+    payload = normalize_transaction_payload(payload)
     if not check_format_of_payload(payload):
         raise TransactionError("Invalid payload provided")
-    canonical_payload = encode(decode(encode(payload)))
+    canonical_payload = canonical_json(payload)
 
     tx = {
         "payload": payload,
         "metadata": {"signature": wallet.sign_msg(canonical_payload)},
     }
 
-    tx = encode(format_dictionary(tx))
-    return json.loads(tx)
+    return json.loads(canonical_json(tx))
 
 
 async def broadcast_tx_commit_async(
