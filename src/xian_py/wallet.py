@@ -22,7 +22,7 @@ def _require_ethereum_support() -> None:
     if not ETHEREUM_SUPPORT:
         raise ImportError(
             "Ethereum wallet helpers require the optional 'eth' dependency "
-            "group; install with 'pip install xian-tech-py[eth]'"
+            "group; install with 'uv add \"xian-tech-py[eth]\"'"
         )
 
 
@@ -33,7 +33,7 @@ def _load_mnemonic_library():
     except ImportError as exc:
         raise ImportError(
             "HD wallet support requires the optional 'hd' dependency group; "
-            "install with 'pip install xian-tech-py[hd]'"
+            "install with 'uv add \"xian-tech-py[hd]\"'"
         ) from exc
     return Mnemonic
 

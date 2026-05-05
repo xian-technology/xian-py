@@ -30,7 +30,7 @@ flowchart LR
 Install the SDK:
 
 ```bash
-pip install xian-tech-py
+uv add xian-tech-py
 ```
 
 Read state and submit a transaction with the synchronous client:
@@ -94,9 +94,9 @@ the operation kind, attempt number, next backoff delay, and exception.
 Optional extras:
 
 ```bash
-pip install "xian-tech-py[app]"   # FastAPI examples
-pip install "xian-tech-py[eth]"   # Ethereum-style key helpers
-pip install "xian-tech-py[hd]"    # HD-wallet derivation
+uv add "xian-tech-py[app]"   # FastAPI examples
+uv add "xian-tech-py[eth]"   # Ethereum-style key helpers
+uv add "xian-tech-py[hd]"    # HD-wallet derivation
 ```
 
 ## SDK Cookbook
@@ -120,7 +120,7 @@ print(wallet.public_key)
 # Restore an existing account from a hex private key.
 wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
 
-# Optional HD-wallet derivation. Requires: pip install "xian-tech-py[hd]".
+# Optional HD-wallet derivation. Requires: uv add "xian-tech-py[hd]".
 hd = HDWallet()
 derived_wallet = hd.get_wallet([44, 734, 0, 0, 0])
 ```
