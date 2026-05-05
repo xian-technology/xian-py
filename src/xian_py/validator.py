@@ -1,6 +1,5 @@
 import ast
 from enum import Enum, auto
-from typing import Dict, List, Set
 
 
 class XianStandard(Enum):
@@ -9,8 +8,32 @@ class XianStandard(Enum):
 
 
 class ValidatorBase(ast.NodeVisitor):
-    def validate(self) -> tuple[bool, List[str]]:
+    def validate(self) -> tuple[bool, list[str]]:
         raise NotImplementedError
+
+
+def _is_name_call(node: ast.AST, name: str) -> bool:
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == name
+    )
+
+
+def _metadata_assignment_key(stmt: ast.stmt) -> str | None:
+    if not isinstance(stmt, ast.Assign):
+        return None
+
+    for target in stmt.targets:
+        if (
+            isinstance(target, ast.Subscript)
+            and isinstance(target.value, ast.Name)
+            and target.value.id == "metadata"
+            and isinstance(target.slice, ast.Constant)
+            and isinstance(target.slice.value, str)
+        ):
+            return target.slice.value
+    return None
 
 
 class ValidatorXSC001(ValidatorBase):
@@ -23,10 +46,10 @@ class ValidatorXSC001(ValidatorBase):
             "transfer_from": ("amount", "to", "main_account"),
             "balance_of": ("address",),
         }
-        self.found_variables: Set[str] = set()
-        self.found_functions: Dict[str, tuple[str, ...]] = {}
+        self.found_variables: set[str] = set()
+        self.found_functions: dict[str, tuple[str, ...]] = {}
         self.has_constructor = False
-        self.is_hash_type: Dict[str, bool] = {}
+        self.is_hash_type: dict[str, bool] = {}
         self.metadata_fields = {
             "token_name",
             "token_symbol",
@@ -34,20 +57,14 @@ class ValidatorXSC001(ValidatorBase):
             "token_logo_svg",
             "token_website",
         }
-        self.found_metadata_fields: Set[str] = set()
+        self.found_metadata_fields: set[str] = set()
 
     def visit_Assign(self, node: ast.Assign) -> None:
-        if isinstance(node.targets[0], ast.Name) and isinstance(
-            node.value, ast.Call
-        ):
-            var_name = node.targets[0].id
+        target = node.targets[0]
+        if isinstance(target, ast.Name) and isinstance(node.value, ast.Call):
+            var_name = target.id
             self.found_variables.add(var_name)
-
-            if (
-                isinstance(node.value.func, ast.Name)
-                and node.value.func.id == "Hash"
-            ):
-                self.is_hash_type[var_name] = True
+            self.is_hash_type[var_name] = _is_name_call(node.value, "Hash")
 
         self.generic_visit(node)
 
@@ -62,37 +79,33 @@ class ValidatorXSC001(ValidatorBase):
 
         if func_name == "seed":
             for stmt in node.body:
-                if isinstance(stmt, ast.Assign):
-                    if isinstance(stmt.targets[0], ast.Subscript):
-                        if (
-                            isinstance(stmt.targets[0].value, ast.Name)
-                            and stmt.targets[0].value.id == "metadata"
-                        ):
-                            if isinstance(stmt.targets[0].slice, ast.Constant):
-                                self.found_metadata_fields.add(
-                                    stmt.targets[0].slice.value
-                                )
+                metadata_key = _metadata_assignment_key(stmt)
+                if metadata_key is not None:
+                    self.found_metadata_fields.add(metadata_key)
 
         self.generic_visit(node)
 
-    def validate(self) -> tuple[bool, List[str]]:
+    def validate(self) -> tuple[bool, list[str]]:
         errors = []
 
         missing_vars = self.required_variables - self.found_variables
         if missing_vars:
             errors.append(f"Missing required variables: {missing_vars}")
 
-        for var in self.required_variables:
-            if var in self.found_variables and not self.is_hash_type.get(var):
-                errors.append(f"Variable {var} must be of type Hash")
+        errors.extend(
+            f"Variable {var} must be of type Hash"
+            for var in self.required_variables
+            if var in self.found_variables and not self.is_hash_type.get(var)
+        )
 
         for func, required_args in self.required_functions.items():
             if func not in self.found_functions:
                 errors.append(f"Missing required function: {func}")
             elif self.found_functions[func] != required_args:
+                found_args = self.found_functions[func]
                 errors.append(
                     f"Function {func} has incorrect arguments. "
-                    f"Expected {required_args}, got {self.found_functions[func]}"
+                    f"Expected {required_args}, got {found_args}"
                 )
 
         if not self.has_constructor:
@@ -104,7 +117,7 @@ class ValidatorXSC001(ValidatorBase):
                 f"Missing required metadata fields: {missing_metadata}"
             )
 
-        return len(errors) == 0, errors
+        return not errors, errors
 
 
 class ValidatorFactory:
@@ -117,12 +130,13 @@ class ValidatorFactory:
 
 def validate_contract(
     contract_code: str, standard: XianStandard = XianStandard.XSC001
-) -> tuple[bool, List[str]]:
+) -> tuple[bool, list[str]]:
     """
     Validates if a contract follows the specified token standard
     Args:
         contract_code: String containing the contract code
-        standard: TokenStandard enum specifying which standard to validate against
+        standard: TokenStandard enum specifying which standard to validate
+            against
     Returns:
         Tuple of (is_valid: bool, errors: List[str])
     """
@@ -132,6 +146,6 @@ def validate_contract(
         validator.visit(tree)
         return validator.validate()
     except SyntaxError as e:
-        return False, [f"Syntax error in contract: {str(e)}"]
+        return False, [f"Syntax error in contract: {e}"]
     except Exception as e:
-        return False, [f"Error validating contract: {str(e)}"]
+        return False, [f"Error validating contract: {e}"]

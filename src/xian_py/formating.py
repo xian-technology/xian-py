@@ -2,18 +2,19 @@ import re
 
 MIN_JSON_INTEGER = -(2**63)
 MAX_JSON_INTEGER = 2**64 - 1
+_IDENTIFIER_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")
+_HEX_KEY_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
-def kwargs_are_formatted(kwargs: dict):
-    if not isinstance(kwargs, dict):
-        return False
-    for key in kwargs.keys():
-        if not identifier_is_formatted(key):
-            return False
-    return json_value_is_formatted(kwargs)
+def kwargs_are_formatted(kwargs: dict) -> bool:
+    return (
+        isinstance(kwargs, dict)
+        and all(identifier_is_formatted(key) for key in kwargs)
+        and json_value_is_formatted(kwargs)
+    )
 
 
-def json_value_is_formatted(value):
+def json_value_is_formatted(value) -> bool:
     if isinstance(value, dict):
         for key, item in value.items():
             if not isinstance(key, str) or not json_value_is_formatted(item):
@@ -23,22 +24,14 @@ def json_value_is_formatted(value):
         return all(json_value_is_formatted(item) for item in value)
     if type(value) is int:
         return MIN_JSON_INTEGER <= value <= MAX_JSON_INTEGER
-    if isinstance(value, float):
-        return False
-    return True
+    return not isinstance(value, float)
 
 
-def identifier_is_formatted(s: str):
-    try:
-        iden = re.match(r"^[a-zA-Z][a-zA-Z0-9_]*$", s)
-        if iden is None:
-            return False
-        return True
-    except TypeError:
-        return False
+def identifier_is_formatted(s: str) -> bool:
+    return isinstance(s, str) and _IDENTIFIER_RE.fullmatch(s) is not None
 
 
-def number_is_formatted(i: int):
+def number_is_formatted(i: int) -> bool:
     if type(i) is not int:
         return False
     if i < 0:
@@ -46,20 +39,12 @@ def number_is_formatted(i: int):
     return i <= MAX_JSON_INTEGER
 
 
-def key_is_formatted(s: str):
-    try:
-        int(s, 16)
-        if len(s) != 64:
-            return False
-        return True
-    except ValueError:
-        return False
-    except TypeError:
-        return False
+def key_is_formatted(s: str) -> bool:
+    return isinstance(s, str) and _HEX_KEY_RE.fullmatch(s) is not None
 
 
-def cid_id_formatted(s: str):
-    return type(s) is str and s != ""
+def cid_id_formatted(s: str) -> bool:
+    return isinstance(s, str) and s != ""
 
 
 TRANSACTION_PAYLOAD_RULES = {
@@ -73,25 +58,28 @@ TRANSACTION_PAYLOAD_RULES = {
 }
 
 
-def dict_has_keys(d: dict, keys: set):
-    key_set = set(d.keys())
-    return len(keys ^ key_set) == 0
+def dict_has_keys(d: dict, keys: set) -> bool:
+    return set(d) == keys
 
 
 def format_dictionary(d: dict) -> dict:
-    for k, v in d.items():
-        if type(k) is not str:
-            raise TypeError("Non-string key types not allowed.")
-        if type(v) is list:
-            for i in range(len(v)):
-                if isinstance(v[i], dict):
-                    v[i] = format_dictionary(v[i])
-        elif isinstance(v, dict):
-            d[k] = format_dictionary(v)
-    return {k: v for k, v in sorted(d.items())}
+    return _format_value(d)
 
 
-def recurse_rules(d: dict, rule: dict):
+def _format_value(value):
+    if isinstance(value, dict):
+        items = []
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError("Non-string key types not allowed.")
+            items.append((key, _format_value(item)))
+        return dict(sorted(items))
+    if isinstance(value, list):
+        return [_format_value(item) for item in value]
+    return value
+
+
+def recurse_rules(d: dict, rule: dict) -> bool:
     if callable(rule):
         return rule(d)
 
@@ -117,7 +105,7 @@ def recurse_rules(d: dict, rule: dict):
     return True
 
 
-def check_format_of_payload(d: dict):
+def check_format_of_payload(d: dict) -> bool:
     rule = TRANSACTION_PAYLOAD_RULES
     expected_keys = set(rule.keys())
 
