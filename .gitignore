@@ -8,3 +8,4 @@ build/
 dist/
 *.egg-info/
 .xian-transfer-cursor
+.DS_Store
