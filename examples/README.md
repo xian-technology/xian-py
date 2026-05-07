@@ -18,6 +18,7 @@ into ordinary software workflows.
     projected read model
   - `workflow_backend/`: shared workflow/state-machine backend with processor
     and projector workers
+  - `x402_exact/`: HTTP 402 pay-per-request flow with native Xian settlement
 
 ## What These Examples Demonstrate
 
@@ -94,4 +95,13 @@ uv run python examples/workflow_backend/admin_job.py
 uv run uvicorn examples.workflow_backend.api_service:app --reload --app-dir .
 uv run python examples/workflow_backend/processor_worker.py
 uv run python examples/workflow_backend/projector_worker.py
+```
+
+x402 Exact Payment examples:
+
+```bash
+uv sync --group dev --extra app
+uv run python -m examples.x402_exact.admin_job
+uv run --extra app uvicorn examples.x402_exact.paid_api_service:app --reload --app-dir .
+uv run python -m examples.x402_exact.buyer_client
 ```
