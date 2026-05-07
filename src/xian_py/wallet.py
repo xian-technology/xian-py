@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import secrets
 from functools import lru_cache
+from typing import TypeAlias
 
 from xian_accounts import (
     Ed25519Account,
@@ -55,14 +56,20 @@ def _derive_slip10_ed25519_private_key(
     return private_key.hex()
 
 
-# TODO: Unify this function with the method with the same name from 'Wallet' class
-def verify_msg(public_key: str, msg: str, signature: str) -> bool:
-    """Verify signed message by public key."""
+WalletPrivateKey: TypeAlias = str | None
+
+
+def _verify_ed25519_message(public_key: str, msg: str, signature: str) -> bool:
     return verify_message(public_key, msg, signature)
 
 
+def verify_msg(public_key: str, msg: str, signature: str) -> bool:
+    """Verify signed message by public key."""
+    return _verify_ed25519_message(public_key, msg, signature)
+
+
 class Wallet:
-    def __init__(self, private_key: str = None):
+    def __init__(self, private_key: WalletPrivateKey = None):
         if private_key:
             self._account = Ed25519Account(private_key)
         else:
@@ -82,7 +89,7 @@ class Wallet:
 
     def verify_msg(self, msg: str, signature: str) -> bool:
         """Verify signed message."""
-        return self._account.verify_message(msg, signature)
+        return _verify_ed25519_message(self.public_key, msg, signature)
 
     @staticmethod
     def is_valid_key(key: str) -> bool:
@@ -91,7 +98,7 @@ class Wallet:
 
 
 class EthereumWallet:
-    def __init__(self, private_key: str = None):
+    def __init__(self, private_key: WalletPrivateKey = None):
         _require_ethereum_support()
         if private_key:
             private_key = bytes.fromhex(private_key)
@@ -128,26 +135,26 @@ class EthereumWallet:
                 message, signature=bytes.fromhex(signature)
             )
             return recovered_address.lower() == self.address.lower()
-        except Exception:
+        except (TypeError, ValueError):
             return False
 
     @staticmethod
     def is_valid_key(key: str) -> bool:
         """Check if the given key is a valid Ethereum address"""
-        try:
-            # Ethereum addresses are 40 hex chars (not counting '0x')
-            if key.startswith("0x"):
-                key = key[2:]
-            if len(key) != 40:
-                return False
-            int(key, 16)
-            return True
-        except Exception:
+        if not isinstance(key, str):
             return False
+        normalized = key[2:] if key.startswith("0x") else key
+        if len(normalized) != 40:
+            return False
+        try:
+            int(normalized, 16)
+        except ValueError:
+            return False
+        return True
 
 
 class HDWallet:
-    def __init__(self, mnemonic: str = None):
+    def __init__(self, mnemonic: str | None = None):
         mnemonic_type = _load_mnemonic_library()
         mnemonic_library = mnemonic_type("english")
 
