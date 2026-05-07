@@ -392,9 +392,10 @@ with ShieldedRelayerClient("http://127.0.0.1:38480") as relayer:
   - `projectors.py` — reusable polling, ordering, and checkpoint primitives.
   - `models.py` — typed transaction, event, block, and status models.
   - `shielded_relayer.py` — client for the private-submission relayer.
+  - `x402.py` — native-Xian x402 exact-payment helpers.
 - `examples/` — service, worker, and reference-app examples built on the SDK
   (`credits_ledger/`, `registry_approval/`, `workflow_backend/`,
-  `fastapi_service.py`, `event_worker.py`, `admin_job.py`).
+  `x402_exact/`, `fastapi_service.py`, `event_worker.py`, `admin_job.py`).
 - `tests/` — SDK transport, decoding, and integration-shape coverage.
 - `docs/` — compatibility notes and SDK backlog items.
 
@@ -411,6 +412,7 @@ with ShieldedRelayerClient("http://127.0.0.1:38480") as relayer:
   matters more than replayable cursors
 - use thin helper clients for common patterns: contract, token, event, and
   state-key access
+- sign, verify, settle, and retry native-Xian x402 exact-payment requests
 - build SQLite-backed read models with the shared projector primitives, using
   CometBFT websocket wakeups and BDS cursor reconciliation
 
@@ -446,6 +448,7 @@ websocket-only, non-resumable delivery.
 - credits-ledger reference app: [examples/credits_ledger/README.md](examples/credits_ledger/README.md)
 - registry-approval reference app: [examples/registry_approval/README.md](examples/registry_approval/README.md)
 - workflow-backend reference app: [examples/workflow_backend/README.md](examples/workflow_backend/README.md)
+- x402 exact-payment reference app: [examples/x402_exact/README.md](examples/x402_exact/README.md)
 
 ## Validation
 
