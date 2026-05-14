@@ -964,7 +964,7 @@ class XianAsync:
             return result
         try:
             return ast.literal_eval(result)
-        except (SyntaxError, ValueError):
+        except SyntaxError, ValueError:
             normalized = self._decode_simulation_result_string(result)
             if normalized is not None:
                 return normalized
@@ -1464,7 +1464,7 @@ class XianAsync:
         raw_height = header.get("height")
         try:
             block_height = int(raw_height) if raw_height is not None else None
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             block_height = None
 
         txs = block_data.get("txs") or []
@@ -1863,7 +1863,7 @@ class XianAsync:
 
         try:
             return ast.literal_eval(quoted_datetimes)
-        except (SyntaxError, ValueError):
+        except SyntaxError, ValueError:
             return None
 
     @staticmethod
@@ -1874,7 +1874,7 @@ class XianAsync:
         if type_of_data == "int":
             try:
                 return int(data)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return XianAsync._decode_abci_value(data, None)
         if type_of_data == "bool":
             return data == "True"

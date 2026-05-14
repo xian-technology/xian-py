@@ -524,4 +524,3 @@ async def wait_for_tx_async(
             )
 
         await sleep(poll_interval_seconds)
-

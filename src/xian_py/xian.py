@@ -276,9 +276,7 @@ class Xian:
         )
 
     def get_contract_source(self, contract: str) -> None | str:
-        return self._run_async(
-            self._async_client.get_contract_source(contract)
-        )
+        return self._run_async(self._async_client.get_contract_source(contract))
 
     def get_contract_ir(self, contract: str) -> None | str:
         return self._run_async(self._async_client.get_contract_ir(contract))

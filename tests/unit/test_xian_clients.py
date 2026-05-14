@@ -363,7 +363,9 @@ def test_xian_async_estimate_chi_reports_exact_simulation_value() -> None:
             min_chi_headroom=100,
         )
     )
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet, config=config)
+    client = XianAsync(
+        "http://node", chain_id="xian-1", wallet=wallet, config=config
+    )
 
     async def run_estimate() -> dict[str, object]:
         try:
@@ -562,12 +564,14 @@ def test_xian_async_deploy_contract_uses_real_xian_vm_compiler() -> None:
     assert artifacts["module_name"] == "con_complex_ledger"
     assert artifacts["vm_profile"] == "xian_vm_v1"
     assert "runtime_code" not in artifacts
-    assert artifacts["hashes"]["source_sha256"] == hashlib.sha256(
-        artifacts["source"].encode()
-    ).hexdigest()
-    assert artifacts["hashes"]["vm_ir_sha256"] == hashlib.sha256(
-        artifacts["vm_ir_json"].encode()
-    ).hexdigest()
+    assert (
+        artifacts["hashes"]["source_sha256"]
+        == hashlib.sha256(artifacts["source"].encode()).hexdigest()
+    )
+    assert (
+        artifacts["hashes"]["vm_ir_sha256"]
+        == hashlib.sha256(artifacts["vm_ir_json"].encode()).hexdigest()
+    )
     assert submit_contract.await_args.kwargs["args"] == {
         "initial_owner": "alice",
         "supply": 100,
@@ -1528,7 +1532,13 @@ def test_xian_async_get_contract_ir_returns_vm_ir() -> None:
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse(
-                {"result": {"response": {"value": _b64('{"vm_profile":"xian_vm_v1"}')}}},
+                {
+                    "result": {
+                        "response": {
+                            "value": _b64('{"vm_profile":"xian_vm_v1"}')
+                        }
+                    }
+                },
             )
         ]
     )
