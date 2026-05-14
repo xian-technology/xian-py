@@ -152,7 +152,7 @@ with Xian("http://127.0.0.1:26657") as client:
         address=address,
     )
     source = client.contract("currency").get_source()
-    runtime_code = client.contract("currency").get_code()
+    vm_ir = client.contract("currency").get_ir()
     print(balance, raw_balance, simulated["result"])
 ```
 
@@ -174,7 +174,7 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
     submission = client.token().transfer(
         "bob",
         5,
-        chi=estimate["suggested"],
+        chi=estimate["estimated"],
         mode="checktx",
         wait_for_tx=True,
     )
@@ -183,7 +183,7 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
         print(submission.receipt.success)
 ```
 
-Submit a contract from source:
+Deploy a contract from source:
 
 ```python
 import os
@@ -205,7 +205,7 @@ def increment():
 """
 
 with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
-    deployed = client.submit_contract(
+    deployed = client.deploy_contract(
         "con_counter",
         source,
         mode="checktx",
@@ -218,6 +218,11 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
     )
     print(deployed.tx_hash, result.tx_hash)
 ```
+
+`deploy_contract` builds the Xian VM deployment artifacts locally before
+submitting. To submit artifacts produced by another toolchain, such as
+`xian contract build-artifacts`, call `submit_contract(name, deployment_artifacts)`
+directly.
 
 Query BDS-backed history:
 
@@ -402,7 +407,7 @@ with ShieldedRelayerClient("http://127.0.0.1:38480") as relayer:
 ## Capabilities
 
 - read current state via ABCI query paths and simulate readonly contract calls
-- retrieve preferred contract source and canonical runtime code separately
+- retrieve canonical contract source and Xian VM IR separately
 - create, sign, and broadcast transactions with explicit `async`, `checktx`,
   and `commit` modes; wait for final receipts
 - query indexed blocks, transactions, events, state history, and developer

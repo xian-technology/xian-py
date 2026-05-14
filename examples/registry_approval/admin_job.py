@@ -62,7 +62,7 @@ def main() -> None:
             f"{status.latest_block_height}"
         )
 
-        registry_source = client.get_contract(registry_name)
+        registry_source = client.get_contract_source(registry_name)
         if registry_source is None:
             registry_code = records_source_path().read_text(encoding="utf-8")
             result = ensure_submission_succeeded(
@@ -88,7 +88,7 @@ def main() -> None:
         else:
             print(f"{registry_name} already exists; skipping deployment.")
 
-        approval_source = client.get_contract(approval_name)
+        approval_source = client.get_contract_source(approval_name)
         if approval_source is None:
             approval_code = approval_source_path().read_text(encoding="utf-8")
             result = ensure_submission_succeeded(

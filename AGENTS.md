@@ -22,7 +22,8 @@
 ## Change Routing
 - Do not import private ABCI internals into the SDK.
 - If you change request/response behavior, add tests or at least a documented smoke path in the same change.
-- Keep compatibility shims in mind when cleaning naming or module-layout issues.
+- Prefer explicit breaking cleanup over compatibility shims when an API has been
+  intentionally retired.
 
 ## Validation
 - Preferred setup: `uv sync --group dev`

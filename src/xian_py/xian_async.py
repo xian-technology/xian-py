@@ -3,7 +3,6 @@ import asyncio
 import hashlib
 import inspect
 import json
-import math
 import re
 from decimal import Decimal
 from typing import Any, Literal, Optional
@@ -59,6 +58,30 @@ from xian_py.wallet import Wallet
 _SIMULATION_DATETIME_RE = re.compile(
     r"(?<=:\s)(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)(?=[,}])"
 )
+
+
+def _build_deployment_artifacts(
+    *,
+    module_name: str,
+    source: str,
+    lint: bool,
+) -> dict[str, object]:
+    try:
+        from contracting.artifacts import build_contract_artifacts
+    except ImportError as exc:
+        raise ImportError(
+            "deploy_contract requires xian-tech-contracting, which is a "
+            "required xian-tech-py dependency. Reinstall xian-tech-py in this "
+            "environment, or build artifacts separately and call "
+            "submit_contract(name, deployment_artifacts)."
+        ) from exc
+
+    return build_contract_artifacts(
+        module_name=module_name,
+        source=source,
+        lint=lint,
+        vm_profile="xian_vm_v1",
+    )
 
 
 class XianAsync:
@@ -618,16 +641,8 @@ class XianAsync:
         chi_margin: float | None = None,
         min_chi_headroom: int | None = None,
     ) -> dict[str, Any]:
-        chi_margin = (
-            self.config.submission.chi_margin
-            if chi_margin is None
-            else chi_margin
-        )
-        min_chi_headroom = (
-            self.config.submission.min_chi_headroom
-            if min_chi_headroom is None
-            else min_chi_headroom
-        )
+        # Margin arguments are retained for API compatibility; simulator-derived
+        # chi is supplied exactly.
         payload = {
             "contract": contract,
             "function": function,
@@ -642,14 +657,9 @@ class XianAsync:
             )
         )
         estimated = int(simulation["chi_used"])
-        suggested = self._apply_chi_headroom(
-            estimated,
-            chi_margin=chi_margin,
-            min_chi_headroom=min_chi_headroom,
-        )
         return {
             "estimated": estimated,
-            "suggested": suggested,
+            "suggested": estimated,
             "simulation": simulation,
         }
 
@@ -680,23 +690,6 @@ class XianAsync:
         async with self._nonce_reservation_lock:
             if self._next_nonce is not None and nonce < self._next_nonce:
                 self._next_nonce = None
-
-    @classmethod
-    def _apply_chi_headroom(
-        cls,
-        estimated: int,
-        *,
-        chi_margin: float,
-        min_chi_headroom: int,
-    ) -> int:
-        if chi_margin < 0:
-            raise ValueError("chi_margin must be >= 0")
-        if min_chi_headroom < 0:
-            raise ValueError("min_chi_headroom must be >= 0")
-
-        proportional = math.ceil(estimated * chi_margin)
-        headroom = max(proportional, min_chi_headroom)
-        return estimated + headroom
 
     async def send_tx(
         self,
@@ -730,17 +723,6 @@ class XianAsync:
             if poll_interval_seconds is None
             else poll_interval_seconds
         )
-        chi_margin = (
-            self.config.submission.chi_margin
-            if chi_margin is None
-            else chi_margin
-        )
-        min_chi_headroom = (
-            self.config.submission.min_chi_headroom
-            if min_chi_headroom is None
-            else min_chi_headroom
-        )
-
         if mode not in {"async", "checktx", "commit"}:
             raise ValueError(
                 "mode must be one of: 'async', 'checktx', 'commit'"
@@ -757,11 +739,9 @@ class XianAsync:
                 contract,
                 function,
                 kwargs,
-                chi_margin=chi_margin,
-                min_chi_headroom=min_chi_headroom,
             )
             estimated_stamps = chi_estimate["estimated"]
-            supplied_stamps = chi_estimate["suggested"]
+            supplied_stamps = estimated_stamps
 
         reserved_nonce = await self._reserve_nonce(nonce)
         payload = {
@@ -984,7 +964,7 @@ class XianAsync:
             return result
         try:
             return ast.literal_eval(result)
-        except SyntaxError, ValueError:
+        except (SyntaxError, ValueError):
             normalized = self._decode_simulation_result_string(result)
             if normalized is not None:
                 return normalized
@@ -1005,11 +985,11 @@ class XianAsync:
             path = f"{path}:{':'.join(str(key) for key in keys)}"
         return await self._abci_query_value(path)
 
-    async def get_contract(self, contract: str) -> None | str:
-        """Retrieve the preferred contract source for a contract."""
+    async def get_contract_source(self, contract: str) -> None | str:
+        """Retrieve the canonical contract source for a contract."""
         response = await tr.abci_query_async(
             self.node_url,
-            f"/contract/{contract}",
+            f"/contract_source/{contract}",
             session=self.session,
         )
         byte_string = response["result"]["response"]["value"]
@@ -1019,11 +999,11 @@ class XianAsync:
 
         return tr.decode_str(byte_string)
 
-    async def get_contract_code(self, contract: str) -> None | str:
-        """Retrieve the canonical runtime code for a contract."""
+    async def get_contract_ir(self, contract: str) -> None | str:
+        """Retrieve the Xian VM IR for a contract."""
         response = await tr.abci_query_async(
             self.node_url,
-            f"/contract_code/{contract}",
+            f"/contract_ir/{contract}",
             session=self.session,
         )
         byte_string = response["result"]["response"]["value"]
@@ -1075,9 +1055,8 @@ class XianAsync:
     async def submit_contract(
         self,
         name: str,
-        code: str | None = None,
+        deployment_artifacts: dict,
         args: dict = None,
-        deployment_artifacts: dict | None = None,
         chi: int | None = None,
         mode: Literal["async", "checktx", "commit"] | None = None,
         wait_for_tx: bool | None = None,
@@ -1085,33 +1064,68 @@ class XianAsync:
         poll_interval_seconds: float | None = None,
         chi_margin: float | None = None,
         min_chi_headroom: int | None = None,
+        nonce: int = None,
     ) -> TransactionSubmission:
         """Submit a contract to the network."""
         kwargs: dict[str, Any] = {"name": name}
-        artifact_source = None
-        compact_artifacts = deployment_artifacts
-        if isinstance(deployment_artifacts, dict):
-            artifact_source = deployment_artifacts.get("source")
-            compact_artifacts = dict(deployment_artifacts)
-            compact_artifacts.pop("runtime_code", None)
-            hashes = compact_artifacts.get("hashes")
-            if isinstance(hashes, dict):
-                compact_hashes = dict(hashes)
-                compact_hashes.pop("runtime_code_sha256", None)
-                compact_artifacts["hashes"] = compact_hashes
-        if code is not None:
-            if artifact_source is None:
-                kwargs["code"] = code
+        if not isinstance(deployment_artifacts, dict):
+            raise TypeError("deployment_artifacts must be a dict")
+        if "runtime_code" in deployment_artifacts:
+            raise ValueError(
+                "deployment_artifacts must not include runtime_code"
+            )
+        hashes = deployment_artifacts.get("hashes")
+        if isinstance(hashes, dict) and "runtime_code_sha256" in hashes:
+            raise ValueError(
+                "deployment_artifacts hashes must not include "
+                "runtime_code_sha256"
+            )
         if args:
             kwargs["constructor_args"] = args
-        if compact_artifacts is not None:
-            kwargs["deployment_artifacts"] = compact_artifacts
+        kwargs["deployment_artifacts"] = deployment_artifacts
 
         return await self.send_tx(
             "submission",
             "submit_contract",
             kwargs,
             chi=chi,
+            nonce=nonce,
+            mode=mode,
+            wait_for_tx=wait_for_tx,
+            timeout_seconds=timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+            chi_margin=chi_margin,
+            min_chi_headroom=min_chi_headroom,
+        )
+
+    async def deploy_contract(
+        self,
+        name: str,
+        source: str,
+        args: dict = None,
+        chi: int | None = None,
+        mode: Literal["async", "checktx", "commit"] | None = None,
+        wait_for_tx: bool | None = None,
+        timeout_seconds: float | None = None,
+        poll_interval_seconds: float | None = None,
+        chi_margin: float | None = None,
+        min_chi_headroom: int | None = None,
+        nonce: int = None,
+        *,
+        lint: bool = True,
+    ) -> TransactionSubmission:
+        """Compile and submit a contract using the Xian VM artifact format."""
+        deployment_artifacts = _build_deployment_artifacts(
+            module_name=name,
+            source=source,
+            lint=lint,
+        )
+        return await self.submit_contract(
+            name,
+            deployment_artifacts,
+            args=args,
+            chi=chi,
+            nonce=nonce,
             mode=mode,
             wait_for_tx=wait_for_tx,
             timeout_seconds=timeout_seconds,
@@ -1450,7 +1464,7 @@ class XianAsync:
         raw_height = header.get("height")
         try:
             block_height = int(raw_height) if raw_height is not None else None
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             block_height = None
 
         txs = block_data.get("txs") or []
@@ -1849,7 +1863,7 @@ class XianAsync:
 
         try:
             return ast.literal_eval(quoted_datetimes)
-        except SyntaxError, ValueError:
+        except (SyntaxError, ValueError):
             return None
 
     @staticmethod
@@ -1860,7 +1874,7 @@ class XianAsync:
         if type_of_data == "int":
             try:
                 return int(data)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 return XianAsync._decode_abci_value(data, None)
         if type_of_data == "bool":
             return data == "True"

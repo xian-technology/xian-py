@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import hashlib
 import json
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
@@ -35,6 +36,105 @@ from xian_py.models import (
 from xian_py.wallet import Wallet
 from xian_py.xian import Xian
 from xian_py.xian_async import XianAsync
+
+COMPLEX_LEDGER_SOURCE = """
+LedgerEvent = LogEvent(
+    "LedgerTransfer",
+    {
+        "sender": indexed(str),
+        "recipient": indexed(str),
+        "amount": int,
+    },
+)
+
+owner = Variable()
+total_supply = Variable()
+balances = Hash(default_value=0)
+allowances = Hash(default_value=0)
+audit_log = Hash()
+audit_count = Variable()
+
+
+def require_positive(amount: int):
+    assert isinstance(amount, int), "amount must be an integer!"
+    assert amount > 0, "amount must be positive!"
+
+
+def record(action: str, account: str, amount: int):
+    index = audit_count.get()
+    audit_log[index, "action"] = action
+    audit_log[index, "account"] = account
+    audit_log[index, "amount"] = amount
+    audit_count.set(index + 1)
+
+
+@construct
+def seed(initial_owner: str = None, supply: int = 1):
+    if initial_owner is None or initial_owner == "":
+        initial_owner = ctx.caller
+    require_positive(supply)
+    owner.set(initial_owner)
+    total_supply.set(supply)
+    balances[initial_owner] = supply
+    audit_count.set(0)
+    record("seed", initial_owner, supply)
+
+
+@export
+def transfer(amount: int, to: str):
+    require_positive(amount)
+    sender = ctx.caller
+    assert isinstance(to, str) and to != "", "recipient required!"
+    assert balances[sender] >= amount, "insufficient balance!"
+    balances[sender] -= amount
+    balances[to] += amount
+    record("transfer", sender, amount)
+    LedgerEvent({"sender": sender, "recipient": to, "amount": amount})
+    return balances[sender]
+
+
+@export
+def approve(amount: int, spender: str):
+    require_positive(amount)
+    assert isinstance(spender, str) and spender != "", "spender required!"
+    allowances[ctx.caller, spender] = amount
+    record("approve", spender, amount)
+    return allowances[ctx.caller, spender]
+
+
+@export
+def transfer_from(amount: int, owner_account: str, to: str):
+    require_positive(amount)
+    spender = ctx.caller
+    assert allowances[owner_account, spender] >= amount, "allowance too low!"
+    assert balances[owner_account] >= amount, "insufficient balance!"
+    allowances[owner_account, spender] -= amount
+    balances[owner_account] -= amount
+    balances[to] += amount
+    record("transfer_from", owner_account, amount)
+    LedgerEvent({"sender": owner_account, "recipient": to, "amount": amount})
+    return allowances[owner_account, spender]
+
+
+@export
+def batch_transfer(recipients: list[str], amounts: list[int]):
+    assert len(recipients) == len(amounts), "batch length mismatch!"
+    sent = 0
+    i = 0
+    while i < len(recipients):
+        transfer(amounts[i], recipients[i])
+        sent += amounts[i]
+        i += 1
+    return sent
+
+
+@export
+def snapshot(accounts: list[str]) -> dict:
+    result = {}
+    for account in accounts:
+        result[account] = balances[account]
+    return result
+"""
 
 
 def _b64(value: str) -> str:
@@ -241,7 +341,7 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
     create_payload = create_tx.call_args.args[0]
     assert create_payload["chain_id"] == "xian-mainnet-1"
     assert create_payload["nonce"] == 11
-    assert create_payload["chi_supplied"] == 87
+    assert create_payload["chi_supplied"] == 77
     broadcast_tx_wait_async.assert_awaited_once_with(
         "http://node",
         {"signed": True},
@@ -252,7 +352,39 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
     assert result.finalized is False
     assert result.tx_hash == "abc123"
     assert result.chi_estimated == 77
-    assert result.chi_supplied == 87
+    assert result.chi_supplied == 77
+
+
+def test_xian_async_estimate_chi_reports_exact_simulation_value() -> None:
+    wallet = Wallet()
+    config = XianClientConfig(
+        submission=SubmissionConfig(
+            chi_margin=0.50,
+            min_chi_headroom=100,
+        )
+    )
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet, config=config)
+
+    async def run_estimate() -> dict[str, object]:
+        try:
+            return await client.estimate_chi(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr,
+        "simulate_tx_async",
+        AsyncMock(return_value={"chi_used": 77, "status": 0}),
+    ) as simulate_tx_async:
+        estimate = asyncio.run(run_estimate())
+
+    simulate_tx_async.assert_awaited_once()
+    assert estimate["estimated"] == 77
+    assert estimate["suggested"] == 77
 
 
 def test_xian_async_submit_contract_forwards_deployment_artifacts() -> None:
@@ -264,9 +396,9 @@ def test_xian_async_submit_contract_forwards_deployment_artifacts() -> None:
         try:
             return await client.submit_contract(
                 "con_probe",
-                code=None,
+                {"format": "bundle-v1"},
                 args={"value": 7},
-                deployment_artifacts={"format": "bundle-v1"},
+                nonce=42,
             )
         finally:
             await client.close()
@@ -288,22 +420,19 @@ def test_xian_async_submit_contract_forwards_deployment_artifacts() -> None:
             "deployment_artifacts": {"format": "bundle-v1"},
         },
     )
+    assert send_tx.await_args.kwargs["nonce"] == 42
 
 
-def test_xian_async_submit_contract_omits_duplicate_code_from_artifacts() -> (
-    None
-):
+def test_xian_async_submit_contract_rejects_runtime_artifacts() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
-    sentinel = object()
     source = "def foo():\n    return 1\n"
 
     async def run_submit():
         try:
             return await client.submit_contract(
                 "con_probe",
-                code=source,
-                deployment_artifacts={
+                {
                     "format": "bundle-v1",
                     "source": source,
                     "runtime_code": "compiled",
@@ -318,30 +447,11 @@ def test_xian_async_submit_contract_omits_duplicate_code_from_artifacts() -> (
         finally:
             await client.close()
 
-    with patch.object(
-        client,
-        "send_tx",
-        AsyncMock(return_value=sentinel),
-    ) as send_tx:
-        result = asyncio.run(run_submit())
-
-    assert result is sentinel
-    assert send_tx.await_args.args == (
-        "submission",
-        "submit_contract",
-        {
-            "name": "con_probe",
-            "deployment_artifacts": {
-                "format": "bundle-v1",
-                "source": source,
-                "vm_ir_json": "{}",
-                "hashes": {
-                    "source_sha256": "source",
-                    "vm_ir_sha256": "ir",
-                },
-            },
-        },
-    )
+    with pytest.raises(
+        ValueError,
+        match="deployment_artifacts must not include runtime_code",
+    ):
+        asyncio.run(run_submit())
 
 
 def test_xian_submit_contract_forwards_deployment_artifacts() -> None:
@@ -357,9 +467,8 @@ def test_xian_submit_contract_forwards_deployment_artifacts() -> None:
         ) as submit_contract:
             result = client.submit_contract(
                 "con_probe",
-                code=None,
+                {"format": "bundle-v1"},
                 args={"value": 7},
-                deployment_artifacts={"format": "bundle-v1"},
             )
     finally:
         client.close()
@@ -367,12 +476,139 @@ def test_xian_submit_contract_forwards_deployment_artifacts() -> None:
     assert result is sentinel
     assert submit_contract.await_args.args == (
         "con_probe",
-        None,
+        {"format": "bundle-v1"},
         {"value": 7},
     )
-    assert submit_contract.await_args.kwargs["deployment_artifacts"] == {
-        "format": "bundle-v1"
+
+
+def test_xian_async_deploy_contract_builds_and_submits_artifacts() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    sentinel = object()
+
+    async def run_deploy():
+        try:
+            return await client.deploy_contract(
+                "con_probe",
+                "value = Variable()\n",
+                args={"value": 7},
+                lint=False,
+            )
+        finally:
+            await client.close()
+
+    with (
+        patch(
+            "xian_py.xian_async._build_deployment_artifacts",
+            return_value={"format": "xian_contract_artifact_v1"},
+        ) as build_artifacts,
+        patch.object(
+            client,
+            "submit_contract",
+            AsyncMock(return_value=sentinel),
+        ) as submit_contract,
+    ):
+        result = asyncio.run(run_deploy())
+
+    assert result is sentinel
+    build_artifacts.assert_called_once_with(
+        module_name="con_probe",
+        source="value = Variable()\n",
+        lint=False,
+    )
+    submit_contract.assert_awaited_once_with(
+        "con_probe",
+        {"format": "xian_contract_artifact_v1"},
+        args={"value": 7},
+        chi=None,
+        nonce=None,
+        mode=None,
+        wait_for_tx=None,
+        timeout_seconds=None,
+        poll_interval_seconds=None,
+        chi_margin=None,
+        min_chi_headroom=None,
+    )
+
+
+def test_xian_async_deploy_contract_uses_real_xian_vm_compiler() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    sentinel = object()
+
+    async def run_deploy():
+        try:
+            return await client.deploy_contract(
+                "con_complex_ledger",
+                COMPLEX_LEDGER_SOURCE,
+                args={"initial_owner": "alice", "supply": 100},
+                lint=True,
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        client,
+        "submit_contract",
+        AsyncMock(return_value=sentinel),
+    ) as submit_contract:
+        result = asyncio.run(run_deploy())
+
+    assert result is sentinel
+    submit_contract.assert_awaited_once()
+    name, artifacts = submit_contract.await_args.args[:2]
+    assert name == "con_complex_ledger"
+    assert artifacts["format"] == "xian_contract_artifact_v1"
+    assert artifacts["module_name"] == "con_complex_ledger"
+    assert artifacts["vm_profile"] == "xian_vm_v1"
+    assert "runtime_code" not in artifacts
+    assert artifacts["hashes"]["source_sha256"] == hashlib.sha256(
+        artifacts["source"].encode()
+    ).hexdigest()
+    assert artifacts["hashes"]["vm_ir_sha256"] == hashlib.sha256(
+        artifacts["vm_ir_json"].encode()
+    ).hexdigest()
+    assert submit_contract.await_args.kwargs["args"] == {
+        "initial_owner": "alice",
+        "supply": 100,
     }
+
+
+def test_xian_deploy_contract_forwards_to_async_client() -> None:
+    wallet = Wallet()
+    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    sentinel = object()
+
+    try:
+        with patch.object(
+            client._async_client,
+            "deploy_contract",
+            AsyncMock(return_value=sentinel),
+        ) as deploy_contract:
+            result = client.deploy_contract(
+                "con_probe",
+                "value = Variable()\n",
+                args={"value": 7},
+                lint=False,
+            )
+    finally:
+        client.close()
+
+    assert result is sentinel
+    deploy_contract.assert_awaited_once_with(
+        "con_probe",
+        "value = Variable()\n",
+        {"value": 7},
+        chi=None,
+        nonce=None,
+        mode=None,
+        wait_for_tx=None,
+        timeout_seconds=None,
+        poll_interval_seconds=None,
+        chi_margin=None,
+        min_chi_headroom=None,
+        lint=False,
+    )
 
 
 def test_xian_async_rejects_non_ed25519_wallets() -> None:
@@ -1267,7 +1503,7 @@ def test_xian_async_approve_preserves_decimal_precision() -> None:
     )
 
 
-def test_xian_async_get_contract_returns_display_source() -> None:
+def test_xian_async_get_contract_source_returns_display_source() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
     client._session = _FakeSession(
@@ -1278,25 +1514,28 @@ def test_xian_async_get_contract_returns_display_source() -> None:
         ]
     )
 
-    contract = asyncio.run(client.get_contract("currency"))
+    contract = asyncio.run(client.get_contract_source("currency"))
 
     assert contract == "display-code"
+    assert client._session.post_calls[0][0] == (
+        'http://node/abci_query?path="/contract_source/currency"'
+    )
 
 
-def test_xian_async_get_contract_code_returns_runtime_code() -> None:
+def test_xian_async_get_contract_ir_returns_vm_ir() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse(
-                {"result": {"response": {"value": _b64("runtime-code")}}},
+                {"result": {"response": {"value": _b64('{"vm_profile":"xian_vm_v1"}')}}},
             )
         ]
     )
 
-    contract = asyncio.run(client.get_contract_code("currency"))
+    contract = asyncio.run(client.get_contract_ir("currency"))
 
-    assert contract == "runtime-code"
+    assert contract == '{"vm_profile":"xian_vm_v1"}'
 
 
 def test_xian_async_get_approved_amount_reads_approvals() -> None:
@@ -1360,7 +1599,7 @@ def test_xian_async_exposes_perf_status_as_typed_model() -> None:
                     "result": {
                         "response": {
                             "value": _b64(
-                                '{"enabled":true,"tracer_mode":"native_instruction_v1","node_name":"node-0","chain_id":"xian-local-1","global_metrics":{},"recent_blocks":[]}'
+                                '{"enabled":true,"execution_mode":"xian_vm_v1","node_name":"node-0","chain_id":"xian-local-1","global_metrics":{},"recent_blocks":[]}'
                             ),
                             "info": "dict",
                         }
@@ -1374,7 +1613,7 @@ def test_xian_async_exposes_perf_status_as_typed_model() -> None:
 
     assert isinstance(status, PerformanceStatus)
     assert status.enabled is True
-    assert status.tracer_mode == "native_instruction_v1"
+    assert status.execution_mode == "xian_vm_v1"
 
 
 def test_xian_async_exposes_bds_status_as_typed_model() -> None:
@@ -2921,7 +3160,7 @@ def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:
                         result = asyncio.run(run_send())
 
     create_payload = create_tx.call_args.args[0]
-    assert create_payload["chi_supplied"] == 100
+    assert create_payload["chi_supplied"] == 80
     assert result.submitted is True
     assert result.finalized is True
     assert result.receipt is not None

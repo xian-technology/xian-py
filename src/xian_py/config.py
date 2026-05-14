@@ -42,8 +42,8 @@ class SubmissionConfig:
     wait_for_tx: bool = False
     timeout_seconds: float = 30.0
     poll_interval_seconds: float = 0.25
-    chi_margin: float = 0.10
-    min_chi_headroom: int = 10
+    chi_margin: float = 0.0
+    min_chi_headroom: int = 0
 
 
 @dataclass(frozen=True)

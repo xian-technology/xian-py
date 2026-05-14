@@ -10,7 +10,7 @@
 - `wait_for_tx(...)` helper on async and sync clients
 - local nonce reservation cache per client wallet to prevent concurrent nonce
   reuse
-- automatic chi estimation headroom for implicit chi selection
+- automatic chi estimation using the simulator's exact `chi_used`
 - `refresh_nonce()` and `estimate_chi()` helpers
 - block watchers driven from node RPC with resume by height
 - event watchers driven from indexed BDS reads with stable `after_id` cursor
@@ -40,12 +40,7 @@
   - `/perf_status`
   - `/bds_status`
   - state-history queries
-- replace the current per-call sync wrapper model with a persistent background
-  transport so the sync client stops creating and destroying event loops for
-  each call
 - revisit the validator helper in `validator.py`; it should either consume the
   authoritative `xian-contracting` standard rules or move out of the SDK
   `ast.unparse` based path if possible
-- clean up naming and ergonomics in wallet helpers, especially the Ethereum
-  helper where `public_key` is currently an address
 - consider renaming `formating.py` to `formatting.py`

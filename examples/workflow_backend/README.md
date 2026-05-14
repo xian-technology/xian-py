@@ -13,7 +13,6 @@ Backend solution and the deeper reference-app slice built on top of it.
 - `processor_worker.py`: claim submitted items and complete or fail them
 - `projector_worker.py`: rebuild a local SQLite queue/activity projection from
   indexed events and authoritative contract reads
-- `event_worker.py`: compatibility wrapper for `processor_worker.py`
 - `projection.py`: SQLite-backed queue and activity projection
 - `common.py`: shared environment/config helpers used by these examples
 

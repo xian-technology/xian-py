@@ -98,7 +98,7 @@ async def health() -> dict[str, Any]:
         },
         "perf": {
             "enabled": perf.enabled,
-            "tracer_mode": perf.tracer_mode,
+            "execution_mode": perf.execution_mode,
         },
         "bds": (
             None

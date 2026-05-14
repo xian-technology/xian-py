@@ -12,7 +12,6 @@ solution and the first deeper reference-application slice built on top of it.
   transfers, plus projected activity and summary reads
 - `projector_worker.py`: resumable projector that rebuilds a local SQLite read
   model from `Issue`, `Transfer`, and `Burn` events
-- `event_worker.py`: compatibility wrapper for `projector_worker.py`
 - `projection.py`: SQLite-backed projection store for account activity and
   summary views
 - `common.py`: shared environment/config helpers used by these examples

@@ -256,10 +256,10 @@ class AsyncContractClient:
         )
 
     async def get_source(self) -> str | None:
-        return await self.client.get_contract(self.name)
+        return await self.client.get_contract_source(self.name)
 
-    async def get_code(self) -> str | None:
-        return await self.client.get_contract_code(self.name)
+    async def get_ir(self) -> str | None:
+        return await self.client.get_contract_ir(self.name)
 
     def events(self, event: str) -> AsyncEventClient:
         return AsyncEventClient(self.client, self.name, event)
@@ -334,10 +334,10 @@ class ContractClient:
         )
 
     def get_source(self) -> str | None:
-        return self.client.get_contract(self.name)
+        return self.client.get_contract_source(self.name)
 
-    def get_code(self) -> str | None:
-        return self.client.get_contract_code(self.name)
+    def get_ir(self) -> str | None:
+        return self.client.get_contract_ir(self.name)
 
     def events(self, event: str) -> EventClient:
         return EventClient(self.client, self.name, event)

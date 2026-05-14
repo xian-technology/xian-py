@@ -39,7 +39,7 @@ def main() -> None:
             f"{status.latest_block_height} using {ledger_name}"
         )
 
-        existing_source = client.get_contract(ledger_name)
+        existing_source = client.get_contract_source(ledger_name)
         if existing_source is None:
             source_path = contract_source_path()
             code = source_path.read_text(encoding="utf-8")

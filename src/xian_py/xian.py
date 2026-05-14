@@ -275,11 +275,13 @@ class Xian:
             self._async_client.get_state(contract, variable, *keys)
         )
 
-    def get_contract(self, contract: str) -> None | str:
-        return self._run_async(self._async_client.get_contract(contract))
+    def get_contract_source(self, contract: str) -> None | str:
+        return self._run_async(
+            self._async_client.get_contract_source(contract)
+        )
 
-    def get_contract_code(self, contract: str) -> None | str:
-        return self._run_async(self._async_client.get_contract_code(contract))
+    def get_contract_ir(self, contract: str) -> None | str:
+        return self._run_async(self._async_client.get_contract_ir(contract))
 
     def get_approved_amount(
         self,
@@ -322,9 +324,8 @@ class Xian:
     def submit_contract(
         self,
         name: str,
-        code: str | None = None,
+        deployment_artifacts: dict,
         args: dict = None,
-        deployment_artifacts: dict | None = None,
         chi: int | None = None,
         mode: str | None = None,
         wait_for_tx: bool | None = None,
@@ -332,20 +333,54 @@ class Xian:
         poll_interval_seconds: float | None = None,
         chi_margin: float | None = None,
         min_chi_headroom: int | None = None,
+        nonce: int = None,
     ) -> TransactionSubmission:
         return self._run_async(
             self._async_client.submit_contract(
                 name,
-                code,
+                deployment_artifacts,
                 args,
-                deployment_artifacts=deployment_artifacts,
                 chi=chi,
+                nonce=nonce,
                 mode=mode,
                 wait_for_tx=wait_for_tx,
                 timeout_seconds=timeout_seconds,
                 poll_interval_seconds=poll_interval_seconds,
                 chi_margin=chi_margin,
                 min_chi_headroom=min_chi_headroom,
+            )
+        )
+
+    def deploy_contract(
+        self,
+        name: str,
+        source: str,
+        args: dict = None,
+        chi: int | None = None,
+        mode: str | None = None,
+        wait_for_tx: bool | None = None,
+        timeout_seconds: float | None = None,
+        poll_interval_seconds: float | None = None,
+        chi_margin: float | None = None,
+        min_chi_headroom: int | None = None,
+        nonce: int = None,
+        *,
+        lint: bool = True,
+    ) -> TransactionSubmission:
+        return self._run_async(
+            self._async_client.deploy_contract(
+                name,
+                source,
+                args,
+                chi=chi,
+                nonce=nonce,
+                mode=mode,
+                wait_for_tx=wait_for_tx,
+                timeout_seconds=timeout_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+                chi_margin=chi_margin,
+                min_chi_headroom=min_chi_headroom,
+                lint=lint,
             )
         )
 

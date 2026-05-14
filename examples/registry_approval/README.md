@@ -13,7 +13,6 @@ Approval solution and the deeper reference-app slice built on top of it.
   workflow views for pending approvals and activity
 - `projector_worker.py`: rebuild a local SQLite projection from proposal and
   registry events, hydrating rich state from authoritative contract reads
-- `event_worker.py`: compatibility wrapper for `projector_worker.py`
 - `projection.py`: SQLite-backed proposal, record, and activity projection
 - `common.py`: shared environment/config helpers used by these examples
 

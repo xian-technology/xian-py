@@ -25,7 +25,7 @@ def _coerce_int(value: Any) -> int | None:
         return None
     try:
         return int(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
 
 
@@ -367,7 +367,7 @@ class ShieldedRelayerJobResult:
 @dataclass(frozen=True)
 class PerformanceStatus:
     enabled: bool
-    tracer_mode: str | None
+    execution_mode: str | None
     node_name: str | None
     chain_id: str | None
     global_metrics: dict[str, Any]
@@ -379,7 +379,7 @@ class PerformanceStatus:
         raw_dict = dict(raw)
         return cls(
             enabled=bool(raw_dict.get("enabled")),
-            tracer_mode=raw_dict.get("tracer_mode"),
+            execution_mode=raw_dict.get("execution_mode"),
             node_name=raw_dict.get("node_name"),
             chain_id=raw_dict.get("chain_id"),
             global_metrics=dict(raw_dict.get("global_metrics", {})),
@@ -412,7 +412,7 @@ class NodeStatus:
             latest_height = (
                 int(latest_height) if latest_height is not None else None
             )
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             latest_height = None
 
         catching_up = sync_info.get("catching_up")
@@ -525,7 +525,7 @@ class TokenBalance:
                 if last_block_height is not None
                 else None
             )
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             last_block_height = None
 
         balance = raw_dict.get("balance")

@@ -129,19 +129,19 @@ class ValidatorFactory:
 
 
 def validate_contract(
-    contract_code: str, standard: XianStandard = XianStandard.XSC001
+    contract_source: str, standard: XianStandard = XianStandard.XSC001
 ) -> tuple[bool, list[str]]:
     """
     Validates if a contract follows the specified token standard
     Args:
-        contract_code: String containing the contract code
+        contract_source: String containing the contract source
         standard: TokenStandard enum specifying which standard to validate
             against
     Returns:
         Tuple of (is_valid: bool, errors: List[str])
     """
     try:
-        tree = ast.parse(contract_code)
+        tree = ast.parse(contract_source)
         validator = ValidatorFactory.get_validator(standard)
         validator.visit(tree)
         return validator.validate()

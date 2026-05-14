@@ -115,12 +115,6 @@ class EthereumWallet:
     def address(self) -> str:
         return str(self.account.address)
 
-    # Compatibility alias for older code paths that treated the Ethereum
-    # address as the account identifier.
-    @property
-    def public_key(self) -> str:
-        return self.address
-
     def sign_msg(self, msg: str):
         """Sign message with private key"""
         message = encode_defunct(text=msg)
@@ -135,7 +129,7 @@ class EthereumWallet:
                 message, signature=bytes.fromhex(signature)
             )
             return recovered_address.lower() == self.address.lower()
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return False
 
     @staticmethod

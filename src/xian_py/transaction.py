@@ -1,11 +1,8 @@
 """
 Transaction module for interacting with the Xian blockchain.
 
-This module provides both async and sync versions of all functions:
-- Async functions have the `_async` suffix (e.g., get_nonce_async)
-- Sync functions have no suffix (e.g., get_nonce)
-
-Both versions are exported to allow users to choose based on their needs.
+This module provides low-level async helpers. Use `Xian` for the supported
+synchronous client surface.
 """
 
 import hashlib
@@ -18,7 +15,6 @@ from typing import Any
 import aiohttp
 from xian_runtime_types.encoding import encode
 
-from xian_py.async_utils import sync_wrapper
 from xian_py.exception import (
     AbciError,
     RpcError,
@@ -143,10 +139,6 @@ async def get_nonce_async(
     return int(nonce)
 
 
-# Sync wrapper for backward compatibility
-get_nonce = sync_wrapper(get_nonce_async)
-
-
 async def get_tx_async(
     node_url: str,
     tx_hash: str,
@@ -181,10 +173,6 @@ async def get_tx_async(
             data["result"]["tx_result"]["data"] = json.loads(decoded)
 
     return data
-
-
-# Sync wrapper for backward compatibility
-get_tx = sync_wrapper(get_tx_async)
 
 
 def canonical_json(value: dict) -> str:
@@ -231,10 +219,6 @@ async def simulate_tx_async(
         raise SimulationError(res["log"], details=res)
 
     return json.loads(decode_str(res["value"]))
-
-
-# Sync wrapper for backward compatibility
-simulate_tx = sync_wrapper(simulate_tx_async)
 
 
 async def get_status_async(
@@ -333,10 +317,6 @@ async def broadcast_tx_commit_async(
     return data
 
 
-# Sync wrapper for backward compatibility
-broadcast_tx_commit = sync_wrapper(broadcast_tx_commit_async)
-
-
 async def broadcast_tx_wait_async(
     node_url: str,
     tx: dict,
@@ -365,10 +345,6 @@ async def broadcast_tx_wait_async(
         raise XianException(e) from e
 
     return data
-
-
-# Sync wrapper for backward compatibility
-broadcast_tx_wait = sync_wrapper(broadcast_tx_wait_async)
 
 
 async def broadcast_tx_nowait_async(
@@ -401,10 +377,6 @@ async def broadcast_tx_nowait_async(
         raise
     except Exception as e:
         raise XianException(e) from e
-
-
-# Sync wrapper for backward compatibility
-broadcast_tx_nowait = sync_wrapper(broadcast_tx_nowait_async)
 
 
 def _hash_block_tx(block_tx: str) -> str:
@@ -553,5 +525,3 @@ async def wait_for_tx_async(
 
         await sleep(poll_interval_seconds)
 
-
-wait_for_tx = sync_wrapper(wait_for_tx_async)

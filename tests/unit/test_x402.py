@@ -330,8 +330,8 @@ def test_facilitator_settlement_forwards_chi_defaults() -> None:
     assert result.transaction == "tx-x402"
     function, kwargs = client.fake_contract.calls[0]
     assert function == "settle"
-    assert kwargs["chi_margin"] == 0.25
-    assert kwargs["min_chi_headroom"] == 500
+    assert kwargs["chi_margin"] == 0.0
+    assert kwargs["min_chi_headroom"] == 0
     assert kwargs["settlement_contract"] == "con_x402_settlement"
 
 
