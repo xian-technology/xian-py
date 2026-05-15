@@ -355,7 +355,9 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
     assert result.chi_supplied == 77
 
 
-def test_xian_async_estimate_chi_reports_exact_simulation_value() -> None:
+def test_xian_async_estimate_chi_reports_exact_estimate_and_suggested_headroom() -> (
+    None
+):
     wallet = Wallet()
     config = XianClientConfig(
         submission=SubmissionConfig(
@@ -386,7 +388,7 @@ def test_xian_async_estimate_chi_reports_exact_simulation_value() -> None:
 
     simulate_tx_async.assert_awaited_once()
     assert estimate["estimated"] == 77
-    assert estimate["suggested"] == 77
+    assert estimate["suggested"] == 177
 
 
 def test_xian_async_submit_contract_forwards_deployment_artifacts() -> None:
@@ -3170,10 +3172,52 @@ def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:
                         result = asyncio.run(run_send())
 
     create_payload = create_tx.call_args.args[0]
-    assert create_payload["chi_supplied"] == 80
+    assert create_payload["chi_supplied"] == 100
     assert result.submitted is True
     assert result.finalized is True
     assert result.receipt is not None
+
+
+def test_xian_async_send_tx_uses_per_call_chi_headroom() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+
+    async def run_send() -> TransactionSubmission:
+        try:
+            return await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+                chi_margin=1.0,
+                min_chi_headroom=5000,
+            )
+        finally:
+            await client.close()
+
+    with patch.object(tr, "get_nonce_async", AsyncMock(return_value=11)):
+        with patch.object(
+            tr,
+            "simulate_tx_async",
+            AsyncMock(return_value={"chi_used": 1167}),
+        ):
+            with patch.object(
+                tr,
+                "create_tx",
+                return_value={"signed": True},
+            ) as create_tx:
+                with patch.object(
+                    tr,
+                    "broadcast_tx_wait_async",
+                    AsyncMock(
+                        return_value={"result": {"hash": "abc123", "code": 0}}
+                    ),
+                ):
+                    result = asyncio.run(run_send())
+
+    create_payload = create_tx.call_args.args[0]
+    assert create_payload["chi_supplied"] == 6167
+    assert result.chi_estimated == 1167
+    assert result.chi_supplied == 6167
 
 
 def test_xian_async_watch_events_uses_watcher_defaults_from_config() -> None:

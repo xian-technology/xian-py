@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import inspect
 import json
+import math
 import re
 from decimal import Decimal
 from typing import Any, Literal, Optional
@@ -641,8 +642,16 @@ class XianAsync:
         chi_margin: float | None = None,
         min_chi_headroom: int | None = None,
     ) -> dict[str, Any]:
-        # Margin arguments are retained for API compatibility; simulator-derived
-        # chi is supplied exactly.
+        resolved_chi_margin = (
+            self.config.submission.chi_margin
+            if chi_margin is None
+            else chi_margin
+        )
+        resolved_min_chi_headroom = (
+            self.config.submission.min_chi_headroom
+            if min_chi_headroom is None
+            else min_chi_headroom
+        )
         payload = {
             "contract": contract,
             "function": function,
@@ -657,9 +666,14 @@ class XianAsync:
             )
         )
         estimated = int(simulation["chi_used"])
+        suggested = max(
+            estimated,
+            math.ceil(estimated * (1 + resolved_chi_margin)),
+            estimated + resolved_min_chi_headroom,
+        )
         return {
             "estimated": estimated,
-            "suggested": estimated,
+            "suggested": suggested,
             "simulation": simulation,
         }
 
@@ -739,9 +753,11 @@ class XianAsync:
                 contract,
                 function,
                 kwargs,
+                chi_margin=chi_margin,
+                min_chi_headroom=min_chi_headroom,
             )
             estimated_stamps = chi_estimate["estimated"]
-            supplied_stamps = estimated_stamps
+            supplied_stamps = int(chi_estimate["suggested"])
 
         reserved_nonce = await self._reserve_nonce(nonce)
         payload = {
