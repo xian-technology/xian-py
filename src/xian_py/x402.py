@@ -24,6 +24,7 @@ DEFAULT_PERMIT_AUTHORIZER_CONTRACT = "permit_authorizer"
 DEFAULT_SETTLEMENT_CHI_MARGIN = 0.0
 DEFAULT_SETTLEMENT_MIN_CHI_HEADROOM = 0
 XIAN_X402_EXACT_MESSAGE_TAG = "xian-x402-exact-v1"
+XIAN_PERMIT_MESSAGE_TAG = "xian-permit-v2"
 PAYMENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{16,128}$")
 
 
@@ -54,15 +55,21 @@ def is_valid_payment_id(value: str) -> bool:
     return bool(PAYMENT_ID_PATTERN.fullmatch(value))
 
 
-def canonical_amount(value: object) -> str:
+def _canonical_decimal_text(
+    value: object,
+    *,
+    allow_zero: bool,
+    reject_float: bool,
+) -> str:
     if isinstance(value, bool):
         raise TypeError("Amount must not be a boolean.")
-    if isinstance(value, float):
+    if reject_float and isinstance(value, float):
         raise TypeError("Use str, int, or Decimal for exact x402 amounts.")
-    if isinstance(value, int):
-        amount = Decimal(value)
-    elif isinstance(value, Decimal):
+
+    if isinstance(value, Decimal):
         amount = value
+    elif isinstance(value, (int, float)):
+        amount = Decimal(str(value))
     elif isinstance(value, str):
         normalized = value.strip()
         if not normalized:
@@ -74,13 +81,32 @@ def canonical_amount(value: object) -> str:
     else:
         raise TypeError(f"Unsupported amount value: {value!r}")
 
-    if amount <= 0:
+    if allow_zero:
+        if amount < 0:
+            raise ValueError("Amount must be non-negative.")
+    elif amount <= 0:
         raise ValueError("Amount must be positive.")
 
     text = format(amount.normalize(), "f")
     if "." in text:
         text = text.rstrip("0").rstrip(".")
     return text
+
+
+def canonical_amount(value: object) -> str:
+    return _canonical_decimal_text(
+        value,
+        allow_zero=False,
+        reject_float=True,
+    )
+
+
+def canonical_permit_amount(value: object) -> str:
+    return _canonical_decimal_text(
+        value,
+        allow_zero=True,
+        reject_float=False,
+    )
 
 
 def amount_for_contract(value: object) -> int | Decimal:
@@ -164,14 +190,29 @@ def construct_permit_authorizer_message(
     token_contract: str,
     owner: str,
     spender: str,
-    value: str,
+    value: object,
     deadline: str,
     authorizer_contract: str,
     chain_id: str,
+    nonce: int,
 ) -> str:
-    return (
-        f"{token_contract}:{owner}:{spender}:{value}:"
-        f"{deadline}:{authorizer_contract}:{chain_id}"
+    if isinstance(nonce, bool):
+        raise TypeError("nonce must be an integer.")
+    nonce_int = int(nonce)
+    if nonce_int < 0:
+        raise ValueError("nonce must be non-negative.")
+    return "\n".join(
+        [
+            XIAN_PERMIT_MESSAGE_TAG,
+            f"chain_id:{chain_id}",
+            f"authorizer:{authorizer_contract}",
+            f"token_contract:{token_contract}",
+            f"owner:{owner}",
+            f"spender:{spender}",
+            f"amount:{canonical_permit_amount(value)}",
+            f"deadline:{normalize_contract_time(deadline)}",
+            f"nonce:{nonce_int}",
+        ]
     )
 
 
@@ -299,6 +340,7 @@ class XianX402PaymentPayload:
     deadline: str
     signature: str
     permit_signature: str
+    permit_nonce: int
     settlement_contract: str = DEFAULT_SETTLEMENT_CONTRACT
     scheme: str = "exact"
     x402_version: int = 2
@@ -311,6 +353,12 @@ class XianX402PaymentPayload:
         object.__setattr__(
             self, "deadline", normalize_contract_time(self.deadline)
         )
+        if isinstance(self.permit_nonce, bool):
+            raise TypeError("permit_nonce must be an integer.")
+        permit_nonce = int(self.permit_nonce)
+        if permit_nonce < 0:
+            raise ValueError("permit_nonce must be non-negative.")
+        object.__setattr__(self, "permit_nonce", permit_nonce)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -327,6 +375,7 @@ class XianX402PaymentPayload:
             "settlementContract": self.settlement_contract,
             "signature": self.signature,
             "permitSignature": self.permit_signature,
+            "permitNonce": self.permit_nonce,
             "extensions": {
                 PAYMENT_IDENTIFIER: {
                     "id": self.payment_id,
@@ -344,6 +393,13 @@ class XianX402PaymentPayload:
         permit_signature = payload.get("permitSignature") or payload.get(
             "permit_signature"
         )
+        permit_nonce = payload.get("permitNonce")
+        if permit_nonce is None:
+            permit_nonce = payload.get("permit_nonce")
+        if permit_nonce is None:
+            raise ValueError("permitNonce is required.")
+        if isinstance(permit_nonce, bool):
+            raise TypeError("permitNonce must be an integer.")
         settlement_contract = (
             payload.get("settlementContract")
             or payload.get("settlement_contract")
@@ -363,6 +419,7 @@ class XianX402PaymentPayload:
             deadline=str(payload.get("deadline") or ""),
             signature=str(payload.get("signature") or ""),
             permit_signature=str(permit_signature or ""),
+            permit_nonce=int(permit_nonce),
             settlement_contract=str(settlement_contract),
             scheme=str(payload.get("scheme") or "exact"),
             x402_version=int(x402_version),
@@ -442,6 +499,7 @@ def sign_xian_x402_payment(
     *,
     payment_id: str | None = None,
     deadline: str | datetime | None = None,
+    permit_nonce: int = 0,
     permit_authorizer_contract: str = DEFAULT_PERMIT_AUTHORIZER_CONTRACT,
 ) -> XianX402PaymentPayload:
     payment_id = payment_id or generate_payment_id()
@@ -473,6 +531,7 @@ def sign_xian_x402_payment(
         deadline=deadline_text,
         authorizer_contract=permit_authorizer_contract,
         chain_id=chain_id,
+        nonce=permit_nonce,
     )
     return XianX402PaymentPayload(
         network=requirement.network,
@@ -485,6 +544,7 @@ def sign_xian_x402_payment(
         deadline=deadline_text,
         signature=wallet.sign_msg(payment_msg),
         permit_signature=wallet.sign_msg(permit_msg),
+        permit_nonce=permit_nonce,
         settlement_contract=requirement.settlement_contract,
         scheme=requirement.scheme,
         x402_version=requirement.x402_version,
@@ -565,6 +625,7 @@ def verify_xian_x402_payment(
         deadline=payload.deadline,
         authorizer_contract=permit_authorizer_contract,
         chain_id=chain_id_from_xian_network(payload.network),
+        nonce=payload.permit_nonce,
     )
     if not verify_msg(payload.payer, permit_msg, payload.permit_signature):
         return XianX402VerificationResult(
@@ -645,6 +706,7 @@ class XianX402Facilitator:
             deadline=payload.deadline,
             payment_signature=payload.signature,
             permit_signature=payload.permit_signature,
+            permit_nonce=payload.permit_nonce,
             x402_version=payload.x402_version,
             scheme=payload.scheme,
             network=payload.network,
@@ -694,6 +756,7 @@ async def x402_request(
     *,
     wallet: Wallet,
     max_amount: object | None = None,
+    permit_nonce: int = 0,
     session: aiohttp.ClientSession | None = None,
     headers: dict[str, str] | None = None,
     **request_kwargs: Any,
@@ -732,7 +795,11 @@ async def x402_request(
                     f"Payment amount {requirement.amount} exceeds max_amount {max_amount_text}."
                 )
 
-        payment_payload = sign_xian_x402_payment(requirement, wallet)
+        payment_payload = sign_xian_x402_payment(
+            requirement,
+            wallet,
+            permit_nonce=permit_nonce,
+        )
         retry_headers = dict(request_headers)
         retry_headers[PAYMENT_SIGNATURE_HEADER] = payment_payload.to_header()
 

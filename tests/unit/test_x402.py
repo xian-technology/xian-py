@@ -14,6 +14,7 @@ from xian_py import (
     XianX402PaymentRequirement,
     amount_for_contract,
     canonical_amount,
+    canonical_permit_amount,
     chain_id_from_xian_network,
     construct_payment_message,
     construct_permit_authorizer_message,
@@ -51,6 +52,8 @@ def test_canonical_amount_rejects_floats_for_exact_payments() -> None:
     assert canonical_amount(10) == "10"
     assert amount_for_contract("10") == 10
     assert amount_for_contract("0.001") == Decimal("0.001")
+    assert canonical_permit_amount("0.000") == "0"
+    assert canonical_permit_amount(100.0) == "100"
 
     with pytest.raises(TypeError):
         canonical_amount(0.1)
@@ -80,6 +83,7 @@ def test_payment_payload_signs_and_verifies_both_messages() -> None:
         wallet,
         payment_id="pay_1234567890abcdef",
         deadline="2099-01-01 00:00:00",
+        permit_nonce=7,
     )
 
     result = verify_xian_x402_payment(
@@ -91,6 +95,7 @@ def test_payment_payload_signs_and_verifies_both_messages() -> None:
     assert result.valid is True
     assert result.payer == wallet.public_key
     assert result.payment_id == "pay_1234567890abcdef"
+    assert payload.permit_nonce == 7
 
 
 def test_payment_payload_header_round_trips() -> None:
@@ -232,12 +237,20 @@ def test_signable_messages_match_contract_profile() -> None:
         deadline="2099-01-01 00:00:00",
         authorizer_contract="permit_authorizer",
         chain_id="xian-local-1",
+        nonce=12,
     )
 
     assert message.startswith("xian-x402-exact-v1:")
     assert permit_message == (
-        "currency:buyer:con_x402_settlement:0.001:"
-        "2099-01-01 00:00:00:permit_authorizer:xian-local-1"
+        "xian-permit-v2\n"
+        "chain_id:xian-local-1\n"
+        "authorizer:permit_authorizer\n"
+        "token_contract:currency\n"
+        "owner:buyer\n"
+        "spender:con_x402_settlement\n"
+        "amount:0.001\n"
+        "deadline:2099-01-01 00:00:00\n"
+        "nonce:12"
     )
 
 
@@ -333,6 +346,7 @@ def test_facilitator_settlement_forwards_chi_defaults() -> None:
     assert kwargs["chi_margin"] == 0.0
     assert kwargs["min_chi_headroom"] == 0
     assert kwargs["settlement_contract"] == "con_x402_settlement"
+    assert kwargs["permit_nonce"] == payload.permit_nonce
 
 
 def test_facilitator_rejects_mismatched_payment_before_submission() -> None:
