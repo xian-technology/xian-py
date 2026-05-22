@@ -129,7 +129,7 @@ class EthereumWallet:
                 message, signature=bytes.fromhex(signature)
             )
             return recovered_address.lower() == self.address.lower()
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return False
 
     @staticmethod
