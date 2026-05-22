@@ -57,6 +57,34 @@ def _derive_slip10_ed25519_private_key(
 
 
 WalletPrivateKey: TypeAlias = str | None
+_XIAN_WALLET_V1_CONTEXT = b"xian-wallet-seed-v1"
+
+
+def _normalize_bip39_mnemonic(mnemonic: str) -> str:
+    mnemonic_type = _load_mnemonic_library()
+    mnemonic_library = mnemonic_type("english")
+    normalized = " ".join(mnemonic.strip().lower().split())
+    if not mnemonic_library.check(normalized):
+        raise ValueError("invalid BIP39 mnemonic")
+    return normalized
+
+
+def _derive_xian_v1_mnemonic_private_key(
+    mnemonic: str, account_index: int = 0
+) -> str:
+    if (
+        type(account_index) is not int
+        or account_index < 0
+        or account_index > 0xFFFFFFFF
+    ):
+        raise ValueError("account_index must be an integer between 0 and 4294967295")
+
+    mnemonic_type = _load_mnemonic_library()
+    seed = mnemonic_type.to_seed(_normalize_bip39_mnemonic(mnemonic))
+    digest_input = seed + _XIAN_WALLET_V1_CONTEXT
+    if account_index != 0:
+        digest_input += account_index.to_bytes(4, "big")
+    return hashlib.sha256(digest_input).hexdigest()
 
 
 def _verify_ed25519_message(public_key: str, msg: str, signature: str) -> bool:
@@ -74,6 +102,16 @@ class Wallet:
             self._account = Ed25519Account(private_key)
         else:
             self._account = Ed25519Account.generate()
+
+    @classmethod
+    def from_mnemonic_xian_v1(
+        cls, mnemonic: str, account_index: int = 0
+    ) -> "Wallet":
+        """Create a wallet using the browser/mobile Xian v1 mnemonic scheme."""
+        private_key = _derive_xian_v1_mnemonic_private_key(
+            mnemonic, account_index
+        )
+        return cls(private_key=private_key)
 
     @property
     def private_key(self) -> str:

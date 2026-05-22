@@ -123,6 +123,12 @@ wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
 # Optional HD-wallet derivation. Requires: uv add "xian-tech-py[hd]".
 hd = HDWallet()
 derived_wallet = hd.get_wallet([44, 734, 0, 0, 0])
+
+# Browser/mobile wallet recovery compatibility. Also requires [hd].
+wallet = Wallet.from_mnemonic_xian_v1(os.environ["XIAN_RECOVERY_PHRASE"])
+second_account = Wallet.from_mnemonic_xian_v1(
+    os.environ["XIAN_RECOVERY_PHRASE"], account_index=1
+)
 ```
 
 Inspect node and indexer health:
