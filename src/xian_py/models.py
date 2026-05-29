@@ -4,6 +4,8 @@ import json
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from xian_py._coercion import coerce_int as _coerce_int
+
 
 def _decode_json_mapping(value: Any) -> dict[str, Any] | None:
     if value is None:
@@ -18,15 +20,6 @@ def _decode_json_mapping(value: Any) -> dict[str, Any] | None:
         if isinstance(decoded, Mapping):
             return dict(decoded)
     return None
-
-
-def _coerce_int(value: Any) -> int | None:
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _coerce_str(value: Any) -> str | None:

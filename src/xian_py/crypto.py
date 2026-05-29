@@ -6,6 +6,17 @@ from nacl.public import Box, PrivateKey, PublicKey
 from nacl.signing import SigningKey
 
 
+def _private_key_from_ed25519_hex(private_key: str) -> PrivateKey:
+    ed25519_seed = bytes.fromhex(private_key)
+    signing_key = SigningKey(ed25519_seed)
+    full_ed25519_sk = ed25519_seed + signing_key.verify_key.encode()
+    return PrivateKey(crypto_sign_ed25519_sk_to_curve25519(full_ed25519_sk))
+
+
+def _public_key_from_ed25519_hex(public_key: str) -> PublicKey:
+    return PublicKey(crypto_sign_ed25519_pk_to_curve25519(bytes.fromhex(public_key)))
+
+
 def encrypt(
     sender_private_key: str, receiver_public_key: str, cleartext_msg: str
 ) -> str:
@@ -24,16 +35,8 @@ def encrypt(
     Returns:
         str: The encrypted message as a hexadecimal string.
     """
-    ed25519_seed = bytes.fromhex(sender_private_key)
-    signing_key = SigningKey(ed25519_seed)
-
-    full_ed25519_sk = ed25519_seed + signing_key.verify_key.encode()
-    x25519_sk = crypto_sign_ed25519_sk_to_curve25519(full_ed25519_sk)
-    sender_pk = PrivateKey(x25519_sk)
-
-    ed25519_pk = bytes.fromhex(receiver_public_key)
-    x25519_pk = crypto_sign_ed25519_pk_to_curve25519(ed25519_pk)
-    recipient_pk = PublicKey(x25519_pk)
+    sender_pk = _private_key_from_ed25519_hex(sender_private_key)
+    recipient_pk = _public_key_from_ed25519_hex(receiver_public_key)
 
     box = Box(sender_pk, recipient_pk)
     encrypted = box.encrypt(cleartext_msg.encode("utf-8"))
@@ -57,16 +60,8 @@ def decrypt_as_receiver(
     Returns:
         str: The decrypted plaintext message.
     """
-    ed25519_seed = bytes.fromhex(receiver_private_key)
-    signing_key = SigningKey(ed25519_seed)
-    full_ed25519_sk = ed25519_seed + signing_key.verify_key.encode()
-
-    x25519_sk = crypto_sign_ed25519_sk_to_curve25519(full_ed25519_sk)
-    recipient_sk = PrivateKey(x25519_sk)
-
-    ed25519_pk = bytes.fromhex(sender_public_key)
-    x25519_pk = crypto_sign_ed25519_pk_to_curve25519(ed25519_pk)
-    sender_pk = PublicKey(x25519_pk)
+    recipient_sk = _private_key_from_ed25519_hex(receiver_private_key)
+    sender_pk = _public_key_from_ed25519_hex(sender_public_key)
 
     recipient_box = Box(recipient_sk, sender_pk)
     decrypted_plaintext = recipient_box.decrypt(bytes.fromhex(encrypted_msg))
@@ -90,16 +85,8 @@ def decrypt_as_sender(
     Returns:
         str: The decrypted plaintext message.
     """
-    ed25519_seed = bytes.fromhex(sender_private_key)
-    signing_key = SigningKey(ed25519_seed)
-    full_ed25519_sk = ed25519_seed + signing_key.verify_key.encode()
-
-    x25519_sk = crypto_sign_ed25519_sk_to_curve25519(full_ed25519_sk)
-    sender_sk = PrivateKey(x25519_sk)
-
-    ed25519_pk = bytes.fromhex(receiver_public_key)
-    x25519_pk = crypto_sign_ed25519_pk_to_curve25519(ed25519_pk)
-    receiver_pk = PublicKey(x25519_pk)
+    sender_sk = _private_key_from_ed25519_hex(sender_private_key)
+    receiver_pk = _public_key_from_ed25519_hex(receiver_public_key)
 
     sender_box = Box(sender_sk, receiver_pk)
     decrypted_plaintext = sender_box.decrypt(bytes.fromhex(encrypted_msg))

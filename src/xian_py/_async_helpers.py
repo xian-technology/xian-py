@@ -14,15 +14,9 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import xian_py.transaction as tr
+from xian_py._coercion import coerce_int as _coerce_int
 from xian_py.models import LiveEvent
 from xian_py.wallet import Wallet
-
-
-def _coerce_int(value: Any) -> int | None:
-    try:
-        return int(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
 
 
 def _rpc_ws_url(url: str) -> str:
