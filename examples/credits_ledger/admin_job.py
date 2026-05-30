@@ -85,12 +85,8 @@ def main() -> None:
                 ),
                 f"issue {parsed_amount} credits",
             )
-            print(
-                f"Issued {parsed_amount} credits to {issue_to}: {result.tx_hash}"
-            )
-            print(
-                f"Recipient balance: {ledger.get_state('balances', issue_to)}"
-            )
+            print(f"Issued {parsed_amount} credits to {issue_to}: {result.tx_hash}")
+            print(f"Recipient balance: {ledger.get_state('balances', issue_to)}")
 
 
 if __name__ == "__main__":

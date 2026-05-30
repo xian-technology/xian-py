@@ -56,9 +56,7 @@ async def paid_data(request: Request) -> JSONResponse:
         return JSONResponse(
             {"error": "payment required"},
             status_code=402,
-            headers={
-                PAYMENT_REQUIRED_HEADER: requirement.to_payment_required_header()
-            },
+            headers={PAYMENT_REQUIRED_HEADER: requirement.to_payment_required_header()},
         )
 
     payload = XianX402PaymentPayload.from_header(payment_header)

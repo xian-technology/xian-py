@@ -6,8 +6,7 @@ import xian_py.wallet as wallet_module
 from xian_py.wallet import Wallet, verify_msg
 
 VALID_MNEMONIC = (
-    "abandon abandon abandon abandon abandon abandon abandon abandon "
-    "abandon abandon abandon about"
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 )
 
 
@@ -21,9 +20,7 @@ class _FakeMnemonic:
     @staticmethod
     def to_seed(mnemonic: str) -> bytes:
         assert mnemonic == VALID_MNEMONIC
-        return hashlib.pbkdf2_hmac(
-            "sha512", mnemonic.encode(), b"mnemonic", 2048, 64
-        )
+        return hashlib.pbkdf2_hmac("sha512", mnemonic.encode(), b"mnemonic", 2048, 64)
 
 
 def test_wallet_can_sign_and_verify_messages() -> None:
@@ -61,10 +58,7 @@ def test_wallet_derives_browser_mobile_xian_v1_mnemonic(monkeypatch) -> None:
     wallet = Wallet.from_mnemonic_xian_v1(VALID_MNEMONIC.upper())
     second_wallet = Wallet.from_mnemonic_xian_v1(VALID_MNEMONIC, account_index=1)
 
-    assert (
-        wallet.private_key
-        == "457c57823c3ba5c795eb91a34b3a666d2bdf7a40bf8154e715dcf687a3ded6ec"
-    )
+    assert wallet.private_key == "457c57823c3ba5c795eb91a34b3a666d2bdf7a40bf8154e715dcf687a3ded6ec"
     assert (
         second_wallet.private_key
         == "a40393033de03256f7d4b2c42860464879c6d763febbc89a25989598af246fa7"

@@ -52,10 +52,7 @@ def main() -> None:
 
     with Xian(node_url(), chain_id=chain_id(), wallet=wallet) as client:
         status = client.get_node_status()
-        print(
-            f"Connected to {status.network} at height "
-            f"{status.latest_block_height}"
-        )
+        print(f"Connected to {status.network} at height {status.latest_block_height}")
 
         existing_source = client.get_contract_source(contract_name)
         if existing_source is None:
@@ -65,9 +62,7 @@ def main() -> None:
                     name=contract_name,
                     code=code,
                     args={
-                        "name": os.environ.get(
-                            "XIAN_WORKFLOW_NAME", "Job Workflow"
-                        ),
+                        "name": os.environ.get("XIAN_WORKFLOW_NAME", "Job Workflow"),
                         "operator": os.environ.get(
                             "XIAN_WORKFLOW_OPERATOR",
                             wallet.public_key,
@@ -97,14 +92,10 @@ def main() -> None:
                 )
                 print(f"Added worker {worker}: {result.tx_hash}")
 
-        worker_fund_target = _as_decimal(
-            os.environ.get("XIAN_WORKFLOW_WORKER_FUND_AMOUNT", "250")
-        )
+        worker_fund_target = _as_decimal(os.environ.get("XIAN_WORKFLOW_WORKER_FUND_AMOUNT", "250"))
         native_token = client.token("currency")
         if worker_fund_target > 0:
-            for worker in _split_workers(
-                os.environ.get("XIAN_WORKFLOW_WORKERS")
-            ):
+            for worker in _split_workers(os.environ.get("XIAN_WORKFLOW_WORKERS")):
                 current_balance = _as_decimal(native_token.balance_of(worker))
                 if current_balance >= worker_fund_target:
                     continue
@@ -135,9 +126,7 @@ def main() -> None:
                         "XIAN_WORKFLOW_PAYLOAD_URI",
                         f"https://example.invalid/jobs/{item_id}",
                     ),
-                    metadata_ref=os.environ.get(
-                        "XIAN_WORKFLOW_METADATA_REF", ""
-                    ),
+                    metadata_ref=os.environ.get("XIAN_WORKFLOW_METADATA_REF", ""),
                     mode="checktx",
                     wait_for_tx=True,
                 ),

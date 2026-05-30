@@ -26,9 +26,7 @@ class XianException(Exception):
         )
         self.ex_msg = message
         self.ex = cause or (
-            message_or_exception
-            if isinstance(message_or_exception, Exception)
-            else None
+            message_or_exception if isinstance(message_or_exception, Exception) else None
         )
         self.details = details or {}
 

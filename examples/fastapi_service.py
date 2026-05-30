@@ -144,8 +144,7 @@ async def submit_transfer(request: TransferRequest) -> dict[str, Any]:
         raise HTTPException(
             status_code=503,
             detail=(
-                "Set XIAN_WALLET_PRIVATE_KEY to enable transfer submission "
-                "in this example service."
+                "Set XIAN_WALLET_PRIVATE_KEY to enable transfer submission in this example service."
             ),
         )
 

@@ -15,9 +15,7 @@ def test_indexed_event_from_dict_decodes_json_payload_fields() -> None:
     assert event.data_indexed == {"to": "alice"}
 
 
-def test_indexed_event_from_dict_ignores_non_mapping_json_payload_fields() -> (
-    None
-):
+def test_indexed_event_from_dict_ignores_non_mapping_json_payload_fields() -> None:
     event = IndexedEvent.from_dict(
         {
             "id": 8,
@@ -32,15 +30,11 @@ def test_indexed_event_from_dict_ignores_non_mapping_json_payload_fields() -> (
 
 
 def test_indexed_models_fall_back_to_created_at() -> None:
-    tx = IndexedTransaction.from_dict(
-        {"tx_hash": "abc", "created_at": "2026-03-24T00:00:00Z"}
-    )
+    tx = IndexedTransaction.from_dict({"tx_hash": "abc", "created_at": "2026-03-24T00:00:00Z"})
     event = IndexedEvent.from_dict(
         {"id": 1, "event": "Issue", "created_at": "2026-03-24T00:00:01Z"}
     )
-    state = StateEntry.from_dict(
-        {"key": "a", "value": "b", "created_at": "2026-03-24T00:00:02Z"}
-    )
+    state = StateEntry.from_dict({"key": "a", "value": "b", "created_at": "2026-03-24T00:00:02Z"})
 
     assert tx.created == "2026-03-24T00:00:00Z"
     assert event.created == "2026-03-24T00:00:01Z"

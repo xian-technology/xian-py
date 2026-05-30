@@ -167,9 +167,7 @@ async def get_account(address: str, activity_limit: int = 20) -> dict[str, Any]:
     return {
         "contract": contract_name(),
         "address": address,
-        "on_chain_balance": _json_amount(
-            await ledger().get_state("balances", address)
-        ),
+        "on_chain_balance": _json_amount(await ledger().get_state("balances", address)),
         "projection": account_projection.__dict__,
         "recent_activity": [event.__dict__ for event in recent_events],
     }

@@ -34,9 +34,7 @@ def _json_dumps(payload: dict[str, Any]) -> str:
 
 def encode_json_header(payload: dict[str, Any]) -> str:
     """Encode a JSON object for an x402 HTTP header."""
-    return base64.b64encode(_json_dumps(payload).encode("utf-8")).decode(
-        "ascii"
-    )
+    return base64.b64encode(_json_dumps(payload).encode("utf-8")).decode("ascii")
 
 
 def decode_json_header(value: str) -> dict[str, Any]:
@@ -178,11 +176,7 @@ def construct_payment_message(
         deadline,
         settlement_contract,
     ]
-    return (
-        XIAN_X402_EXACT_MESSAGE_TAG
-        + ":"
-        + ":".join(_sha3_text(field) for field in fields)
-    )
+    return XIAN_X402_EXACT_MESSAGE_TAG + ":" + ":".join(_sha3_text(field) for field in fields)
 
 
 def construct_permit_authorizer_message(
@@ -287,17 +281,11 @@ class XianX402PaymentRequirement:
         try:
             item = accepts[selected_index]
         except IndexError as exc:
-            raise ValueError(
-                "Selected payment requirement is missing."
-            ) from exc
+            raise ValueError("Selected payment requirement is missing.") from exc
         if not isinstance(item, dict):
             raise ValueError("Selected payment requirement must be an object.")
 
-        amount = (
-            item.get("maxAmountRequired")
-            or item.get("amount")
-            or item.get("price")
-        )
+        amount = item.get("maxAmountRequired") or item.get("amount") or item.get("price")
         if isinstance(amount, str) and amount.startswith("$"):
             raise ValueError(
                 "Dollar-denominated x402 prices must be resolved to a Xian token amount."
@@ -308,9 +296,7 @@ class XianX402PaymentRequirement:
             or item.get("settlement_contract")
             or DEFAULT_SETTLEMENT_CONTRACT
         )
-        x402_version = payload.get("x402Version") or payload.get(
-            "x402_version", 2
-        )
+        x402_version = payload.get("x402Version") or payload.get("x402_version", 2)
         extensions = item.get("extensions") or payload.get("extensions") or {}
 
         return cls(
@@ -350,9 +336,7 @@ class XianX402PaymentPayload:
         if not is_valid_payment_id(self.payment_id):
             raise ValueError("Invalid x402 payment_id.")
         object.__setattr__(self, "amount", canonical_amount(self.amount))
-        object.__setattr__(
-            self, "deadline", normalize_contract_time(self.deadline)
-        )
+        object.__setattr__(self, "deadline", normalize_contract_time(self.deadline))
         if isinstance(self.permit_nonce, bool):
             raise TypeError("permit_nonce must be an integer.")
         permit_nonce = int(self.permit_nonce)
@@ -390,9 +374,7 @@ class XianX402PaymentPayload:
     def from_dict(cls, payload: dict[str, Any]) -> "XianX402PaymentPayload":
         payment_id = payload.get("paymentId") or payload.get("payment_id")
         pay_to = payload.get("payTo") or payload.get("pay_to")
-        permit_signature = payload.get("permitSignature") or payload.get(
-            "permit_signature"
-        )
+        permit_signature = payload.get("permitSignature") or payload.get("permit_signature")
         permit_nonce = payload.get("permitNonce")
         if permit_nonce is None:
             permit_nonce = payload.get("permit_nonce")
@@ -405,9 +387,7 @@ class XianX402PaymentPayload:
             or payload.get("settlement_contract")
             or DEFAULT_SETTLEMENT_CONTRACT
         )
-        x402_version = payload.get("x402Version") or payload.get(
-            "x402_version", 2
-        )
+        x402_version = payload.get("x402Version") or payload.get("x402_version", 2)
         return cls(
             network=str(payload.get("network") or ""),
             asset=str(payload.get("asset") or ""),
@@ -503,11 +483,7 @@ def sign_xian_x402_payment(
     permit_authorizer_contract: str = DEFAULT_PERMIT_AUTHORIZER_CONTRACT,
 ) -> XianX402PaymentPayload:
     payment_id = payment_id or generate_payment_id()
-    deadline_text = (
-        contract_deadline()
-        if deadline is None
-        else normalize_contract_time(deadline)
-    )
+    deadline_text = contract_deadline() if deadline is None else normalize_contract_time(deadline)
     payer = wallet.public_key
     payment_msg = construct_payment_message(
         x402_version=requirement.x402_version,
@@ -650,9 +626,7 @@ class XianX402Facilitator:
         requirement: XianX402PaymentRequirement,
         permit_authorizer_contract: str = DEFAULT_PERMIT_AUTHORIZER_CONTRACT,
         settlement_chi_margin: float = DEFAULT_SETTLEMENT_CHI_MARGIN,
-        settlement_min_chi_headroom: int = (
-            DEFAULT_SETTLEMENT_MIN_CHI_HEADROOM
-        ),
+        settlement_min_chi_headroom: int = (DEFAULT_SETTLEMENT_MIN_CHI_HEADROOM),
     ) -> None:
         self.client = client
         self.requirement = requirement
@@ -660,9 +634,7 @@ class XianX402Facilitator:
         self.settlement_chi_margin = settlement_chi_margin
         self.settlement_min_chi_headroom = settlement_min_chi_headroom
 
-    def verify(
-        self, payload: XianX402PaymentPayload
-    ) -> XianX402VerificationResult:
+    def verify(self, payload: XianX402PaymentPayload) -> XianX402VerificationResult:
         return verify_xian_x402_payment(
             payload,
             self.requirement,
@@ -692,9 +664,7 @@ class XianX402Facilitator:
                 error=verification.error,
             )
 
-        submission = await self.client.contract(
-            payload.settlement_contract
-        ).send(
+        submission = await self.client.contract(payload.settlement_contract).send(
             "settle",
             token_contract=payload.asset,
             payer=payload.payer,
@@ -715,18 +685,12 @@ class XianX402Facilitator:
             mode=mode,
             wait_for_tx=wait_for_tx,
             chi=chi,
-            chi_margin=(
-                self.settlement_chi_margin if chi_margin is None else chi_margin
-            ),
+            chi_margin=(self.settlement_chi_margin if chi_margin is None else chi_margin),
             min_chi_headroom=(
-                self.settlement_min_chi_headroom
-                if min_chi_headroom is None
-                else min_chi_headroom
+                self.settlement_min_chi_headroom if min_chi_headroom is None else min_chi_headroom
             ),
         )
-        receipt_failed = (
-            submission.receipt is not None and not submission.receipt.success
-        )
+        receipt_failed = submission.receipt is not None and not submission.receipt.success
         success = (
             submission.submitted
             and submission.accepted is not False
@@ -781,13 +745,9 @@ async def x402_request(
                     body=body,
                 )
 
-            payment_required = _payment_required_from_response(
-                response.headers, body
-            )
+            payment_required = _payment_required_from_response(response.headers, body)
 
-        requirement = XianX402PaymentRequirement.from_payment_required(
-            payment_required
-        )
+        requirement = XianX402PaymentRequirement.from_payment_required(payment_required)
         if max_amount is not None:
             max_amount_text = canonical_amount(max_amount)
             if Decimal(str(requirement.amount)) > Decimal(max_amount_text):

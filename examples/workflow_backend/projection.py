@@ -181,9 +181,7 @@ class WorkflowProjection:
 
     def get_summary(self) -> WorkflowProjectionSummary:
         item_count = int(
-            self.connection.execute(
-                "SELECT COUNT(*) FROM workflow_items"
-            ).fetchone()[0]
+            self.connection.execute("SELECT COUNT(*) FROM workflow_items").fetchone()[0]
         )
         submitted_count = self._status_count("submitted")
         processing_count = self._status_count("processing")
@@ -191,9 +189,7 @@ class WorkflowProjection:
         failed_count = self._status_count("failed")
         cancelled_count = self._status_count("cancelled")
         activity_count = int(
-            self.connection.execute(
-                "SELECT COUNT(*) FROM workflow_activity"
-            ).fetchone()[0]
+            self.connection.execute("SELECT COUNT(*) FROM workflow_activity").fetchone()[0]
         )
         last_event_id = self.connection.execute(
             "SELECT MAX(event_id) FROM workflow_activity"

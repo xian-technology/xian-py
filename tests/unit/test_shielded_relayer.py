@@ -79,9 +79,7 @@ def test_async_relayer_client_reads_info_and_quote() -> None:
                             "min_note_relayer_fee": 1,
                             "min_command_relayer_fee": 2,
                             "allowed_note_contracts": ["con_private_usd"],
-                            "allowed_command_contracts": [
-                                "con_shielded_commands"
-                            ],
+                            "allowed_command_contracts": ["con_shielded_commands"],
                             "allowed_command_targets": ["con_dex"],
                         },
                     }
@@ -121,13 +119,8 @@ def test_async_relayer_client_reads_info_and_quote() -> None:
         assert isinstance(quote, ShieldedRelayerQuote)
         assert quote.relayer_fee == 2
         assert session.requests[0][1] == "http://127.0.0.1:38888/v1/info"
-        assert (
-            session.requests[0][2]["headers"]["Authorization"]
-            == "Bearer secret"
-        )
-        assert json.dumps(
-            session.requests[1][2]["json"], sort_keys=True
-        ) == json.dumps(
+        assert session.requests[0][2]["headers"]["Authorization"] == "Bearer secret"
+        assert json.dumps(session.requests[1][2]["json"], sort_keys=True) == json.dumps(
             {
                 "kind": "shielded_note_relay_transfer",
                 "contract": "con_private_usd",
@@ -189,9 +182,7 @@ def test_async_relayer_client_submits_and_reads_job() -> None:
                 ),
             ]
         )
-        client = ShieldedRelayerAsyncClient(
-            "http://127.0.0.1:38888", session=session
-        )
+        client = ShieldedRelayerAsyncClient("http://127.0.0.1:38888", session=session)
 
         job = await client.submit_shielded_command(
             contract="con_shielded_commands",
@@ -242,9 +233,7 @@ def test_async_relayer_client_does_not_close_caller_owned_session() -> None:
                             "min_note_relayer_fee": 1,
                             "min_command_relayer_fee": 2,
                             "allowed_note_contracts": ["con_private_usd"],
-                            "allowed_command_contracts": [
-                                "con_shielded_commands"
-                            ],
+                            "allowed_command_contracts": ["con_shielded_commands"],
                             "allowed_command_targets": ["con_dex"],
                         },
                     }
@@ -269,9 +258,7 @@ def test_async_relayer_client_does_not_close_caller_owned_session() -> None:
                             "min_note_relayer_fee": 1,
                             "min_command_relayer_fee": 2,
                             "allowed_note_contracts": ["con_private_usd"],
-                            "allowed_command_contracts": [
-                                "con_shielded_commands"
-                            ],
+                            "allowed_command_contracts": ["con_shielded_commands"],
                             "allowed_command_targets": ["con_dex"],
                         },
                     }
@@ -349,9 +336,7 @@ def test_async_relayer_pool_client_fails_over_quote_requests() -> None:
     asyncio.run(run())
 
 
-def test_async_relayer_pool_client_does_not_close_caller_owned_session() -> (
-    None
-):
+def test_async_relayer_pool_client_does_not_close_caller_owned_session() -> None:
     async def run() -> None:
         session = _FakeSession(
             [
@@ -375,9 +360,7 @@ def test_async_relayer_pool_client_does_not_close_caller_owned_session() -> (
                             "min_note_relayer_fee": 1,
                             "min_command_relayer_fee": 2,
                             "allowed_note_contracts": ["con_private_usd"],
-                            "allowed_command_contracts": [
-                                "con_shielded_commands"
-                            ],
+                            "allowed_command_contracts": ["con_shielded_commands"],
                             "allowed_command_targets": ["con_dex"],
                         },
                     }
@@ -402,9 +385,7 @@ def test_async_relayer_pool_client_does_not_close_caller_owned_session() -> (
                             "min_note_relayer_fee": 1,
                             "min_command_relayer_fee": 2,
                             "allowed_note_contracts": ["con_private_usd"],
-                            "allowed_command_contracts": [
-                                "con_shielded_commands"
-                            ],
+                            "allowed_command_contracts": ["con_shielded_commands"],
                             "allowed_command_targets": ["con_dex"],
                         },
                     }
@@ -433,9 +414,7 @@ def test_async_relayer_pool_client_does_not_close_caller_owned_session() -> (
     asyncio.run(run())
 
 
-def test_async_relayer_pool_client_requires_explicit_routing_for_submit() -> (
-    None
-):
+def test_async_relayer_pool_client_requires_explicit_routing_for_submit() -> None:
     async def run() -> None:
         pool = ShieldedRelayerAsyncPoolClient(
             [
@@ -473,9 +452,7 @@ def test_async_relayer_pool_client_requires_explicit_routing_for_submit() -> (
     asyncio.run(run())
 
 
-def test_async_relayer_pool_client_routes_single_submit_without_relayer_id() -> (
-    None
-):
+def test_async_relayer_pool_client_routes_single_submit_without_relayer_id() -> None:
     async def run() -> None:
         session = _FakeSession(
             handler=lambda method, url, kwargs: _FakeResponse(
@@ -504,11 +481,8 @@ def test_async_relayer_pool_client_routes_single_submit_without_relayer_id() -> 
                         "response": {"result": {"hash": "DEF456"}},
                     },
                 }
-                if method == "POST"
-                and url == "http://relayer-only/v1/jobs/shielded-command"
-                else (_ for _ in ()).throw(
-                    AssertionError(f"unexpected URL {url} with {kwargs}")
-                )
+                if method == "POST" and url == "http://relayer-only/v1/jobs/shielded-command"
+                else (_ for _ in ()).throw(AssertionError(f"unexpected URL {url} with {kwargs}"))
             )
         )
         pool = ShieldedRelayerAsyncPoolClient(
@@ -543,9 +517,7 @@ def test_async_relayer_client_raises_transport_error_for_http_error() -> None:
     async def run() -> None:
         client = ShieldedRelayerAsyncClient(
             "http://relayer",
-            session=_FakeSession(
-                [_FakeResponse({"error": "unauthorized"}, status=401)]
-            ),
+            session=_FakeSession([_FakeResponse({"error": "unauthorized"}, status=401)]),
         )
 
         try:

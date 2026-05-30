@@ -1,6 +1,8 @@
 import asyncio
+import inspect
 import threading
 from concurrent.futures import Future
+from functools import wraps
 from typing import Any, Generic, TypeVar
 
 from xian_py.application_clients import (
@@ -10,22 +12,6 @@ from xian_py.application_clients import (
     TokenClient,
 )
 from xian_py.config import XianClientConfig
-from xian_py.models import (
-    BdsStatus,
-    DeveloperRewardSummary,
-    IndexedBlock,
-    IndexedEvent,
-    IndexedTransaction,
-    LiveEvent,
-    NodeStatus,
-    PerformanceStatus,
-    ShieldedOutputTag,
-    ShieldedWalletHistoryEntry,
-    StateEntry,
-    TokenBalancePage,
-    TransactionReceipt,
-    TransactionSubmission,
-)
 from xian_py.wallet import Wallet
 from xian_py.xian_async import XianAsync
 
@@ -96,13 +82,30 @@ class Xian:
     def __exit__(self, exc_type, exc, tb) -> None:
         self.close()
 
+    def __getattr__(self, name: str) -> Any:
+        async_client = self.__dict__.get("_async_client")
+        if async_client is None:
+            raise AttributeError(f"{type(self).__name__!s} object has no attribute {name!r}")
+
+        try:
+            async_attr = getattr(async_client, name)
+        except AttributeError as exc:
+            raise AttributeError(
+                f"{type(self).__name__!s} object has no attribute {name!r}"
+            ) from exc
+
+        if not callable(async_attr):
+            return async_attr
+
+        @wraps(async_attr)
+        def _sync_delegate(*args: Any, **kwargs: Any) -> Any:
+            return self._coerce_async_result(async_attr(*args, **kwargs))
+
+        return _sync_delegate
+
     def _ensure_runtime(self) -> None:
         with self._runtime_lock:
-            if (
-                self._loop is not None
-                and self._thread is not None
-                and self._thread.is_alive()
-            ):
+            if self._loop is not None and self._thread is not None and self._thread.is_alive():
                 return
 
             started = threading.Event()
@@ -117,9 +120,7 @@ class Xian:
                 for task in pending:
                     task.cancel()
                 if pending:
-                    loop.run_until_complete(
-                        asyncio.gather(*pending, return_exceptions=True)
-                    )
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                 loop.close()
 
             self._thread = threading.Thread(
@@ -148,6 +149,13 @@ class Xian:
             "Use XianAsync directly for async operations."
         )
 
+    def _coerce_async_result(self, result: Any) -> Any:
+        if inspect.isasyncgen(result):
+            return _SyncAsyncIterator(self, result)
+        if inspect.isawaitable(result):
+            return self._run_async(result)
+        return result
+
     def close(self) -> None:
         with self._runtime_lock:
             loop = self._loop
@@ -163,423 +171,6 @@ class Xian:
             thread.join()
             self._loop = None
             self._thread = None
-
-    def get_tx(self, tx_hash: str) -> TransactionReceipt:
-        return self._run_async(self._async_client.get_tx(tx_hash))
-
-    def get_balance(
-        self,
-        address: str = None,
-        contract: str = "currency",
-    ) -> int | float:
-        return self._run_async(
-            self._async_client.get_balance(address, contract)
-        )
-
-    def send_tx(
-        self,
-        contract: str,
-        function: str,
-        kwargs: dict,
-        chi: int | None = None,
-        nonce: int = None,
-        chain_id: str = None,
-        mode: str | None = None,
-        wait_for_tx: bool | None = None,
-        timeout_seconds: float | None = None,
-        poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
-    ) -> TransactionSubmission:
-        return self._run_async(
-            self._async_client.send_tx(
-                contract=contract,
-                function=function,
-                kwargs=kwargs,
-                chi=chi,
-                nonce=nonce,
-                chain_id=chain_id,
-                mode=mode,
-                wait_for_tx=wait_for_tx,
-                timeout_seconds=timeout_seconds,
-                poll_interval_seconds=poll_interval_seconds,
-                chi_margin=chi_margin,
-                min_chi_headroom=min_chi_headroom,
-            )
-        )
-
-    def send(
-        self,
-        amount: int | float | str,
-        to_address: str,
-        token: str = "currency",
-        chi: int | None = None,
-        mode: str | None = None,
-        wait_for_tx: bool | None = None,
-        timeout_seconds: float | None = None,
-        poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
-    ) -> TransactionSubmission:
-        return self._run_async(
-            self._async_client.send(
-                amount,
-                to_address,
-                token,
-                chi=chi,
-                mode=mode,
-                wait_for_tx=wait_for_tx,
-                timeout_seconds=timeout_seconds,
-                poll_interval_seconds=poll_interval_seconds,
-                chi_margin=chi_margin,
-                min_chi_headroom=min_chi_headroom,
-            )
-        )
-
-    def simulate(self, contract: str, function: str, kwargs: dict) -> dict:
-        return self._run_async(
-            self._async_client.simulate(contract, function, kwargs)
-        )
-
-    def call(self, contract: str, function: str, kwargs: dict) -> Any:
-        return self._run_async(
-            self._async_client.call(contract, function, kwargs)
-        )
-
-    def estimate_chi(
-        self,
-        contract: str,
-        function: str,
-        kwargs: dict,
-        *,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
-    ) -> dict:
-        return self._run_async(
-            self._async_client.estimate_chi(
-                contract,
-                function,
-                kwargs,
-                chi_margin=chi_margin,
-                min_chi_headroom=min_chi_headroom,
-            )
-        )
-
-    def get_state(
-        self,
-        contract: str,
-        variable: str,
-        *keys: object,
-    ) -> None | int | float | dict | str:
-        return self._run_async(
-            self._async_client.get_state(contract, variable, *keys)
-        )
-
-    def get_contract_source(self, contract: str) -> None | str:
-        return self._run_async(self._async_client.get_contract_source(contract))
-
-    def get_contract_ir(self, contract: str) -> None | str:
-        return self._run_async(self._async_client.get_contract_ir(contract))
-
-    def get_approved_amount(
-        self,
-        contract: str,
-        address: str = None,
-        token: str = "currency",
-    ) -> int | float:
-        return self._run_async(
-            self._async_client.get_approved_amount(contract, address, token)
-        )
-
-    def approve(
-        self,
-        contract: str,
-        token: str = "currency",
-        amount: int | float | str = 999999999999,
-        chi: int | None = None,
-        mode: str | None = None,
-        wait_for_tx: bool | None = None,
-        timeout_seconds: float | None = None,
-        poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
-    ) -> TransactionSubmission:
-        return self._run_async(
-            self._async_client.approve(
-                contract,
-                token,
-                amount,
-                chi=chi,
-                mode=mode,
-                wait_for_tx=wait_for_tx,
-                timeout_seconds=timeout_seconds,
-                poll_interval_seconds=poll_interval_seconds,
-                chi_margin=chi_margin,
-                min_chi_headroom=min_chi_headroom,
-            )
-        )
-
-    def submit_contract(
-        self,
-        name: str,
-        deployment_artifacts: dict,
-        args: dict = None,
-        chi: int | None = None,
-        mode: str | None = None,
-        wait_for_tx: bool | None = None,
-        timeout_seconds: float | None = None,
-        poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
-        nonce: int = None,
-    ) -> TransactionSubmission:
-        return self._run_async(
-            self._async_client.submit_contract(
-                name,
-                deployment_artifacts,
-                args,
-                chi=chi,
-                nonce=nonce,
-                mode=mode,
-                wait_for_tx=wait_for_tx,
-                timeout_seconds=timeout_seconds,
-                poll_interval_seconds=poll_interval_seconds,
-                chi_margin=chi_margin,
-                min_chi_headroom=min_chi_headroom,
-            )
-        )
-
-    def deploy_contract(
-        self,
-        name: str,
-        source: str,
-        args: dict = None,
-        chi: int | None = None,
-        mode: str | None = None,
-        wait_for_tx: bool | None = None,
-        timeout_seconds: float | None = None,
-        poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
-        nonce: int = None,
-        *,
-        lint: bool = True,
-    ) -> TransactionSubmission:
-        return self._run_async(
-            self._async_client.deploy_contract(
-                name,
-                source,
-                args,
-                chi=chi,
-                nonce=nonce,
-                mode=mode,
-                wait_for_tx=wait_for_tx,
-                timeout_seconds=timeout_seconds,
-                poll_interval_seconds=poll_interval_seconds,
-                chi_margin=chi_margin,
-                min_chi_headroom=min_chi_headroom,
-                lint=lint,
-            )
-        )
-
-    def wait_for_tx(
-        self,
-        tx_hash: str,
-        *,
-        timeout_seconds: float | None = None,
-        poll_interval_seconds: float | None = None,
-    ) -> TransactionReceipt:
-        return self._run_async(
-            self._async_client.wait_for_tx(
-                tx_hash,
-                timeout_seconds=timeout_seconds,
-                poll_interval_seconds=poll_interval_seconds,
-            )
-        )
-
-    def refresh_nonce(self) -> int:
-        return self._run_async(self._async_client.refresh_nonce())
-
-    def get_nodes(self) -> list:
-        return self._run_async(self._async_client.get_nodes())
-
-    def get_genesis(self):
-        return self._run_async(self._async_client.get_genesis())
-
-    def get_chain_id(self):
-        return self._run_async(self._async_client.get_chain_id())
-
-    def get_node_status(self) -> NodeStatus:
-        return self._run_async(self._async_client.get_node_status())
-
-    def get_perf_status(self) -> PerformanceStatus:
-        return self._run_async(self._async_client.get_perf_status())
-
-    def get_bds_status(self) -> BdsStatus:
-        return self._run_async(self._async_client.get_bds_status())
-
-    def get_developer_rewards(
-        self, recipient_key: str
-    ) -> DeveloperRewardSummary:
-        return self._run_async(
-            self._async_client.get_developer_rewards(recipient_key)
-        )
-
-    def get_token_balances(
-        self,
-        address: str | None = None,
-        *,
-        limit: int = 100,
-        offset: int = 0,
-        include_zero: bool = False,
-    ) -> TokenBalancePage:
-        return self._run_async(
-            self._async_client.get_token_balances(
-                address,
-                limit=limit,
-                offset=offset,
-                include_zero=include_zero,
-            )
-        )
-
-    def list_blocks(
-        self,
-        *,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> list[IndexedBlock]:
-        return self._run_async(
-            self._async_client.list_blocks(limit=limit, offset=offset)
-        )
-
-    def get_block(self, height: int) -> IndexedBlock | None:
-        return self._run_async(self._async_client.get_block(height))
-
-    def get_block_by_hash(self, block_hash: str) -> IndexedBlock | None:
-        return self._run_async(self._async_client.get_block_by_hash(block_hash))
-
-    def get_indexed_tx(self, tx_hash: str) -> IndexedTransaction | None:
-        return self._run_async(self._async_client.get_indexed_tx(tx_hash))
-
-    def list_txs_for_block(
-        self,
-        block_ref: str | int,
-    ) -> list[IndexedTransaction]:
-        return self._run_async(self._async_client.list_txs_for_block(block_ref))
-
-    def list_txs_by_sender(
-        self,
-        sender: str,
-        *,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> list[IndexedTransaction]:
-        return self._run_async(
-            self._async_client.list_txs_by_sender(
-                sender,
-                limit=limit,
-                offset=offset,
-            )
-        )
-
-    def list_txs_by_contract(
-        self,
-        contract: str,
-        *,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> list[IndexedTransaction]:
-        return self._run_async(
-            self._async_client.list_txs_by_contract(
-                contract,
-                limit=limit,
-                offset=offset,
-            )
-        )
-
-    def get_events_for_tx(self, tx_hash: str) -> list[IndexedEvent]:
-        return self._run_async(self._async_client.get_events_for_tx(tx_hash))
-
-    def list_shielded_output_tags(
-        self,
-        tag_value: str,
-        *,
-        kind: str = "sync_hint",
-        limit: int = 100,
-        offset: int = 0,
-        after_id: int | None = None,
-    ) -> list[ShieldedOutputTag]:
-        return self._run_async(
-            self._async_client.list_shielded_output_tags(
-                tag_value,
-                kind=kind,
-                limit=limit,
-                offset=offset,
-                after_id=after_id,
-            )
-        )
-
-    def list_shielded_wallet_history(
-        self,
-        tag_value: str,
-        *,
-        kind: str = "sync_hint",
-        limit: int = 100,
-        after_note_index: int = 0,
-    ) -> list[ShieldedWalletHistoryEntry]:
-        return self._run_async(
-            self._async_client.list_shielded_wallet_history(
-                tag_value,
-                kind=kind,
-                limit=limit,
-                after_note_index=after_note_index,
-            )
-        )
-
-    def list_events(
-        self,
-        contract: str,
-        event: str,
-        *,
-        limit: int = 100,
-        offset: int = 0,
-        after_id: int | None = None,
-    ) -> list[IndexedEvent]:
-        return self._run_async(
-            self._async_client.list_events(
-                contract,
-                event,
-                limit=limit,
-                offset=offset,
-                after_id=after_id,
-            )
-        )
-
-    def get_state_history(
-        self,
-        key: str,
-        *,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> list[StateEntry]:
-        return self._run_async(
-            self._async_client.get_state_history(
-                key,
-                limit=limit,
-                offset=offset,
-            )
-        )
-
-    def get_state_for_tx(self, tx_hash: str) -> list[StateEntry]:
-        return self._run_async(self._async_client.get_state_for_tx(tx_hash))
-
-    def get_state_for_block(
-        self,
-        block_ref: str | int,
-    ) -> list[StateEntry]:
-        return self._run_async(
-            self._async_client.get_state_for_block(block_ref)
-        )
 
     def contract(self, name: str) -> ContractClient:
         return ContractClient(self, name)
@@ -598,52 +189,22 @@ class Xian:
     ) -> StateKeyClient:
         return StateKeyClient(self, contract, variable, tuple(keys))
 
-    def watch_blocks(
-        self,
-        *,
-        start_height: int | None = None,
-        poll_interval_seconds: float | None = None,
-    ) -> _SyncAsyncIterator[IndexedBlock]:
-        return _SyncAsyncIterator(
-            self,
-            self._async_client.watch_blocks(
-                start_height=start_height,
-                poll_interval_seconds=poll_interval_seconds,
-            ),
-        )
 
-    def watch_events(
-        self,
-        contract: str,
-        event: str,
-        *,
-        after_id: int | None = None,
-        limit: int | None = None,
-        poll_interval_seconds: float | None = None,
-    ) -> _SyncAsyncIterator[IndexedEvent]:
-        return _SyncAsyncIterator(
-            self,
-            self._async_client.watch_events(
-                contract,
-                event,
-                after_id=after_id,
-                limit=limit,
-                poll_interval_seconds=poll_interval_seconds,
-            ),
-        )
+def _make_sync_delegate(name: str, async_method: Any):
+    @wraps(async_method)
+    def _sync_delegate(self: Xian, *args: Any, **kwargs: Any) -> Any:
+        async_attr = getattr(self._async_client, name)
+        return self._coerce_async_result(async_attr(*args, **kwargs))
 
-    def watch_live_events(
-        self,
-        contract: str,
-        event: str,
-        *,
-        poll_interval_seconds: float | None = None,
-    ) -> _SyncAsyncIterator[LiveEvent]:
-        return _SyncAsyncIterator(
-            self,
-            self._async_client.watch_live_events(
-                contract,
-                event,
-                poll_interval_seconds=poll_interval_seconds,
-            ),
-        )
+    return _sync_delegate
+
+
+def _install_async_delegates() -> None:
+    for name, async_method in inspect.getmembers(XianAsync):
+        if name.startswith("_") or name == "close" or name in Xian.__dict__:
+            continue
+        if inspect.iscoroutinefunction(async_method) or inspect.isasyncgenfunction(async_method):
+            setattr(Xian, name, _make_sync_delegate(name, async_method))
+
+
+_install_async_delegates()

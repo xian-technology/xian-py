@@ -14,9 +14,7 @@ MAX_BDS_HEIGHT_LAG = int(os.getenv("XIAN_MAX_BDS_HEIGHT_LAG", "0"))
 
 
 def main() -> int:
-    config = XianClientConfig(
-        retry=RetryPolicy(max_attempts=3, initial_delay_seconds=0.25)
-    )
+    config = XianClientConfig(retry=RetryPolicy(max_attempts=3, initial_delay_seconds=0.25))
 
     with Xian(NODE_URL, chain_id=CHAIN_ID, config=config) as client:
         status = client.get_node_status()
@@ -57,9 +55,7 @@ def main() -> int:
         if status.catching_up:
             failures.append("node is still catching up")
         if len(peers) < MIN_PEERS:
-            failures.append(
-                f"peer_count {len(peers)} is below required minimum {MIN_PEERS}"
-            )
+            failures.append(f"peer_count {len(peers)} is below required minimum {MIN_PEERS}")
         if (
             bds is not None
             and MAX_BDS_HEIGHT_LAG > 0
@@ -67,9 +63,7 @@ def main() -> int:
             and bds.height_lag > MAX_BDS_HEIGHT_LAG
         ):
             failures.append(
-                "BDS height lag "
-                f"{bds.height_lag} exceeds allowed maximum "
-                f"{MAX_BDS_HEIGHT_LAG}"
+                f"BDS height lag {bds.height_lag} exceeds allowed maximum {MAX_BDS_HEIGHT_LAG}"
             )
 
         print(json.dumps(summary, indent=2, sort_keys=True))

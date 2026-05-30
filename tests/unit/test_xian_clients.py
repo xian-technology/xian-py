@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import hashlib
+import inspect
 import json
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
@@ -270,9 +271,7 @@ class _FakeWebSocket:
 
 
 class _FakeWebSocketSession:
-    def __init__(
-        self, *, websocket=None, connect_error: Exception | None = None
-    ):
+    def __init__(self, *, websocket=None, connect_error: Exception | None = None):
         self.websocket = websocket
         self.connect_error = connect_error
         self.ws_connect_calls: list[tuple[str, dict]] = []
@@ -310,9 +309,7 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
         finally:
             await client.close()
 
-    with patch.object(
-        tr, "get_nonce_async", AsyncMock(return_value=11)
-    ) as get_nonce_async:
+    with patch.object(tr, "get_nonce_async", AsyncMock(return_value=11)) as get_nonce_async:
         with patch.object(
             tr,
             "simulate_tx_async",
@@ -326,9 +323,7 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
                 with patch.object(
                     tr,
                     "broadcast_tx_wait_async",
-                    AsyncMock(
-                        return_value={"result": {"code": 0, "hash": "abc123"}}
-                    ),
+                    AsyncMock(return_value={"result": {"code": 0, "hash": "abc123"}}),
                 ) as broadcast_tx_wait_async:
                     result = asyncio.run(run_send_tx())
 
@@ -355,9 +350,7 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
     assert result.chi_supplied == 77
 
 
-def test_xian_async_estimate_chi_reports_exact_estimate_and_suggested_headroom() -> (
-    None
-):
+def test_xian_async_estimate_chi_reports_exact_estimate_and_suggested_headroom() -> None:
     wallet = Wallet()
     config = XianClientConfig(
         submission=SubmissionConfig(
@@ -365,9 +358,7 @@ def test_xian_async_estimate_chi_reports_exact_estimate_and_suggested_headroom()
             min_chi_headroom=100,
         )
     )
-    client = XianAsync(
-        "http://node", chain_id="xian-1", wallet=wallet, config=config
-    )
+    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet, config=config)
 
     async def run_estimate() -> dict[str, object]:
         try:
@@ -481,8 +472,8 @@ def test_xian_submit_contract_forwards_deployment_artifacts() -> None:
     assert submit_contract.await_args.args == (
         "con_probe",
         {"format": "bundle-v1"},
-        {"value": 7},
     )
+    assert submit_contract.await_args.kwargs == {"args": {"value": 7}}
 
 
 def test_xian_async_deploy_contract_builds_and_submits_artifacts() -> None:
@@ -604,15 +595,7 @@ def test_xian_deploy_contract_forwards_to_async_client() -> None:
     deploy_contract.assert_awaited_once_with(
         "con_probe",
         "value = Variable()\n",
-        {"value": 7},
-        chi=None,
-        nonce=None,
-        mode=None,
-        wait_for_tx=None,
-        timeout_seconds=None,
-        poll_interval_seconds=None,
-        chi_margin=None,
-        min_chi_headroom=None,
+        args={"value": 7},
         lint=False,
     )
 
@@ -635,9 +618,7 @@ def test_xian_rejects_non_ed25519_wallets() -> None:
         )
 
 
-def test_xian_async_send_tx_reserves_nonces_locally_for_concurrent_calls() -> (
-    None
-):
+def test_xian_async_send_tx_reserves_nonces_locally_for_concurrent_calls() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
     observed_nonces: list[int] = []
@@ -665,9 +646,7 @@ def test_xian_async_send_tx_reserves_nonces_locally_for_concurrent_calls() -> (
         finally:
             await client.close()
 
-    with patch.object(
-        tr, "get_nonce_async", AsyncMock(return_value=7)
-    ) as get_nonce_async:
+    with patch.object(tr, "get_nonce_async", AsyncMock(return_value=7)) as get_nonce_async:
         with patch.object(tr, "create_tx", side_effect=_capture_tx):
             with patch.object(
                 tr,
@@ -684,9 +663,7 @@ def test_xian_async_send_tx_reserves_nonces_locally_for_concurrent_calls() -> (
     assert sorted(observed_nonces) == [7, 8]
 
 
-def test_xian_async_send_tx_invalidates_reserved_nonce_after_checktx_failure() -> (
-    None
-):
+def test_xian_async_send_tx_invalidates_reserved_nonce_after_checktx_failure() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
     observed_nonces: list[int] = []
@@ -713,9 +690,7 @@ def test_xian_async_send_tx_invalidates_reserved_nonce_after_checktx_failure() -
         finally:
             await client.close()
 
-    with patch.object(
-        tr, "get_nonce_async", AsyncMock(side_effect=[7, 7])
-    ) as get_nonce_async:
+    with patch.object(tr, "get_nonce_async", AsyncMock(side_effect=[7, 7])) as get_nonce_async:
         with patch.object(tr, "create_tx", side_effect=_capture_tx):
             with patch.object(
                 tr,
@@ -849,9 +824,77 @@ def test_xian_async_send_tx_can_wait_for_finalized_receipt() -> None:
     assert result.receipt.success is True
 
 
-def test_xian_async_send_tx_treats_duplicate_cache_checktx_as_accepted() -> (
-    None
-):
+def test_xian_async_send_tx_recovers_receipt_after_broadcast_timeout() -> None:
+    wallet = Wallet()
+    client = XianAsync(
+        "http://node",
+        chain_id="xian-1",
+        wallet=wallet,
+        config=XianClientConfig(
+            retry=RetryPolicy(max_attempts=1),
+        ),
+    )
+    signed_tx = {"signed": True}
+    local_hash = hashlib.sha256(json.dumps(signed_tx).encode("utf-8")).hexdigest().upper()
+
+    async def run_send() -> TransactionSubmission:
+        try:
+            return await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+                chi=100,
+                wait_for_tx=True,
+                timeout_seconds=1.0,
+                poll_interval_seconds=0.0,
+            )
+        finally:
+            await client.close()
+
+    with patch.object(tr, "get_nonce_async", AsyncMock(return_value=11)):
+        with patch.object(tr, "create_tx", MagicMock(return_value=signed_tx)):
+            with patch.object(
+                tr,
+                "broadcast_tx_wait_async",
+                AsyncMock(side_effect=TransportError("Timeout on reading data from socket")),
+            ):
+                with patch.object(
+                    client,
+                    "wait_for_tx",
+                    AsyncMock(
+                        return_value=TransactionReceipt.from_lookup(
+                            {
+                                "success": True,
+                                "result": {
+                                    "hash": local_hash,
+                                    "height": "12",
+                                    "index": 0,
+                                    "tx_result": {
+                                        "code": 0,
+                                        "data": {"result": "ok"},
+                                    },
+                                },
+                                "execution": {"result": "ok"},
+                            }
+                        )
+                    ),
+                ) as wait_for_tx:
+                    result = asyncio.run(run_send())
+
+    wait_for_tx.assert_awaited_once_with(
+        local_hash,
+        timeout_seconds=1.0,
+        poll_interval_seconds=0.0,
+    )
+    assert result.submitted is True
+    assert result.accepted is True
+    assert result.finalized is True
+    assert result.tx_hash == local_hash
+    assert result.receipt is not None
+    assert "broadcast response unavailable" in str(result.message)
+
+
+def test_xian_async_send_tx_treats_duplicate_cache_checktx_as_accepted() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
 
@@ -917,9 +960,7 @@ def test_xian_async_send_tx_treats_duplicate_cache_checktx_as_accepted() -> (
     assert result.message == "tx already exists in cache"
 
 
-def test_xian_async_send_tx_treats_duplicate_cache_rpc_error_as_accepted() -> (
-    None
-):
+def test_xian_async_send_tx_treats_duplicate_cache_rpc_error_as_accepted() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
 
@@ -961,9 +1002,7 @@ def test_xian_async_send_tx_treats_duplicate_cache_rpc_error_as_accepted() -> (
     assert result.tx_hash is not None
 
 
-def test_xian_async_send_tx_waits_for_duplicate_cache_rpc_error_by_local_hash() -> (
-    None
-):
+def test_xian_async_send_tx_waits_for_duplicate_cache_rpc_error_by_local_hash() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
 
@@ -1027,9 +1066,7 @@ def test_xian_async_send_tx_waits_for_duplicate_cache_rpc_error_by_local_hash() 
     assert result.tx_hash is not None
 
 
-def test_xian_async_send_tx_invalidates_reserved_nonce_after_wait_timeout() -> (
-    None
-):
+def test_xian_async_send_tx_invalidates_reserved_nonce_after_wait_timeout() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
     observed_nonces: list[int] = []
@@ -1087,9 +1124,7 @@ def test_xian_async_send_tx_invalidates_reserved_nonce_after_wait_timeout() -> (
     assert get_nonce_async.await_count == 2
 
 
-def test_xian_async_send_tx_async_mode_reports_submission_without_checktx() -> (
-    None
-):
+def test_xian_async_send_tx_async_mode_reports_submission_without_checktx() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
 
@@ -1123,9 +1158,7 @@ def test_xian_async_send_tx_async_mode_reports_submission_without_checktx() -> (
     assert result.tx_hash == "abc123"
 
 
-def test_xian_async_send_tx_commit_mode_does_not_report_finalized_when_checktx_fails() -> (
-    None
-):
+def test_xian_async_send_tx_commit_mode_does_not_report_finalized_when_checktx_fails() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
 
@@ -1272,9 +1305,7 @@ def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse({"result": {"response": {"value": "AA=="}}}),
-            _FakeResponse(
-                {"result": {"response": {"value": _b64("15"), "info": "int"}}}
-            ),
+            _FakeResponse({"result": {"response": {"value": _b64("15"), "info": "int"}}}),
             _FakeResponse(
                 {
                     "result": {
@@ -1318,9 +1349,7 @@ def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
         ]
     )
 
-    assert (
-        asyncio.run(client.get_state("currency", "balances", "alice")) is None
-    )
+    assert asyncio.run(client.get_state("currency", "balances", "alice")) is None
     assert asyncio.run(client.get_state("currency", "balances", "alice")) == 15
     assert asyncio.run(client.get_state("currency", "balances", "alice")) == (
         ContractingDecimal("12.5")
@@ -1328,12 +1357,8 @@ def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
     assert asyncio.run(client.get_state("currency", "balances", "alice")) == {
         "owner": "alice",
     }
-    assert (
-        asyncio.run(client.get_state("currency", "balances", "alice")) is True
-    )
-    assert (
-        asyncio.run(client.get_state("currency", "balances", "alice")) is True
-    )
+    assert asyncio.run(client.get_state("currency", "balances", "alice")) is True
+    assert asyncio.run(client.get_state("currency", "balances", "alice")) is True
 
 
 def test_xian_async_call_decodes_structured_return_value() -> None:
@@ -1349,16 +1374,12 @@ def test_xian_async_call_decodes_structured_return_value() -> None:
             }
         ),
     ):
-        result = asyncio.run(
-            client.call("con_example", "get_record", {"record_id": "alice"})
-        )
+        result = asyncio.run(client.call("con_example", "get_record", {"record_id": "alice"}))
 
     assert result == {"owner": "alice", "count": 2}
 
 
-def test_xian_async_call_decodes_structured_return_value_with_datetime_strings() -> (
-    None
-):
+def test_xian_async_call_decodes_structured_return_value_with_datetime_strings() -> None:
     client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
 
     with patch.object(
@@ -1374,9 +1395,7 @@ def test_xian_async_call_decodes_structured_return_value_with_datetime_strings()
             }
         ),
     ):
-        result = asyncio.run(
-            client.call("masternodes", "get_validator", {"account": "alice"})
-        )
+        result = asyncio.run(client.call("masternodes", "get_validator", {"account": "alice"}))
 
     assert result == {
         "account": "alice",
@@ -1394,9 +1413,7 @@ def test_xian_async_get_state_stringifies_non_string_keys() -> None:
         "_abci_query_value",
         AsyncMock(return_value=123),
     ) as query:
-        result = asyncio.run(
-            client.get_state("con_pairs", "pairs", 1, "reserve0")
-        )
+        result = asyncio.run(client.get_state("con_pairs", "pairs", 1, "reserve0"))
 
     assert result == 123
     query.assert_awaited_once_with("/get/con_pairs.pairs:1:reserve0")
@@ -1436,10 +1453,7 @@ def test_xian_async_call_preserves_hex_string_results() -> None:
         result = asyncio.run(client.call("con_private_token", "asset_id", {}))
 
     assert isinstance(result, str)
-    assert (
-        result
-        == "0x19b2c45b73b5f3b755f05f76320d13965fc6fb9898b3238ce501bbddc5898972"
-    )
+    assert result == "0x19b2c45b73b5f3b755f05f76320d13965fc6fb9898b3238ce501bbddc5898972"
 
 
 def test_xian_async_call_raises_on_failed_simulated_execution() -> None:
@@ -1534,13 +1548,7 @@ def test_xian_async_get_contract_ir_returns_vm_ir() -> None:
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse(
-                {
-                    "result": {
-                        "response": {
-                            "value": _b64('{"vm_profile":"xian_vm_v1"}')
-                        }
-                    }
-                },
+                {"result": {"response": {"value": _b64('{"vm_profile":"xian_vm_v1"}')}}},
             )
         ]
     )
@@ -1746,9 +1754,7 @@ def test_xian_async_exposes_token_balances_as_typed_page() -> None:
             },
         )
     ]
-    query.assert_awaited_once_with(
-        "/token_balances/alice/limit=25/offset=5/include_zero=true"
-    )
+    query.assert_awaited_once_with("/token_balances/alice/limit=25/offset=5/include_zero=true")
 
 
 def test_xian_async_exposes_shielded_output_tags_as_typed_models() -> None:
@@ -1828,9 +1834,7 @@ def test_xian_async_exposes_shielded_output_tags_as_typed_models() -> None:
             },
         )
     ]
-    query.assert_awaited_once_with(
-        "/shielded_output_tags/tag-1/limit=10/kind=sync_hint/offset=3"
-    )
+    query.assert_awaited_once_with("/shielded_output_tags/tag-1/limit=10/kind=sync_hint/offset=3")
 
 
 def test_xian_async_exposes_shielded_wallet_history_as_typed_models() -> None:
@@ -1962,9 +1966,7 @@ def test_xian_async_list_events_falls_back_to_graphql() -> None:
         ]
     )
 
-    events = asyncio.run(
-        client.list_events("currency", "Transfer", limit=2, after_id=10)
-    )
+    events = asyncio.run(client.list_events("currency", "Transfer", limit=2, after_id=10))
 
     assert [event.id for event in events] == [11, 12]
     assert events[0].tx_hash == "TX-11"
@@ -2092,9 +2094,7 @@ def test_sync_client_exposes_shielded_output_tags() -> None:
             raw={},
         )
     ]
-    client._async_client.list_shielded_output_tags = AsyncMock(
-        return_value=items
-    )
+    client._async_client.list_shielded_output_tags = AsyncMock(return_value=items)
     client._async_client.close = AsyncMock()
 
     assert client.list_shielded_output_tags("tag-1") == items
@@ -2126,9 +2126,7 @@ def test_sync_client_exposes_shielded_wallet_history() -> None:
             raw={},
         )
     ]
-    client._async_client.list_shielded_wallet_history = AsyncMock(
-        return_value=items
-    )
+    client._async_client.list_shielded_wallet_history = AsyncMock(return_value=items)
     client._async_client.close = AsyncMock()
 
     assert client.list_shielded_wallet_history("tag-1") == items
@@ -2146,6 +2144,22 @@ def test_sync_client_context_manager_closes_async_client() -> None:
         assert managed.get_balance() == 42
 
     client._async_client.close.assert_awaited_once()
+
+
+def test_sync_client_installs_delegates_for_public_async_api() -> None:
+    public_async_methods = {
+        name
+        for name, method in inspect.getmembers(XianAsync)
+        if not name.startswith("_")
+        and name != "close"
+        and (inspect.iscoroutinefunction(method) or inspect.isasyncgenfunction(method))
+    }
+
+    missing_methods = sorted(
+        name for name in public_async_methods if not callable(getattr(Xian, name, None))
+    )
+
+    assert missing_methods == []
 
 
 def test_sync_client_rejects_calls_inside_running_loop() -> None:
@@ -2341,9 +2355,7 @@ def test_xian_async_watch_events_uses_after_id_cursor() -> None:
     assert first_call.kwargs["limit"] == 2
 
 
-def test_xian_async_watch_events_uses_cometbft_websocket_for_live_tail() -> (
-    None
-):
+def test_xian_async_watch_events_uses_cometbft_websocket_for_live_tail() -> None:
     wallet = Wallet()
     config = XianClientConfig(
         watcher=WatcherConfig(
@@ -2519,9 +2531,7 @@ def test_xian_async_watch_events_auto_falls_back_to_polling() -> None:
     assert session.ws_connect_calls[0][0] == "ws://rpc.example:26657/websocket"
 
 
-def test_xian_async_watch_events_resolves_indexed_rows_for_live_messages() -> (
-    None
-):
+def test_xian_async_watch_events_resolves_indexed_rows_for_live_messages() -> None:
     wallet = Wallet()
     config = XianClientConfig(
         watcher=WatcherConfig(
@@ -2601,9 +2611,7 @@ def test_xian_async_watch_events_resolves_indexed_rows_for_live_messages() -> (
     get_events_for_tx.assert_awaited_once_with("TX-12")
 
 
-def test_xian_async_watch_live_events_uses_cometbft_websocket_without_bds() -> (
-    None
-):
+def test_xian_async_watch_live_events_uses_cometbft_websocket_without_bds() -> None:
     wallet = Wallet()
     config = XianClientConfig(
         watcher=WatcherConfig(
@@ -2661,9 +2669,7 @@ def test_xian_async_watch_live_events_uses_cometbft_websocket_without_bds() -> (
         patch.object(
             client,
             "get_events_for_tx",
-            AsyncMock(
-                side_effect=AssertionError("get_events_for_tx not expected")
-            ),
+            AsyncMock(side_effect=AssertionError("get_events_for_tx not expected")),
         ),
     ):
         event = asyncio.run(run_watch())
@@ -2777,9 +2783,7 @@ def test_sync_watch_events_wraps_async_iterator() -> None:
         )
 
     try:
-        with patch.object(
-            client._async_client, "watch_events", return_value=async_events()
-        ):
+        with patch.object(client._async_client, "watch_events", return_value=async_events()):
             iterator = client.watch_events("currency", "Transfer", after_id=20)
             first = next(iterator)
             second = next(iterator)
@@ -2938,9 +2942,7 @@ def test_xian_async_simulate_retries_transport_errors() -> None:
 
     async def run_simulate() -> dict:
         try:
-            return await client.simulate(
-                "currency", "balance_of", {"address": wallet.public_key}
-            )
+            return await client.simulate("currency", "balance_of", {"address": wallet.public_key})
         finally:
             await client.close()
 
@@ -3208,9 +3210,7 @@ def test_xian_async_send_tx_uses_per_call_chi_headroom() -> None:
                 with patch.object(
                     tr,
                     "broadcast_tx_wait_async",
-                    AsyncMock(
-                        return_value={"result": {"hash": "abc123", "code": 0}}
-                    ),
+                    AsyncMock(return_value={"result": {"hash": "abc123", "code": 0}}),
                 ):
                     result = asyncio.run(run_send())
 
@@ -3420,9 +3420,7 @@ def test_async_state_key_client_stringifies_non_string_keys() -> None:
     assert value == 500
     assert history == []
     assert state_key.full_key == "con_pairs.pairs:1:reserve0"
-    client.get_state.assert_awaited_once_with(
-        "con_pairs", "pairs", 1, "reserve0"
-    )
+    client.get_state.assert_awaited_once_with("con_pairs", "pairs", 1, "reserve0")
     client.get_state_history.assert_awaited_once_with(
         "con_pairs.pairs:1:reserve0",
         limit=2,

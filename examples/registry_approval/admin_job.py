@@ -57,10 +57,7 @@ def main() -> None:
 
     with Xian(node_url(), chain_id=chain_id(), wallet=wallet) as client:
         status = client.get_node_status()
-        print(
-            f"Connected to {status.network} at height "
-            f"{status.latest_block_height}"
-        )
+        print(f"Connected to {status.network} at height {status.latest_block_height}")
 
         registry_source = client.get_contract_source(registry_name)
         if registry_source is None:
@@ -101,9 +98,7 @@ def main() -> None:
                             "XIAN_REGISTRY_OPERATOR",
                             wallet.public_key,
                         ),
-                        "threshold": int(
-                            os.environ.get("XIAN_REGISTRY_THRESHOLD", "1")
-                        ),
+                        "threshold": int(os.environ.get("XIAN_REGISTRY_THRESHOLD", "1")),
                     },
                     mode="checktx",
                     wait_for_tx=True,
@@ -146,14 +141,10 @@ def main() -> None:
                 )
                 print(f"Added signer {signer}: {result.tx_hash}")
 
-        signer_fund_target = _as_decimal(
-            os.environ.get("XIAN_REGISTRY_SIGNER_FUND_AMOUNT", "250")
-        )
+        signer_fund_target = _as_decimal(os.environ.get("XIAN_REGISTRY_SIGNER_FUND_AMOUNT", "250"))
         native_token = client.token("currency")
         if signer_fund_target > 0:
-            for signer in _split_signers(
-                os.environ.get("XIAN_REGISTRY_SIGNERS")
-            ):
+            for signer in _split_signers(os.environ.get("XIAN_REGISTRY_SIGNERS")):
                 current_balance = _as_decimal(native_token.balance_of(signer))
                 if current_balance >= signer_fund_target:
                     continue
@@ -187,12 +178,8 @@ def main() -> None:
             )
             print(f"Updated threshold to {desired_threshold}: {result.tx_hash}")
 
-        print(
-            f"Registry approval contract: {configured_approval or approval_name}"
-        )
-        print(
-            f"Approval threshold: {approval.state_key('metadata', 'threshold').get()}"
-        )
+        print(f"Registry approval contract: {configured_approval or approval_name}")
+        print(f"Approval threshold: {approval.state_key('metadata', 'threshold').get()}")
 
         record_id = os.environ.get("XIAN_REGISTRY_RECORD_ID")
         if record_id:
@@ -200,9 +187,7 @@ def main() -> None:
                 approval.send(
                     "propose_upsert",
                     record_id=record_id,
-                    owner=os.environ.get(
-                        "XIAN_REGISTRY_RECORD_OWNER", wallet.public_key
-                    ),
+                    owner=os.environ.get("XIAN_REGISTRY_RECORD_OWNER", wallet.public_key),
                     uri=os.environ.get(
                         "XIAN_REGISTRY_RECORD_URI",
                         f"https://example.invalid/records/{record_id}",
@@ -220,9 +205,7 @@ def main() -> None:
                 ),
                 f"submit upsert proposal for {record_id}",
             )
-            print(
-                f"Submitted upsert proposal for {record_id}: {result.tx_hash}"
-            )
+            print(f"Submitted upsert proposal for {record_id}: {result.tx_hash}")
 
 
 if __name__ == "__main__":

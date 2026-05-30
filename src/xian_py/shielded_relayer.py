@@ -32,9 +32,7 @@ def _normalize_relayer_catalog(
             else ShieldedRelayerCatalogEntry.from_dict(relayer, index=index)
         )
         normalized.append(entry)
-    normalized.sort(
-        key=lambda entry: (entry.priority, entry.id, entry.relayer_url)
-    )
+    normalized.sort(key=lambda entry: (entry.priority, entry.id, entry.relayer_url))
     seen: set[str] = set()
     for entry in normalized:
         if entry.id in seen:
@@ -52,9 +50,7 @@ def _build_aggregate_transport_error(
     failures: list[tuple[ShieldedRelayerCatalogEntry, Exception]],
 ) -> TransportError:
     detail = "; ".join(f"{relayer.id}: {error}" for relayer, error in failures)
-    return TransportError(
-        f"{action} failed for all candidate relayers: {detail}"
-    )
+    return TransportError(f"{action} failed for all candidate relayers: {detail}")
 
 
 class ShieldedRelayerAsyncClient:
@@ -84,11 +80,7 @@ class ShieldedRelayerAsyncClient:
         return self._session
 
     async def close(self) -> None:
-        if (
-            self._owns_session
-            and self._session is not None
-            and not self._session.closed
-        ):
+        if self._owns_session and self._session is not None and not self._session.closed:
             await self._session.close()
 
     async def _request_json(
@@ -129,9 +121,7 @@ class ShieldedRelayerAsyncClient:
         return dict(data)
 
     async def get_info(self) -> ShieldedRelayerInfo:
-        return ShieldedRelayerInfo.from_dict(
-            await self._request_json("GET", "/v1/info")
-        )
+        return ShieldedRelayerInfo.from_dict(await self._request_json("GET", "/v1/info"))
 
     async def get_quote(
         self,
@@ -225,9 +215,7 @@ class ShieldedRelayerAsyncClient:
         )
 
     async def get_job(self, job_id: str) -> ShieldedRelayerJob:
-        return ShieldedRelayerJob.from_dict(
-            await self._request_json("GET", f"/v1/jobs/{job_id}")
-        )
+        return ShieldedRelayerJob.from_dict(await self._request_json("GET", f"/v1/jobs/{job_id}"))
 
 
 class ShieldedRelayerAsyncPoolClient:
@@ -239,9 +227,7 @@ class ShieldedRelayerAsyncPoolClient:
     ) -> None:
         self._relayers = _normalize_relayer_catalog(relayers)
         if not self._relayers:
-            raise XianException(
-                "shielded relayer pool requires at least one configured relayer"
-            )
+            raise XianException("shielded relayer pool requires at least one configured relayer")
         self._clients = {
             relayer.id: ShieldedRelayerAsyncClient(
                 relayer.relayer_url,
@@ -261,17 +247,11 @@ class ShieldedRelayerAsyncPoolClient:
         for client in self._clients.values():
             await client.close()
 
-    def list_relayers(
-        self, kind: str | None = None
-    ) -> list[ShieldedRelayerCatalogEntry]:
+    def list_relayers(self, kind: str | None = None) -> list[ShieldedRelayerCatalogEntry]:
         relayers = (
             self._relayers
             if kind is None
-            else [
-                relayer
-                for relayer in self._relayers
-                if _supports_kind(relayer, kind)
-            ]
+            else [relayer for relayer in self._relayers if _supports_kind(relayer, kind)]
         )
         return list(relayers)
 
@@ -281,9 +261,7 @@ class ShieldedRelayerAsyncPoolClient:
             raise XianException(f"unknown shielded relayer id: {relayer_id}")
         return client
 
-    async def get_info(
-        self, *, relayer_id: str | None = None
-    ) -> ShieldedRelayerInfoResult:
+    async def get_info(self, *, relayer_id: str | None = None) -> ShieldedRelayerInfoResult:
         candidates = self._select_candidates(relayer_id=relayer_id)
 
         async def load(
@@ -345,9 +323,7 @@ class ShieldedRelayerAsyncPoolClient:
         )
         return ShieldedRelayerJobResult(
             relayer=relayer,
-            job=await self.get_client(
-                relayer.id
-            ).submit_shielded_note_relay_transfer(
+            job=await self.get_client(relayer.id).submit_shielded_note_relay_transfer(
                 contract=contract,
                 old_root=old_root,
                 input_nullifiers=input_nullifiers,
@@ -415,9 +391,7 @@ class ShieldedRelayerAsyncPoolClient:
         if relayer_id is not None:
             relayer = self._lookup_relayer(relayer_id)
             if kind is not None and not _supports_kind(relayer, kind):
-                raise XianException(
-                    f"shielded relayer {relayer.id} does not support {kind}"
-                )
+                raise XianException(f"shielded relayer {relayer.id} does not support {kind}")
             return [relayer]
         relayers = self.list_relayers(kind)
         if relayers:
@@ -433,8 +407,7 @@ class ShieldedRelayerAsyncPoolClient:
         if relayer_id is not None or len(candidates) == 1:
             return candidates[0]
         raise XianException(
-            f"{action} requires relayer_id when multiple "
-            "shielded relayers are configured"
+            f"{action} requires relayer_id when multiple shielded relayers are configured"
         )
 
     def _resolve_job_relayer(
@@ -444,8 +417,7 @@ class ShieldedRelayerAsyncPoolClient:
         if relayer_id is not None or len(candidates) == 1:
             return candidates[0]
         raise XianException(
-            f"{action} requires relayer_id when multiple "
-            "shielded relayers are configured"
+            f"{action} requires relayer_id when multiple shielded relayers are configured"
         )
 
     def _lookup_relayer(self, relayer_id: str) -> ShieldedRelayerCatalogEntry:
@@ -592,14 +564,10 @@ class ShieldedRelayerPoolClient:
     def __exit__(self, exc_type, exc, tb) -> None:
         self.close()
 
-    def list_relayers(
-        self, kind: str | None = None
-    ) -> list[ShieldedRelayerCatalogEntry]:
+    def list_relayers(self, kind: str | None = None) -> list[ShieldedRelayerCatalogEntry]:
         return self._async_client.list_relayers(kind)
 
-    def get_info(
-        self, *, relayer_id: str | None = None
-    ) -> ShieldedRelayerInfoResult:
+    def get_info(self, *, relayer_id: str | None = None) -> ShieldedRelayerInfoResult:
         return run_sync(self._async_client.get_info(relayer_id=relayer_id))
 
     def get_quote(
@@ -687,9 +655,5 @@ class ShieldedRelayerPoolClient:
             )
         )
 
-    def get_job(
-        self, job_id: str, *, relayer_id: str | None = None
-    ) -> ShieldedRelayerJobResult:
-        return run_sync(
-            self._async_client.get_job(job_id, relayer_id=relayer_id)
-        )
+    def get_job(self, job_id: str, *, relayer_id: str | None = None) -> ShieldedRelayerJobResult:
+        return run_sync(self._async_client.get_job(job_id, relayer_id=relayer_id))

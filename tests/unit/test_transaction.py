@@ -10,7 +10,7 @@ import pytest
 from xian_runtime_types.decimal import ContractingDecimal
 
 from xian_py.exception import TransportError, XianException
-from xian_py.formating import format_dictionary
+from xian_py.formatting import format_dictionary
 from xian_py.transaction import (
     broadcast_tx_commit_async,
     broadcast_tx_nowait_async,
@@ -83,9 +83,7 @@ def test_get_nonce_async_returns_zero_for_empty_response() -> None:
         ]
     )
 
-    with patch(
-        "xian_py.transaction.aiohttp.ClientSession", return_value=fake_session
-    ):
+    with patch("xian_py.transaction.aiohttp.ClientSession", return_value=fake_session):
         nonce = asyncio.run(get_nonce_async("http://node", "abc123"))
 
     assert nonce == 0
@@ -101,9 +99,7 @@ def test_get_nonce_async_decodes_nonce_value() -> None:
         ]
     )
 
-    with patch(
-        "xian_py.transaction.aiohttp.ClientSession", return_value=fake_session
-    ):
+    with patch("xian_py.transaction.aiohttp.ClientSession", return_value=fake_session):
         nonce = asyncio.run(get_nonce_async("http://node", "abc123"))
 
     assert nonce == 7
@@ -127,9 +123,7 @@ def test_simulate_tx_async_decodes_successful_response() -> None:
         ]
     )
 
-    with patch(
-        "xian_py.transaction.aiohttp.ClientSession", return_value=fake_session
-    ):
+    with patch("xian_py.transaction.aiohttp.ClientSession", return_value=fake_session):
         result = asyncio.run(simulate_tx_async("http://node", payload))
 
     assert result == expected
@@ -156,9 +150,7 @@ def test_simulate_tx_async_encodes_runtime_numeric_values() -> None:
         ]
     )
 
-    with patch(
-        "xian_py.transaction.aiohttp.ClientSession", return_value=fake_session
-    ):
+    with patch("xian_py.transaction.aiohttp.ClientSession", return_value=fake_session):
         asyncio.run(simulate_tx_async("http://node", payload))
 
     method, url = fake_session.calls[0]
@@ -185,9 +177,7 @@ def test_simulate_tx_async_wraps_error_response() -> None:
         ]
     )
 
-    with patch(
-        "xian_py.transaction.aiohttp.ClientSession", return_value=fake_session
-    ):
+    with patch("xian_py.transaction.aiohttp.ClientSession", return_value=fake_session):
         with pytest.raises(XianException, match="simulation failed"):
             asyncio.run(
                 simulate_tx_async(
@@ -207,9 +197,7 @@ def test_get_nonce_async_wraps_http_errors() -> None:
         ]
     )
 
-    with patch(
-        "xian_py.transaction.aiohttp.ClientSession", return_value=fake_session
-    ):
+    with patch("xian_py.transaction.aiohttp.ClientSession", return_value=fake_session):
         with pytest.raises(XianException):
             asyncio.run(get_nonce_async("http://node", "abc123"))
 
@@ -393,9 +381,7 @@ def test_format_dictionary_rejects_non_string_keys() -> None:
         (broadcast_tx_commit_async, "/broadcast_tx_commit"),
     ],
 )
-def test_broadcast_tx_async_posts_tx_in_request_body(
-    broadcast_fn, path: str
-) -> None:
+def test_broadcast_tx_async_posts_tx_in_request_body(broadcast_fn, path: str) -> None:
     fake_session = _FakeClientSession(
         post_responses=[_FakeResponse({"result": {"hash": "abc123"}})]
     )
@@ -413,23 +399,17 @@ def test_broadcast_tx_async_posts_tx_in_request_body(
         wallet,
     )
 
-    with patch(
-        "xian_py.transaction.aiohttp.ClientSession", return_value=fake_session
-    ):
+    with patch("xian_py.transaction.aiohttp.ClientSession", return_value=fake_session):
         asyncio.run(broadcast_fn("http://node", tx))
 
     assert fake_session.calls == [("post", f"http://node{path}")]
-    assert fake_session.call_kwargs == [
-        {"data": {"tx": f'"{json.dumps(tx).encode().hex()}"'}}
-    ]
+    assert fake_session.call_kwargs == [{"data": {"tx": f'"{json.dumps(tx).encode().hex()}"'}}]
 
 
 def test_wait_for_tx_async_returns_decoded_transaction_once_found() -> None:
     fake_session = _FakeClientSession(
         get_responses=[
-            _FakeResponse(
-                {"error": {"message": "not found", "data": "missing"}}
-            ),
+            _FakeResponse({"error": {"message": "not found", "data": "missing"}}),
             _FakeResponse(
                 {
                     "result": {
@@ -455,9 +435,7 @@ def test_wait_for_tx_async_returns_decoded_transaction_once_found() -> None:
                             .hex()
                         ),
                         "tx_result": {
-                            "data": _b64(
-                                json.dumps({"status": 0, "result": "ok"})
-                            ),
+                            "data": _b64(json.dumps({"status": 0, "result": "ok"})),
                         },
                     }
                 }
@@ -465,9 +443,7 @@ def test_wait_for_tx_async_returns_decoded_transaction_once_found() -> None:
         ]
     )
 
-    with patch(
-        "xian_py.transaction.aiohttp.ClientSession", return_value=fake_session
-    ):
+    with patch("xian_py.transaction.aiohttp.ClientSession", return_value=fake_session):
         result = asyncio.run(
             wait_for_tx_async(
                 "http://node",
@@ -533,9 +509,7 @@ def test_wait_for_tx_async_falls_back_to_recent_block_scan() -> None:
 
     fake_session = _FakeClientSession(
         get_responses=[
-            _FakeResponse(
-                {"error": {"message": "not found", "data": "missing"}}
-            ),
+            _FakeResponse({"error": {"message": "not found", "data": "missing"}}),
             _FakeResponse(
                 {
                     "result": {
@@ -562,9 +536,7 @@ def test_wait_for_tx_async_falls_back_to_recent_block_scan() -> None:
                         "txs_results": [
                             {
                                 "code": 0,
-                                "data": _b64(
-                                    json.dumps({"status": 0, "result": "ok"})
-                                ),
+                                "data": _b64(json.dumps({"status": 0, "result": "ok"})),
                                 "log": "",
                             }
                         ]
@@ -574,9 +546,7 @@ def test_wait_for_tx_async_falls_back_to_recent_block_scan() -> None:
         ]
     )
 
-    with patch(
-        "xian_py.transaction.aiohttp.ClientSession", return_value=fake_session
-    ):
+    with patch("xian_py.transaction.aiohttp.ClientSession", return_value=fake_session):
         result = asyncio.run(
             wait_for_tx_async(
                 "http://node",

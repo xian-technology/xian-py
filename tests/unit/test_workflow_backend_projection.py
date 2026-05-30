@@ -44,9 +44,7 @@ def _event(
 
 
 def test_workflow_projection_tracks_items_and_activity(tmp_path: Path) -> None:
-    projection = WorkflowProjection(
-        tmp_path / "workflow.sqlite3", "con_job_workflow"
-    )
+    projection = WorkflowProjection(tmp_path / "workflow.sqlite3", "con_job_workflow")
     try:
         assert projection.apply_event(
             _event(
@@ -236,9 +234,7 @@ def test_workflow_projection_tracks_items_and_activity(tmp_path: Path) -> None:
 def test_workflow_projection_accepts_split_bds_event_payloads(
     tmp_path: Path,
 ) -> None:
-    projection = WorkflowProjection(
-        tmp_path / "workflow-split.sqlite3", "con_job_workflow"
-    )
+    projection = WorkflowProjection(tmp_path / "workflow-split.sqlite3", "con_job_workflow")
     try:
         assert projection.apply_event(
             _event(

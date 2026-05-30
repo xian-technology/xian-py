@@ -21,9 +21,7 @@ async def main() -> None:
         )
     ensure_submission_succeeded(submission, "x402 settlement deployment")
     print(
-        "deployed "
-        f"{contract_name()} tx_hash={submission.tx_hash} "
-        f"finalized={submission.finalized}"
+        f"deployed {contract_name()} tx_hash={submission.tx_hash} finalized={submission.finalized}"
     )
 
 

@@ -59,9 +59,7 @@ async def hydrate_projection_state(
     data = merged_event_payload(event)
 
     if event.event in PROPOSAL_EVENTS and data.get("proposal_id") is not None:
-        proposal_snapshot = await client.contract(
-            approval_contract_name()
-        ).call(
+        proposal_snapshot = await client.contract(approval_contract_name()).call(
             "get_proposal",
             proposal_id=int(data["proposal_id"]),
         )

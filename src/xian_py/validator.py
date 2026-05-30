@@ -13,11 +13,7 @@ class ValidatorBase(ast.NodeVisitor):
 
 
 def _is_name_call(node: ast.AST, name: str) -> bool:
-    return (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == name
-    )
+    return isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == name
 
 
 def _metadata_assignment_key(stmt: ast.stmt) -> str | None:
@@ -113,9 +109,7 @@ class ValidatorXSC001(ValidatorBase):
 
         missing_metadata = self.metadata_fields - self.found_metadata_fields
         if missing_metadata:
-            errors.append(
-                f"Missing required metadata fields: {missing_metadata}"
-            )
+            errors.append(f"Missing required metadata fields: {missing_metadata}")
 
         return not errors, errors
 

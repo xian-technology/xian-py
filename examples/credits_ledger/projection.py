@@ -220,9 +220,7 @@ class CreditsLedgerProjection:
                     account_from,
                     account_to,
                     actor,
-                    _decimal_to_string(amount)
-                    if data.get("amount") is not None
-                    else None,
+                    _decimal_to_string(amount) if data.get("amount") is not None else None,
                     event.created,
                     json.dumps(event.raw, sort_keys=True, default=str),
                 ),
@@ -290,14 +288,10 @@ class CreditsLedgerProjection:
             """
         ).fetchone()
         activity_count = int(
-            self.connection.execute(
-                "SELECT COUNT(*) FROM ledger_events"
-            ).fetchone()[0]
+            self.connection.execute("SELECT COUNT(*) FROM ledger_events").fetchone()[0]
         )
         tracked_accounts = int(
-            self.connection.execute(
-                "SELECT COUNT(*) FROM account_balances"
-            ).fetchone()[0]
+            self.connection.execute("SELECT COUNT(*) FROM account_balances").fetchone()[0]
         )
         return ProjectionSummary(
             contract=str(row["contract"]),
@@ -433,13 +427,9 @@ class CreditsLedgerProjection:
             """,
             (address,),
         ).fetchone()
-        balance = (
-            _to_decimal(current["balance"]) if current is not None else ZERO
-        )
+        balance = _to_decimal(current["balance"]) if current is not None else ZERO
         issued = _to_decimal(current["issued"]) if current is not None else ZERO
-        received = (
-            _to_decimal(current["received"]) if current is not None else ZERO
-        )
+        received = _to_decimal(current["received"]) if current is not None else ZERO
         sent = _to_decimal(current["sent"]) if current is not None else ZERO
         burned = _to_decimal(current["burned"]) if current is not None else ZERO
 

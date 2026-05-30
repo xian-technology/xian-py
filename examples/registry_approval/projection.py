@@ -97,9 +97,7 @@ class RegistryActivityEntry:
 
 
 class RegistryApprovalProjection:
-    def __init__(
-        self, path: Path, *, registry_contract: str, approval_contract: str
-    ):
+    def __init__(self, path: Path, *, registry_contract: str, approval_contract: str):
         self.path = path
         self.registry_contract = registry_contract
         self.approval_contract = approval_contract
@@ -248,9 +246,7 @@ class RegistryApprovalProjection:
             or data.get("actor")
         )
         approved_count = (
-            _as_int(data.get("approved_count"))
-            if data.get("approved_count") is not None
-            else None
+            _as_int(data.get("approved_count")) if data.get("approved_count") is not None else None
         )
 
         with self.connection:
@@ -328,9 +324,7 @@ class RegistryApprovalProjection:
 
     def get_summary(self) -> RegistryProjectionSummary:
         proposal_count = int(
-            self.connection.execute(
-                "SELECT COUNT(*) FROM proposal_projection"
-            ).fetchone()[0]
+            self.connection.execute("SELECT COUNT(*) FROM proposal_projection").fetchone()[0]
         )
         pending_proposals = int(
             self.connection.execute(
@@ -343,9 +337,7 @@ class RegistryApprovalProjection:
             ).fetchone()[0]
         )
         record_count = int(
-            self.connection.execute(
-                "SELECT COUNT(*) FROM record_projection"
-            ).fetchone()[0]
+            self.connection.execute("SELECT COUNT(*) FROM record_projection").fetchone()[0]
         )
         active_records = int(
             self.connection.execute(
@@ -358,9 +350,7 @@ class RegistryApprovalProjection:
             ).fetchone()[0]
         )
         approval_count = int(
-            self.connection.execute(
-                "SELECT COUNT(*) FROM proposal_approvals"
-            ).fetchone()[0]
+            self.connection.execute("SELECT COUNT(*) FROM proposal_approvals").fetchone()[0]
         )
         last_event_id = self.connection.execute(
             "SELECT MAX(event_id) FROM registry_activity"
@@ -639,9 +629,7 @@ class RegistryApprovalProjection:
             ),
         )
 
-    def _set_cursor(
-        self, contract: str, event_name: str, event_id: int
-    ) -> None:
+    def _set_cursor(self, contract: str, event_name: str, event_id: int) -> None:
         self.state.set_int(f"cursor:{contract}:{event_name}", event_id)
 
     @staticmethod

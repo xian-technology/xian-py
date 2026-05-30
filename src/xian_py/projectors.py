@@ -83,9 +83,7 @@ class SQLiteProjectionState:
         strip_prefix: str | None = None,
     ) -> dict[str, int]:
         if prefix is None:
-            rows = self.connection.execute(
-                f"SELECT name, value FROM {self.table_name}"
-            ).fetchall()
+            rows = self.connection.execute(f"SELECT name, value FROM {self.table_name}").fetchall()
         else:
             rows = self.connection.execute(
                 f"SELECT name, value FROM {self.table_name} WHERE name LIKE ?",
@@ -143,10 +141,7 @@ def _quote_cometbft_query_value(value: str) -> str:
 
 
 def _build_cometbft_event_query(contract: str, event: str) -> str:
-    return (
-        "tm.event='Tx' "
-        f"AND {event}.contract={_quote_cometbft_query_value(contract)}"
-    )
+    return f"tm.event='Tx' AND {event}.contract={_quote_cometbft_query_value(contract)}"
 
 
 async def _maybe_await(value: Any) -> Any:
@@ -176,9 +171,7 @@ class EventProjector(Generic[HydrationT]):
     ) -> None:
         watcher_config = getattr(client.config, "watcher", None)
         resolved_batch_limit = (
-            batch_limit
-            if batch_limit is not None
-            else getattr(watcher_config, "batch_limit", None)
+            batch_limit if batch_limit is not None else getattr(watcher_config, "batch_limit", None)
         )
         resolved_poll_interval = (
             poll_interval_seconds
@@ -265,9 +258,7 @@ class EventProjector(Generic[HydrationT]):
                     "jsonrpc": "2.0",
                     "method": "subscribe",
                     "id": subscription_id,
-                    "params": {
-                        "query": _build_cometbft_event_query(contract, event)
-                    },
+                    "params": {"query": _build_cometbft_event_query(contract, event)},
                 }
             )
 
@@ -275,8 +266,7 @@ class EventProjector(Generic[HydrationT]):
                 payload = await self._receive_ws_json(ws)
                 if "error" in payload:
                     raise XianException(
-                        payload.get("error", {}).get("message")
-                        or "CometBFT subscription failed",
+                        payload.get("error", {}).get("message") or "CometBFT subscription failed",
                         details=payload,
                     )
                 if payload.get("id") == subscription_id:
@@ -405,9 +395,7 @@ class EventProjector(Generic[HydrationT]):
                         cause=exc,
                     ) from exc
             try:
-                applied = bool(
-                    await _maybe_await(self.apply_event(event, hydrated))
-                )
+                applied = bool(await _maybe_await(self.apply_event(event, hydrated)))
             except Exception as exc:
                 raise EventProjectorError(
                     phase="apply",
@@ -430,9 +418,7 @@ class EventProjector(Generic[HydrationT]):
 
         if self._watcher_mode() != "poll":
             wakeup_queue = asyncio.Queue(maxsize=1)
-            wakeup_worker = asyncio.create_task(
-                self._run_live_wakeup_worker(queue=wakeup_queue)
-            )
+            wakeup_worker = asyncio.create_task(self._run_live_wakeup_worker(queue=wakeup_queue))
 
         try:
             while True:
@@ -442,9 +428,7 @@ class EventProjector(Generic[HydrationT]):
                     if on_error is None:
                         raise
                     await _maybe_await(on_error(exc))
-                    woke_from_live_tail = await self._wait_for_cycle_wakeup(
-                        wakeup_queue
-                    )
+                    woke_from_live_tail = await self._wait_for_cycle_wakeup(wakeup_queue)
                     if woke_from_live_tail:
                         await self._sync_after_live_wakeup(
                             on_applied=on_applied,
@@ -453,9 +437,7 @@ class EventProjector(Generic[HydrationT]):
                     continue
 
                 if processed == 0:
-                    woke_from_live_tail = await self._wait_for_cycle_wakeup(
-                        wakeup_queue
-                    )
+                    woke_from_live_tail = await self._wait_for_cycle_wakeup(wakeup_queue)
                     if woke_from_live_tail:
                         await self._sync_after_live_wakeup(
                             on_applied=on_applied,

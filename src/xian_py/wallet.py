@@ -39,9 +39,7 @@ def _load_mnemonic_library():
     return Mnemonic
 
 
-def _derive_slip10_ed25519_private_key(
-    seed: bytes, derivation_path: list[int]
-) -> str:
+def _derive_slip10_ed25519_private_key(seed: bytes, derivation_path: list[int]) -> str:
     digest = hmac.new(b"ed25519 seed", seed, hashlib.sha512).digest()
     private_key = digest[:32]
     chain_code = digest[32:]
@@ -69,14 +67,8 @@ def _normalize_bip39_mnemonic(mnemonic: str) -> str:
     return normalized
 
 
-def _derive_xian_v1_mnemonic_private_key(
-    mnemonic: str, account_index: int = 0
-) -> str:
-    if (
-        type(account_index) is not int
-        or account_index < 0
-        or account_index > 0xFFFFFFFF
-    ):
+def _derive_xian_v1_mnemonic_private_key(mnemonic: str, account_index: int = 0) -> str:
+    if type(account_index) is not int or account_index < 0 or account_index > 0xFFFFFFFF:
         raise ValueError("account_index must be an integer between 0 and 4294967295")
 
     mnemonic_type = _load_mnemonic_library()
@@ -104,13 +96,9 @@ class Wallet:
             self._account = Ed25519Account.generate()
 
     @classmethod
-    def from_mnemonic_xian_v1(
-        cls, mnemonic: str, account_index: int = 0
-    ) -> "Wallet":
+    def from_mnemonic_xian_v1(cls, mnemonic: str, account_index: int = 0) -> "Wallet":
         """Create a wallet using the browser/mobile Xian v1 mnemonic scheme."""
-        private_key = _derive_xian_v1_mnemonic_private_key(
-            mnemonic, account_index
-        )
+        private_key = _derive_xian_v1_mnemonic_private_key(mnemonic, account_index)
         return cls(private_key=private_key)
 
     @property
@@ -163,11 +151,9 @@ class EthereumWallet:
         """Verify signed message"""
         message = encode_defunct(text=msg)
         try:
-            recovered_address = Account.recover_message(
-                message, signature=bytes.fromhex(signature)
-            )
+            recovered_address = Account.recover_message(message, signature=bytes.fromhex(signature))
             return recovered_address.lower() == self.address.lower()
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return False
 
     @staticmethod
@@ -211,9 +197,7 @@ class HDWallet:
 
     def get_wallet(self, derivation_path):
         """Get ED25519 wallet for custom derivation path"""
-        private_key_hex = _derive_slip10_ed25519_private_key(
-            self.seed_bytes, derivation_path
-        )
+        private_key_hex = _derive_slip10_ed25519_private_key(self.seed_bytes, derivation_path)
         return Wallet(private_key=private_key_hex)
 
     def get_ethereum_wallet(self, account_idx: int = 0):

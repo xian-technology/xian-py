@@ -34,9 +34,7 @@ app = FastAPI(
 
 
 def _facilitator(request: FacilitatorRequest) -> XianX402Facilitator:
-    requirement = XianX402PaymentRequirement.from_payment_required(
-        request.payment_required
-    )
+    requirement = XianX402PaymentRequirement.from_payment_required(request.payment_required)
     return XianX402Facilitator(
         client=app.state.client,
         requirement=requirement,

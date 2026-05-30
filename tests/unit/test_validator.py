@@ -124,18 +124,14 @@ def test_validate_contract_rejects_legacy_shape() -> None:
 
     assert is_valid is False
     assert any("Missing required variables" in error for error in errors)
-    assert any(
-        "balance_of has incorrect arguments" in error for error in errors
-    )
+    assert any("balance_of has incorrect arguments" in error for error in errors)
 
 
 def test_validate_contract_rejects_wrong_argument_order() -> None:
     is_valid, errors = validate_contract(WRONG_ORDER_CONTRACT)
 
     assert is_valid is False
-    assert any(
-        "transfer_from has incorrect arguments" in error for error in errors
-    )
+    assert any("transfer_from has incorrect arguments" in error for error in errors)
 
 
 def test_validate_contract_rejects_invalid_contract() -> None:

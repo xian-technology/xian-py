@@ -99,9 +99,7 @@ class _FakeWebSocket:
 
 
 class _FakeWebSocketSession:
-    def __init__(
-        self, *, websocket=None, connect_error: Exception | None = None
-    ):
+    def __init__(self, *, websocket=None, connect_error: Exception | None = None):
         self.websocket = websocket
         self.connect_error = connect_error
         self.ws_connect_calls: list[tuple[str, dict]] = []
@@ -311,17 +309,13 @@ class TestEventProjector(unittest.IsolatedAsyncioTestCase):
                 await task
 
         assert applied_ids == [1]
-        assert client.session.ws_connect_calls[0][0] == (
-            "ws://rpc.example:26657/websocket"
-        )
+        assert client.session.ws_connect_calls[0][0] == ("ws://rpc.example:26657/websocket")
         assert websocket.sent == [
             {
                 "jsonrpc": "2.0",
                 "method": "subscribe",
                 "id": "xian-py-projector-0",
-                "params": {
-                    "query": "tm.event='Tx' AND Transfer.contract='currency'"
-                },
+                "params": {"query": "tm.event='Tx' AND Transfer.contract='currency'"},
             }
         ]
 
@@ -384,9 +378,7 @@ class TestEventProjector(unittest.IsolatedAsyncioTestCase):
     async def test_run_forever_deduplicates_live_wakeup_subscriptions(
         self,
     ) -> None:
-        websocket = _FakeWebSocket(
-            [{"jsonrpc": "2.0", "id": "xian-py-projector-0", "result": {}}]
-        )
+        websocket = _FakeWebSocket([{"jsonrpc": "2.0", "id": "xian-py-projector-0", "result": {}}])
         event_sources = [
             EventSource("currency", "Transfer"),
             EventSource(
@@ -431,8 +423,6 @@ class TestEventProjector(unittest.IsolatedAsyncioTestCase):
                 "jsonrpc": "2.0",
                 "method": "subscribe",
                 "id": "xian-py-projector-0",
-                "params": {
-                    "query": "tm.event='Tx' AND Transfer.contract='currency'"
-                },
+                "params": {"query": "tm.event='Tx' AND Transfer.contract='currency'"},
             }
         ]

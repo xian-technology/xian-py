@@ -110,10 +110,7 @@ def test_payment_payload_header_round_trips() -> None:
     restored = XianX402PaymentPayload.from_header(payload.to_header())
 
     assert restored == payload
-    assert (
-        decode_json_header(payload.to_header())["paymentId"]
-        == payload.payment_id
-    )
+    assert decode_json_header(payload.to_header())["paymentId"] == payload.payment_id
 
 
 def test_tampered_payment_requirement_fails_verification() -> None:

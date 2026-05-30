@@ -127,23 +127,13 @@ class ShieldedRelayerInfoPolicy:
     def from_dict(cls, raw: Mapping[str, Any]) -> "ShieldedRelayerInfoPolicy":
         raw_dict = dict(raw)
         return cls(
-            quote_ttl_seconds=_coerce_int(raw_dict.get("quote_ttl_seconds"))
-            or 0,
-            default_expiry_seconds=(
-                _coerce_int(raw_dict.get("default_expiry_seconds")) or 0
-            ),
-            max_expiry_seconds=_coerce_int(raw_dict.get("max_expiry_seconds"))
-            or 0,
-            min_note_relayer_fee=(
-                _coerce_int(raw_dict.get("min_note_relayer_fee")) or 0
-            ),
-            min_command_relayer_fee=(
-                _coerce_int(raw_dict.get("min_command_relayer_fee")) or 0
-            ),
+            quote_ttl_seconds=_coerce_int(raw_dict.get("quote_ttl_seconds")) or 0,
+            default_expiry_seconds=(_coerce_int(raw_dict.get("default_expiry_seconds")) or 0),
+            max_expiry_seconds=_coerce_int(raw_dict.get("max_expiry_seconds")) or 0,
+            min_note_relayer_fee=(_coerce_int(raw_dict.get("min_note_relayer_fee")) or 0),
+            min_command_relayer_fee=(_coerce_int(raw_dict.get("min_command_relayer_fee")) or 0),
             allowed_note_contracts=[
-                item
-                for item in raw_dict.get("allowed_note_contracts", [])
-                if isinstance(item, str)
+                item for item in raw_dict.get("allowed_note_contracts", []) if isinstance(item, str)
             ],
             allowed_command_contracts=[
                 item
@@ -172,9 +162,7 @@ class ShieldedRelayerCatalogEntry:
     submission_kinds: list[str]
 
     @classmethod
-    def from_dict(
-        cls, raw: Mapping[str, Any], *, index: int = 0
-    ) -> "ShieldedRelayerCatalogEntry":
+    def from_dict(cls, raw: Mapping[str, Any], *, index: int = 0) -> "ShieldedRelayerCatalogEntry":
         raw_dict = dict(raw)
         relayer_url = (
             _coerce_str(raw_dict.get("relayer_url"))
@@ -185,17 +173,14 @@ class ShieldedRelayerCatalogEntry:
         ).rstrip("/")
         if not relayer_url:
             raise ValueError(
-                "shielded relayer entry must define relayer_url/relayerUrl "
-                "or base_url/baseUrl"
+                "shielded relayer entry must define relayer_url/relayerUrl or base_url/baseUrl"
             )
         auth_token = _coerce_str(raw_dict.get("auth_token")) or _coerce_str(
             raw_dict.get("authToken")
         )
         priority = _coerce_int(raw_dict.get("priority"))
         return cls(
-            id=(
-                _coerce_str(raw_dict.get("id")) or f"relayer-{index + 1}"
-            ).strip(),
+            id=(_coerce_str(raw_dict.get("id")) or f"relayer-{index + 1}").strip(),
             relayer_url=relayer_url,
             auth_token=(auth_token.strip() or None) if auth_token else None,
             auth_scheme=(
@@ -216,18 +201,12 @@ class ShieldedRelayerCatalogEntry:
                 default=False,
             ),
             public_job_lookup=_coerce_bool(
-                raw_dict.get(
-                    "public_job_lookup", raw_dict.get("publicJobLookup")
-                ),
+                raw_dict.get("public_job_lookup", raw_dict.get("publicJobLookup")),
                 default=False,
             ),
-            priority=priority
-            if priority is not None and priority >= 0
-            else 100,
+            priority=priority if priority is not None and priority >= 0 else 100,
             submission_kinds=_normalize_submission_kinds(
-                raw_dict.get(
-                    "submission_kinds", raw_dict.get("submissionKinds")
-                )
+                raw_dict.get("submission_kinds", raw_dict.get("submissionKinds"))
             ),
         )
 
@@ -258,8 +237,7 @@ class ShieldedRelayerInfo:
             submission_mode=str(raw_dict.get("submission_mode", "checktx")),
             wait_for_tx=bool(raw_dict.get("wait_for_tx", False)),
             capabilities={
-                key: bool(value)
-                for key, value in raw_dict.get("capabilities", {}).items()
+                key: bool(value) for key, value in raw_dict.get("capabilities", {}).items()
             }
             if isinstance(raw_dict.get("capabilities"), Mapping)
             else {},
@@ -402,10 +380,8 @@ class NodeStatus:
 
         latest_height = sync_info.get("latest_block_height")
         try:
-            latest_height = (
-                int(latest_height) if latest_height is not None else None
-            )
-        except (TypeError, ValueError):
+            latest_height = int(latest_height) if latest_height is not None else None
+        except TypeError, ValueError:
             latest_height = None
 
         catching_up = sync_info.get("catching_up")
@@ -420,9 +396,7 @@ class NodeStatus:
             latest_block_hash=sync_info.get("latest_block_hash"),
             latest_app_hash=sync_info.get("latest_app_hash"),
             latest_block_time_iso=sync_info.get("latest_block_time"),
-            catching_up=(
-                bool(catching_up) if isinstance(catching_up, bool) else None
-            ),
+            catching_up=(bool(catching_up) if isinstance(catching_up, bool) else None),
             raw=raw_dict,
         )
 
@@ -444,11 +418,7 @@ class BdsStatus:
     def from_dict(cls, raw: Mapping[str, Any]) -> "BdsStatus":
         raw_dict = dict(raw)
         indexed = raw_dict.get("indexed", {})
-        indexed_height = (
-            indexed.get("indexed_height")
-            if isinstance(indexed, Mapping)
-            else None
-        )
+        indexed_height = indexed.get("indexed_height") if isinstance(indexed, Mapping) else None
         return cls(
             worker_running=bool(raw_dict.get("worker_running")),
             catchup_running=bool(raw_dict.get("catchup_running")),
@@ -513,12 +483,8 @@ class TokenBalance:
         raw_dict = dict(raw)
         last_block_height = raw_dict.get("last_block_height")
         try:
-            last_block_height = (
-                int(last_block_height)
-                if last_block_height is not None
-                else None
-            )
-        except (TypeError, ValueError):
+            last_block_height = int(last_block_height) if last_block_height is not None else None
+        except TypeError, ValueError:
             last_block_height = None
 
         balance = raw_dict.get("balance")
@@ -549,11 +515,7 @@ class TokenBalancePage:
     def from_dict(cls, raw: Mapping[str, Any]) -> "TokenBalancePage":
         raw_dict = dict(raw)
         raw_items = raw_dict.get("items", [])
-        items = [
-            TokenBalance.from_dict(item)
-            for item in raw_items
-            if isinstance(item, Mapping)
-        ]
+        items = [TokenBalance.from_dict(item) for item in raw_items if isinstance(item, Mapping)]
         return cls(
             available=bool(raw_dict.get("available", False)),
             address=raw_dict.get("address"),

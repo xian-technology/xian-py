@@ -220,9 +220,7 @@ def test_registry_approval_projection_tracks_proposals_records_and_activity(
         proposal_activity = projection.list_activity(proposal_id=1, limit=10)
         assert [entry.event_id for entry in proposal_activity] == [3, 2, 1]
 
-        record_activity = projection.list_activity(
-            record_id="record-1", limit=10
-        )
+        record_activity = projection.list_activity(record_id="record-1", limit=10)
         assert [entry.event_id for entry in record_activity] == [5, 4, 3, 1]
 
         health = projection.get_health()

@@ -24,7 +24,7 @@ from xian_py.exception import (
     TxTimeoutError,
     XianException,
 )
-from xian_py.formating import check_format_of_payload, format_dictionary
+from xian_py.formatting import check_format_of_payload, format_dictionary
 from xian_py.wallet import Wallet
 
 
@@ -61,9 +61,7 @@ async def request_json_async(
     if requester is not None:
         request_context = requester(method, url, **request_kwargs)
     else:
-        request_context = getattr(session, method.lower())(
-            url, **request_kwargs
-        )
+        request_context = getattr(session, method.lower())(url, **request_kwargs)
 
     try:
         async with request_context as response:
@@ -90,9 +88,7 @@ async def abci_query_async(
     )
     if "error" in data:
         raise RpcError(
-            data["error"].get("data")
-            or data["error"].get("message")
-            or "RPC error",
+            data["error"].get("data") or data["error"].get("message") or "RPC error",
             details=data["error"],
         )
 
@@ -408,10 +404,7 @@ async def _lookup_tx_in_recent_blocks_async(
     target_hash = tx_hash.upper()
     for height in range(max(1, start_height), end_height + 1):
         block = await get_block_async(node_url, height, session=session)
-        block_txs = (
-            block.get("result", {}).get("block", {}).get("data", {}).get("txs")
-            or []
-        )
+        block_txs = block.get("result", {}).get("block", {}).get("data", {}).get("txs") or []
         if not block_txs:
             continue
 
@@ -424,13 +417,10 @@ async def _lookup_tx_in_recent_blocks_async(
                 height,
                 session=session,
             )
-            txs_results = (
-                block_results.get("result", {}).get("txs_results") or []
-            )
+            txs_results = block_results.get("result", {}).get("txs_results") or []
             tx_result = (
                 dict(txs_results[index])
-                if index < len(txs_results)
-                and isinstance(txs_results[index], dict)
+                if index < len(txs_results) and isinstance(txs_results[index], dict)
                 else {"code": 0, "data": None, "log": ""}
             )
             tx_result["data"] = _decode_block_result_data(tx_result.get("data"))
@@ -476,21 +466,13 @@ async def wait_for_tx_async(
             if "error" not in data:
                 return data
 
-            last_error = data["error"].get("data") or data["error"].get(
-                "message"
-            )
+            last_error = data["error"].get("data") or data["error"].get("message")
             try:
                 status = await get_status_async(node_url, session=session)
                 latest_height_raw = (
-                    status.get("result", {})
-                    .get("sync_info", {})
-                    .get("latest_block_height")
+                    status.get("result", {}).get("sync_info", {}).get("latest_block_height")
                 )
-                latest_height = (
-                    int(latest_height_raw)
-                    if latest_height_raw is not None
-                    else None
-                )
+                latest_height = int(latest_height_raw) if latest_height_raw is not None else None
             except TransportError as exc:
                 last_error = str(exc)
             except Exception:

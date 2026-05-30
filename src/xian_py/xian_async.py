@@ -306,9 +306,7 @@ class XianAsync:
             node = edge.get("node")
             if not isinstance(node, dict):
                 continue
-            events.append(
-                IndexedEvent.from_dict(_graphql_event_node_to_dict(node))
-            )
+            events.append(IndexedEvent.from_dict(_graphql_event_node_to_dict(node)))
         return events
 
     async def _graphql_get_events_for_tx(
@@ -353,9 +351,7 @@ class XianAsync:
             node = edge.get("node")
             if not isinstance(node, dict):
                 continue
-            events.append(
-                IndexedEvent.from_dict(_graphql_event_node_to_dict(node))
-            )
+            events.append(IndexedEvent.from_dict(_graphql_event_node_to_dict(node)))
         return events
 
     async def ensure_chain_id(self) -> None:
@@ -401,10 +397,7 @@ class XianAsync:
             try:
                 return await operation()
             except Exception as exc:
-                if (
-                    not self._is_retryable_read_error(exc)
-                    or attempt >= attempts
-                ):
+                if not self._is_retryable_read_error(exc) or attempt >= attempts:
                     raise
                 await self._emit_retry_event(
                     operation="read",
@@ -469,9 +462,7 @@ class XianAsync:
 
     @staticmethod
     def _local_tx_hash(tx: dict[str, Any]) -> str:
-        return (
-            hashlib.sha256(json.dumps(tx).encode("utf-8")).hexdigest().upper()
-        )
+        return hashlib.sha256(json.dumps(tx).encode("utf-8")).hexdigest().upper()
 
     async def _abci_query_value(self, path: str) -> Any:
         data = await self._retry_read(
@@ -539,9 +530,7 @@ class XianAsync:
             return data["result"]
 
         async def query_abci() -> Any:
-            return await self._abci_query_value(
-                f"/get/{contract}.balances:{address}"
-            )
+            return await self._abci_query_value(f"/get/{contract}.balances:{address}")
 
         def normalize_balance(
             balance: int | float | str | ContractingDecimal,
@@ -582,25 +571,21 @@ class XianAsync:
 
         if "error" in normalized:
             normalized["success"] = False
-            normalized["message"] = normalized["error"].get(
-                "data"
-            ) or normalized["error"].get("message")
+            normalized["message"] = normalized["error"].get("data") or normalized["error"].get(
+                "message"
+            )
         elif tx_result.get("code") == 0:
             normalized["success"] = True
         else:
             normalized["success"] = False
             if isinstance(execution, dict):
                 normalized["message"] = (
-                    execution.get("result")
-                    or execution.get("error")
-                    or execution
+                    execution.get("result") or execution.get("error") or execution
                 )
             elif execution is not None:
                 normalized["message"] = execution
             else:
-                normalized["message"] = (
-                    tx_result.get("log") or "Transaction failed"
-                )
+                normalized["message"] = tx_result.get("log") or "Transaction failed"
 
         return TransactionReceipt.from_lookup(normalized)
 
@@ -613,9 +598,7 @@ class XianAsync:
     ) -> TransactionReceipt:
         """Wait until a transaction can be retrieved from the node."""
         timeout_seconds = (
-            self.config.submission.timeout_seconds
-            if timeout_seconds is None
-            else timeout_seconds
+            self.config.submission.timeout_seconds if timeout_seconds is None else timeout_seconds
         )
         poll_interval_seconds = (
             self.config.submission.poll_interval_seconds
@@ -643,9 +626,7 @@ class XianAsync:
         min_chi_headroom: int | None = None,
     ) -> dict[str, Any]:
         resolved_chi_margin = (
-            self.config.submission.chi_margin
-            if chi_margin is None
-            else chi_margin
+            self.config.submission.chi_margin if chi_margin is None else chi_margin
         )
         resolved_min_chi_headroom = (
             self.config.submission.min_chi_headroom
@@ -680,10 +661,7 @@ class XianAsync:
     async def _reserve_nonce(self, explicit_nonce: int | None) -> int:
         if explicit_nonce is not None:
             async with self._nonce_reservation_lock:
-                if (
-                    self._next_nonce is None
-                    or explicit_nonce >= self._next_nonce
-                ):
+                if self._next_nonce is None or explicit_nonce >= self._next_nonce:
                     self._next_nonce = explicit_nonce + 1
             return explicit_nonce
 
@@ -722,15 +700,9 @@ class XianAsync:
     ) -> TransactionSubmission:
         """Send a transaction using an explicit broadcast mode."""
         mode = mode or self.config.submission.mode
-        wait_for_tx = (
-            self.config.submission.wait_for_tx
-            if wait_for_tx is None
-            else wait_for_tx
-        )
+        wait_for_tx = self.config.submission.wait_for_tx if wait_for_tx is None else wait_for_tx
         timeout_seconds = (
-            self.config.submission.timeout_seconds
-            if timeout_seconds is None
-            else timeout_seconds
+            self.config.submission.timeout_seconds if timeout_seconds is None else timeout_seconds
         )
         poll_interval_seconds = (
             self.config.submission.poll_interval_seconds
@@ -738,9 +710,7 @@ class XianAsync:
             else poll_interval_seconds
         )
         if mode not in {"async", "checktx", "commit"}:
-            raise ValueError(
-                "mode must be one of: 'async', 'checktx', 'commit'"
-            )
+            raise ValueError("mode must be one of: 'async', 'checktx', 'commit'")
 
         if chain_id is None:
             await self.ensure_chain_id()
@@ -773,6 +743,20 @@ class XianAsync:
         tx = tr.create_tx(payload, self.wallet)
         local_tx_hash = self._local_tx_hash(tx)
 
+        result: dict[str, Any] = {
+            "submitted": False,
+            "accepted": False,
+            "finalized": False,
+            "message": None,
+            "tx_hash": None,
+            "mode": mode,
+            "nonce": reserved_nonce,
+            "chi_supplied": supplied_stamps,
+            "chi_estimated": estimated_stamps,
+            "response": {},
+            "receipt": None,
+        }
+
         try:
 
             async def _broadcast_once():
@@ -795,31 +779,49 @@ class XianAsync:
                 )
 
             data = await self._retry_broadcast(_broadcast_once)
+        except TransportError as exc:
+            if wait_for_tx:
+                try:
+                    receipt = await self.wait_for_tx(
+                        local_tx_hash,
+                        timeout_seconds=timeout_seconds,
+                        poll_interval_seconds=poll_interval_seconds,
+                    )
+                except Exception as recovery_exc:
+                    await self._invalidate_reserved_nonce(reserved_nonce)
+                    raise exc from recovery_exc
+
+                result.update(
+                    {
+                        "submitted": True,
+                        "accepted": True,
+                        "finalized": True,
+                        "message": "broadcast response unavailable; transaction finalized by local hash",
+                        "tx_hash": local_tx_hash,
+                        "response": {
+                            "error": {
+                                "message": str(exc),
+                                "type": type(exc).__name__,
+                            }
+                        },
+                        "receipt": receipt,
+                    }
+                )
+                return TransactionSubmission.from_dict(result)
+
+            await self._invalidate_reserved_nonce(reserved_nonce)
+            raise
         except Exception:
             await self._invalidate_reserved_nonce(reserved_nonce)
             raise
 
-        result: dict[str, Any] = {
-            "submitted": False,
-            "accepted": False,
-            "finalized": False,
-            "message": None,
-            "tx_hash": None,
-            "mode": mode,
-            "nonce": reserved_nonce,
-            "chi_supplied": supplied_stamps,
-            "chi_estimated": estimated_stamps,
-            "response": data,
-            "receipt": None,
-        }
+        result["response"] = data
 
         if "error" in data:
             duplicate_tx = self._is_duplicate_tx_log(
                 data["error"].get("data") or data["error"].get("message")
             )
-            result["message"] = data["error"].get("data") or data["error"].get(
-                "message"
-            )
+            result["message"] = data["error"].get("data") or data["error"].get("message")
             if duplicate_tx:
                 result["submitted"] = True
                 result["accepted"] = True
@@ -849,11 +851,7 @@ class XianAsync:
         if mode == "commit":
             commit_result = data.get("result", {})
             check_tx = commit_result.get("check_tx", {})
-            deliver_tx = (
-                commit_result.get("deliver_tx")
-                or commit_result.get("tx_result")
-                or {}
-            )
+            deliver_tx = commit_result.get("deliver_tx") or commit_result.get("tx_result") or {}
             commit_height = str(commit_result.get("height") or "0")
             result["tx_hash"] = commit_result.get("hash") or local_tx_hash
             result["accepted"] = check_tx.get("code", 1) == 0
@@ -861,9 +859,7 @@ class XianAsync:
             if duplicate_tx:
                 result["accepted"] = True
             result["finalized"] = (
-                result["accepted"]
-                and deliver_tx.get("code", 1) == 0
-                and commit_height != "0"
+                result["accepted"] and deliver_tx.get("code", 1) == 0 and commit_height != "0"
             )
             if not result["accepted"]:
                 await self._invalidate_reserved_nonce(reserved_nonce)
@@ -871,9 +867,7 @@ class XianAsync:
             elif duplicate_tx:
                 result["message"] = check_tx.get("log")
             elif not result["finalized"]:
-                result["message"] = deliver_tx.get("log") or (
-                    "Transaction was not finalized"
-                )
+                result["message"] = deliver_tx.get("log") or ("Transaction was not finalized")
             return TransactionSubmission.from_dict(result)
 
         checktx_result = data.get("result", {})
@@ -949,9 +943,7 @@ class XianAsync:
             min_chi_headroom=min_chi_headroom,
         )
 
-    async def simulate(
-        self, contract: str, function: str, kwargs: dict
-    ) -> dict:
+    async def simulate(self, contract: str, function: str, kwargs: dict) -> dict:
         payload = {
             "contract": contract,
             "function": function,
@@ -980,7 +972,7 @@ class XianAsync:
             return result
         try:
             return ast.literal_eval(result)
-        except (SyntaxError, ValueError):
+        except SyntaxError, ValueError:
             normalized = self._decode_simulation_result_string(result)
             if normalized is not None:
                 return normalized
@@ -1087,15 +1079,10 @@ class XianAsync:
         if not isinstance(deployment_artifacts, dict):
             raise TypeError("deployment_artifacts must be a dict")
         if "runtime_code" in deployment_artifacts:
-            raise ValueError(
-                "deployment_artifacts must not include runtime_code"
-            )
+            raise ValueError("deployment_artifacts must not include runtime_code")
         hashes = deployment_artifacts.get("hashes")
         if isinstance(hashes, dict) and "runtime_code_sha256" in hashes:
-            raise ValueError(
-                "deployment_artifacts hashes must not include "
-                "runtime_code_sha256"
-            )
+            raise ValueError("deployment_artifacts hashes must not include runtime_code_sha256")
         if args:
             kwargs["constructor_args"] = args
         kwargs["deployment_artifacts"] = deployment_artifacts
@@ -1204,12 +1191,8 @@ class XianAsync:
             raise XianException("Unexpected BDS status payload")
         return BdsStatus.from_dict(payload)
 
-    async def get_developer_rewards(
-        self, recipient_key: str
-    ) -> DeveloperRewardSummary:
-        payload = await self._abci_query_value(
-            f"/developer_rewards/{recipient_key}"
-        )
+    async def get_developer_rewards(self, recipient_key: str) -> DeveloperRewardSummary:
+        payload = await self._abci_query_value(f"/developer_rewards/{recipient_key}")
         if not isinstance(payload, dict):
             raise XianException("Unexpected developer rewards payload")
         return DeveloperRewardSummary.from_dict(payload)
@@ -1237,9 +1220,7 @@ class XianAsync:
         limit: int = 100,
         offset: int = 0,
     ) -> list[IndexedBlock]:
-        payload = await self._abci_query_value(
-            f"/blocks/limit={limit}/offset={offset}"
-        )
+        payload = await self._abci_query_value(f"/blocks/limit={limit}/offset={offset}")
         if not isinstance(payload, list):
             raise XianException("Unexpected block list payload")
         return [IndexedBlock.from_dict(item) for item in payload]
@@ -1453,9 +1434,7 @@ class XianAsync:
     async def _get_latest_block_height(self) -> int:
         status = await self.get_node_status()
         if status.latest_block_height is None:
-            raise XianException(
-                "Node status did not include latest_block_height"
-            )
+            raise XianException("Node status did not include latest_block_height")
         return status.latest_block_height
 
     async def _get_live_block(self, height: int) -> IndexedBlock | None:
@@ -1480,7 +1459,7 @@ class XianAsync:
         raw_height = header.get("height")
         try:
             block_height = int(raw_height) if raw_height is not None else None
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             block_height = None
 
         txs = block_data.get("txs") or []
@@ -1542,8 +1521,7 @@ class XianAsync:
             payload = await self._receive_ws_json(ws)
             if "error" in payload:
                 raise XianException(
-                    payload.get("error", {}).get("message")
-                    or "CometBFT subscription failed",
+                    payload.get("error", {}).get("message") or "CometBFT subscription failed",
                     details=payload,
                 )
             if payload.get("id") == subscription_id:
@@ -1556,10 +1534,7 @@ class XianAsync:
         live_event: LiveEvent,
     ) -> IndexedEvent | None:
         for item in candidates:
-            if (
-                live_event.event_index is not None
-                and item.event_index == live_event.event_index
-            ):
+            if live_event.event_index is not None and item.event_index == live_event.event_index:
                 return item
         for item in candidates:
             if (
@@ -1659,9 +1634,7 @@ class XianAsync:
 
             for item in events:
                 if item.id is None:
-                    raise XianException(
-                        "Event watcher requires event IDs in indexed payloads"
-                    )
+                    raise XianException("Event watcher requires event IDs in indexed payloads")
                 cursor = item.id
                 yield item
 
@@ -1755,18 +1728,13 @@ class XianAsync:
                         for item in pending:
                             if item.id is None:
                                 raise XianException(
-                                    "Event watcher requires event IDs in "
-                                    "indexed payloads"
+                                    "Event watcher requires event IDs in indexed payloads"
                                 )
                             cursor = item.id
                             yield item
 
                     while True:
-                        payload = (
-                            buffered.pop(0)
-                            if buffered
-                            else await self._receive_ws_json(ws)
-                        )
+                        payload = buffered.pop(0) if buffered else await self._receive_ws_json(ws)
 
                         live_events = _extract_matching_live_events(
                             payload,
@@ -1776,11 +1744,9 @@ class XianAsync:
                         if not live_events:
                             continue
 
-                        resolved_events = (
-                            await self._resolve_live_indexed_events(
-                                live_events,
-                                poll_interval_seconds=poll_interval_seconds,
-                            )
+                        resolved_events = await self._resolve_live_indexed_events(
+                            live_events,
+                            poll_interval_seconds=poll_interval_seconds,
                         )
                         for resolved in resolved_events:
                             if resolved.id is None or resolved.id <= cursor:
@@ -1831,11 +1797,7 @@ class XianAsync:
                     )
 
                     while True:
-                        payload = (
-                            buffered.pop(0)
-                            if buffered
-                            else await self._receive_ws_json(ws)
-                        )
+                        payload = buffered.pop(0) if buffered else await self._receive_ws_json(ws)
                         live_events = _extract_matching_live_events(
                             payload,
                             contract=contract,
@@ -1879,7 +1841,7 @@ class XianAsync:
 
         try:
             return ast.literal_eval(quoted_datetimes)
-        except (SyntaxError, ValueError):
+        except SyntaxError, ValueError:
             return None
 
     @staticmethod
@@ -1890,7 +1852,7 @@ class XianAsync:
         if type_of_data == "int":
             try:
                 return int(data)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return XianAsync._decode_abci_value(data, None)
         if type_of_data == "bool":
             return data == "True"

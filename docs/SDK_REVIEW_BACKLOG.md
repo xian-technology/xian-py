@@ -30,6 +30,7 @@
   - FastAPI service
   - background event worker
   - admin / automation job
+- corrected the `xian_py.formatting` import path
 
 ## Still Worth Doing
 
@@ -43,4 +44,3 @@
 - revisit the validator helper in `validator.py`; it should either consume the
   authoritative `xian-contracting` standard rules or move out of the SDK
   `ast.unparse` based path if possible
-- consider renaming `formating.py` to `formatting.py`

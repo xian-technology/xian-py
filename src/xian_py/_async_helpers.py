@@ -68,10 +68,7 @@ def _quote_cometbft_query_value(value: str) -> str:
 
 
 def _build_cometbft_event_query(contract: str, event: str) -> str:
-    return (
-        "tm.event='Tx' "
-        f"AND {event}.contract={_quote_cometbft_query_value(contract)}"
-    )
+    return f"tm.event='Tx' AND {event}.contract={_quote_cometbft_query_value(contract)}"
 
 
 def _decode_ws_tx_execution(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -155,9 +152,7 @@ def _extract_matching_live_events(
             continue
 
         data_indexed = item.get("data_indexed")
-        normalized_indexed = (
-            dict(data_indexed) if isinstance(data_indexed, dict) else None
-        )
+        normalized_indexed = dict(data_indexed) if isinstance(data_indexed, dict) else None
         data = item.get("data")
         normalized_data = dict(data) if isinstance(data, dict) else None
 

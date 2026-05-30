@@ -17,9 +17,7 @@ def _public_key_from_ed25519_hex(public_key: str) -> PublicKey:
     return PublicKey(crypto_sign_ed25519_pk_to_curve25519(bytes.fromhex(public_key)))
 
 
-def encrypt(
-    sender_private_key: str, receiver_public_key: str, cleartext_msg: str
-) -> str:
+def encrypt(sender_private_key: str, receiver_public_key: str, cleartext_msg: str) -> str:
     """
     Encrypts a message using the sender's private key and the receiver's public key.
 
@@ -68,9 +66,7 @@ def decrypt_as_receiver(
     return decrypted_plaintext.decode("utf-8")
 
 
-def decrypt_as_sender(
-    sender_private_key: str, receiver_public_key: str, encrypted_msg: str
-) -> str:
+def decrypt_as_sender(sender_private_key: str, receiver_public_key: str, encrypted_msg: str) -> str:
     """
     Decrypts a message as the sender using the sender's private key and the receiver's public key.
 
