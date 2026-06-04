@@ -381,7 +381,7 @@ class NodeStatus:
         latest_height = sync_info.get("latest_block_height")
         try:
             latest_height = int(latest_height) if latest_height is not None else None
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             latest_height = None
 
         catching_up = sync_info.get("catching_up")
@@ -484,7 +484,7 @@ class TokenBalance:
         last_block_height = raw_dict.get("last_block_height")
         try:
             last_block_height = int(last_block_height) if last_block_height is not None else None
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             last_block_height = None
 
         balance = raw_dict.get("balance")
