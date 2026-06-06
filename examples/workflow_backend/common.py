@@ -43,15 +43,7 @@ def workflow_source_path() -> Path:
     if env_path:
         return Path(env_path).expanduser().resolve()
 
-    workspace_root = Path(__file__).resolve().parents[3]
-    return (
-        workspace_root
-        / "xian-configs"
-        / "solutions"
-        / "workflow-backend"
-        / "contracts"
-        / "job_workflow.s.py"
-    )
+    return Path(__file__).resolve().parent / "contracts" / "job_workflow.s.py"
 
 
 def cursor_path() -> Path:

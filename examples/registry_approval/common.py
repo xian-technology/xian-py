@@ -51,15 +51,7 @@ def records_source_path() -> Path:
     if env_path:
         return Path(env_path).expanduser().resolve()
 
-    workspace_root = Path(__file__).resolve().parents[3]
-    return (
-        workspace_root
-        / "xian-configs"
-        / "solutions"
-        / "registry-approval"
-        / "contracts"
-        / "registry_records.s.py"
-    )
+    return Path(__file__).resolve().parent / "contracts" / "registry_records.s.py"
 
 
 def approval_source_path() -> Path:
@@ -67,15 +59,7 @@ def approval_source_path() -> Path:
     if env_path:
         return Path(env_path).expanduser().resolve()
 
-    workspace_root = Path(__file__).resolve().parents[3]
-    return (
-        workspace_root
-        / "xian-configs"
-        / "solutions"
-        / "registry-approval"
-        / "contracts"
-        / "registry_approval.s.py"
-    )
+    return Path(__file__).resolve().parent / "contracts" / "registry_approval.s.py"
 
 
 def projection_path() -> Path:

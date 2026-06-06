@@ -70,15 +70,7 @@ def contract_source_path() -> Path:
     if env_path:
         return Path(env_path).expanduser().resolve()
 
-    workspace_root = Path(__file__).resolve().parents[3]
-    return (
-        workspace_root
-        / "xian-configs"
-        / "solutions"
-        / "x402-exact"
-        / "contracts"
-        / "x402_settlement.s.py"
-    )
+    return Path(__file__).resolve().parent / "contracts" / "x402_settlement.s.py"
 
 
 def build_requirement(
