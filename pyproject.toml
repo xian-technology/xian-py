@@ -50,6 +50,9 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+# Contract sources use runtime-injected names (ctx, export, Hash, ...)
+# that standalone linting cannot resolve.
+extend-exclude = ["examples/*/contracts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
