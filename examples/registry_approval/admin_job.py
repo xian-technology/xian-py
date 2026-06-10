@@ -63,9 +63,9 @@ def main() -> None:
         if registry_source is None:
             registry_code = records_source_path().read_text(encoding="utf-8")
             result = ensure_submission_succeeded(
-                client.submit_contract(
+                client.deploy_contract(
                     name=registry_name,
-                    code=registry_code,
+                    source=registry_code,
                     args={
                         "name": os.environ.get(
                             "XIAN_REGISTRY_NAME",
@@ -89,9 +89,9 @@ def main() -> None:
         if approval_source is None:
             approval_code = approval_source_path().read_text(encoding="utf-8")
             result = ensure_submission_succeeded(
-                client.submit_contract(
+                client.deploy_contract(
                     name=approval_name,
-                    code=approval_code,
+                    source=approval_code,
                     args={
                         "registry_contract": registry_name,
                         "operator": os.environ.get(

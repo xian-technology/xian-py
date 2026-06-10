@@ -52,9 +52,9 @@ def main() -> None:
                 ),
             }
             result = ensure_submission_succeeded(
-                client.submit_contract(
+                client.deploy_contract(
                     name=ledger_name,
-                    code=code,
+                    source=code,
                     args=args,
                     mode="checktx",
                     wait_for_tx=True,

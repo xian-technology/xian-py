@@ -58,9 +58,9 @@ def main() -> None:
         if existing_source is None:
             code = workflow_source_path().read_text(encoding="utf-8")
             result = ensure_submission_succeeded(
-                client.submit_contract(
+                client.deploy_contract(
                     name=contract_name,
-                    code=code,
+                    source=code,
                     args={
                         "name": os.environ.get("XIAN_WORKFLOW_NAME", "Job Workflow"),
                         "operator": os.environ.get(

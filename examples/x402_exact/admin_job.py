@@ -13,7 +13,7 @@ from examples.x402_exact.common import (
 async def main() -> None:
     source = contract_source_path().read_text(encoding="utf-8")
     async with xian_client() as client:
-        submission = await client.submit_contract(
+        submission = await client.deploy_contract(
             contract_name(),
             source,
             mode="checktx",
