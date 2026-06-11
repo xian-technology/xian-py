@@ -31,16 +31,16 @@
   - background event worker
   - admin / automation job
 - corrected the `xian_py.formatting` import path
+- structured error types (`TransportError`, `RpcError`, `AbciError`,
+  `SimulationError`, `TransactionError`, `TxTimeoutError`) under
+  `XianException`
+- direct SDK surfaces for the newer stack endpoints:
+  - BDS-backed block / tx / event queries
+  - `get_perf_status()` and `get_bds_status()`
+  - state-history queries
 
 ## Still Worth Doing
 
-- split `XianException` into transport, RPC, ABCI, simulation, and transaction
-  error types
-- expose the newer stack surfaces directly in the SDK:
-  - BDS-backed block / tx / event queries
-  - `/perf_status`
-  - `/bds_status`
-  - state-history queries
 - revisit the validator helper in `validator.py`; it should either consume the
   authoritative `xian-contracting` standard rules or move out of the SDK
   `ast.unparse` based path if possible

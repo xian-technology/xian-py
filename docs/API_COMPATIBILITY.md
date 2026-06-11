@@ -25,6 +25,12 @@ client calls, or call the explicit `*_async` functions from async code.
 Ethereum wallet helpers expose `address`; they no longer alias that value as
 `public_key`.
 
+## Additive Surface
+
+- `Wallet.from_mnemonic(mnemonic, account_index=0)` derives accounts with the
+  canonical Xian mnemonic scheme shared with the browser and mobile wallets.
+  It is additive and does not change existing `Wallet` constructor behavior.
+
 Release checklist:
 
 - tag as the next breaking pre-1.0 version, for example `0.5.0`
@@ -32,6 +38,6 @@ Release checklist:
   submission path in release notes
 - call out removed low-level transaction sync wrappers and the removed
   `EthereumWallet.public_key` address alias
-- update downstream examples before tagging
+- done: downstream examples use `deploy_contract(...)` / artifact submission
 - keep `/contract_source/<name>` and `/contract_ir/<name>` as the only SDK
   retrieval paths for contract artifacts
