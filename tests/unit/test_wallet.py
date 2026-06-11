@@ -52,27 +52,27 @@ def test_wallet_reconstructs_from_private_key() -> None:
     assert wallet.verify_msg(message, restored.sign_msg(message)) is True
 
 
-def test_wallet_derives_browser_mobile_xian_v1_mnemonic(monkeypatch) -> None:
+def test_wallet_derives_browser_mobile_xian_mnemonic(monkeypatch) -> None:
     monkeypatch.setattr(wallet_module, "_load_mnemonic_library", lambda: _FakeMnemonic)
 
-    wallet = Wallet.from_mnemonic_xian_v1(VALID_MNEMONIC.upper())
-    second_wallet = Wallet.from_mnemonic_xian_v1(VALID_MNEMONIC, account_index=1)
+    wallet = Wallet.from_mnemonic(VALID_MNEMONIC.upper())
+    second_wallet = Wallet.from_mnemonic(VALID_MNEMONIC, account_index=1)
 
-    assert wallet.private_key == "457c57823c3ba5c795eb91a34b3a666d2bdf7a40bf8154e715dcf687a3ded6ec"
+    assert wallet.private_key == "b3aee0ed179a18a754136d3d134c03e9c1ad97eb2e9912401dc2d9ffc96882e0"
     assert (
         second_wallet.private_key
-        == "a40393033de03256f7d4b2c42860464879c6d763febbc89a25989598af246fa7"
+        == "f1f4674448f4d17a78af6b150a7fa45a752d0014fb0235604a339a898695ce69"
     )
     assert wallet.public_key != second_wallet.public_key
 
 
-def test_wallet_rejects_invalid_xian_v1_mnemonic_index(monkeypatch) -> None:
+def test_wallet_rejects_invalid_xian_mnemonic_index(monkeypatch) -> None:
     monkeypatch.setattr(wallet_module, "_load_mnemonic_library", lambda: _FakeMnemonic)
 
     with pytest.raises(ValueError, match="account_index"):
-        Wallet.from_mnemonic_xian_v1(VALID_MNEMONIC, account_index=-1)
+        Wallet.from_mnemonic(VALID_MNEMONIC, account_index=-1)
     with pytest.raises(ValueError, match="account_index"):
-        Wallet.from_mnemonic_xian_v1(VALID_MNEMONIC, account_index=True)
+        Wallet.from_mnemonic(VALID_MNEMONIC, account_index=True)
 
 
 def test_ethereum_address_validation_accepts_prefixed_and_plain_hex() -> None:

@@ -1395,7 +1395,7 @@ def test_xian_async_call_decodes_structured_return_value_with_datetime_strings()
             }
         ),
     ):
-        result = asyncio.run(client.call("masternodes", "get_validator", {"account": "alice"}))
+        result = asyncio.run(client.call("validators", "get_validator", {"account": "alice"}))
 
     assert result == {
         "account": "alice",
