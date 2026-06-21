@@ -95,6 +95,7 @@ Optional extras:
 
 ```bash
 uv add "xian-tech-py[app]"   # FastAPI examples
+uv add "xian-tech-py[compile]" # Source-to-artifact contract deployment
 uv add "xian-tech-py[eth]"   # Ethereum-style key helpers
 uv add "xian-tech-py[hd]"    # HD-wallet derivation
 ```
@@ -226,9 +227,10 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
 ```
 
 `deploy_contract` builds the Xian VM deployment artifacts locally before
-submitting. To submit artifacts produced by another toolchain, such as
-`xian contract build-artifacts`, call `submit_contract(name, deployment_artifacts)`
-directly.
+submitting and requires the `compile` extra (`uv add "xian-tech-py[compile]"`).
+To submit artifacts produced by another toolchain, such as
+`xian contract build-artifacts`, call
+`submit_contract(name, deployment_artifacts)` directly.
 
 Query BDS-backed history:
 
@@ -464,7 +466,7 @@ websocket-only, non-resumable delivery.
 ## Validation
 
 ```bash
-uv sync --group dev
+uv sync --group dev --extra compile
 uv run ruff check .
 uv run ruff format --check .
 uv run pytest

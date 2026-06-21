@@ -14,11 +14,13 @@ dependencies = [
     "aiohttp>=3.13.5,<4",
     "pynacl>=1.5.0,<2",
     "xian-tech-accounts>=0.1.1,<0.2",
-    "xian-tech-contracting>=1.0.8,<2",
     "xian-tech-runtime-types>=0.1.2,<0.2",
 ]
 
 [project.optional-dependencies]
+compile = [
+    "xian-tech-contracting>=1.0.8,<2",
+]
 hd = [
     "mnemonic>=0.21,<0.22",
 ]

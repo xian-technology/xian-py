@@ -35,7 +35,7 @@ jobs:
 
       - name: Sync dependencies
         working-directory: xian-py
-        run: uv sync --group dev
+        run: uv sync --group dev --extra compile
 
       - name: Ruff lint
         working-directory: xian-py

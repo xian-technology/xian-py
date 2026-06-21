@@ -26,7 +26,7 @@
   intentionally retired.
 
 ## Validation
-- Preferred setup: `uv sync --group dev`
+- Preferred setup: `uv sync --group dev --extra compile`
 - Lint: `uv run ruff check .`
 - Format check: `uv run ruff format --check .`
 - Tests: `uv run pytest`

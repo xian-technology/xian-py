@@ -358,7 +358,7 @@ def test_xian_async_estimate_chi_reports_exact_estimate_and_suggested_headroom()
             min_chi_headroom=100,
         )
     )
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet, config=config)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet, config=config)
 
     async def run_estimate() -> dict[str, object]:
         try:
@@ -384,7 +384,7 @@ def test_xian_async_estimate_chi_reports_exact_estimate_and_suggested_headroom()
 
 def test_xian_async_submit_contract_forwards_deployment_artifacts() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     sentinel = object()
 
     async def run_submit():
@@ -420,7 +420,7 @@ def test_xian_async_submit_contract_forwards_deployment_artifacts() -> None:
 
 def test_xian_async_submit_contract_rejects_runtime_artifacts() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     source = "def foo():\n    return 1\n"
 
     async def run_submit():
@@ -451,7 +451,7 @@ def test_xian_async_submit_contract_rejects_runtime_artifacts() -> None:
 
 def test_xian_submit_contract_forwards_deployment_artifacts() -> None:
     wallet = Wallet()
-    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    client = Xian("http://node", chain_id="xian-local-1", wallet=wallet)
     sentinel = object()
 
     try:
@@ -478,7 +478,7 @@ def test_xian_submit_contract_forwards_deployment_artifacts() -> None:
 
 def test_xian_async_deploy_contract_builds_and_submits_artifacts() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     sentinel = object()
 
     async def run_deploy():
@@ -528,7 +528,7 @@ def test_xian_async_deploy_contract_builds_and_submits_artifacts() -> None:
 
 def test_xian_async_deploy_contract_uses_real_xian_vm_compiler() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     sentinel = object()
 
     async def run_deploy():
@@ -573,7 +573,7 @@ def test_xian_async_deploy_contract_uses_real_xian_vm_compiler() -> None:
 
 def test_xian_deploy_contract_forwards_to_async_client() -> None:
     wallet = Wallet()
-    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    client = Xian("http://node", chain_id="xian-local-1", wallet=wallet)
     sentinel = object()
 
     try:
@@ -604,7 +604,7 @@ def test_xian_async_rejects_non_ed25519_wallets() -> None:
     with pytest.raises(TypeError, match="Ed25519 Xian account"):
         XianAsync(
             "http://node",
-            chain_id="xian-1",
+            chain_id="xian-local-1",
             wallet=_InvalidWallet(),
         )
 
@@ -613,14 +613,14 @@ def test_xian_rejects_non_ed25519_wallets() -> None:
     with pytest.raises(TypeError, match="Ed25519 Xian account"):
         Xian(
             "http://node",
-            chain_id="xian-1",
+            chain_id="xian-local-1",
             wallet=_InvalidWallet(),
         )
 
 
 def test_xian_async_send_tx_reserves_nonces_locally_for_concurrent_calls() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     observed_nonces: list[int] = []
 
     def _capture_tx(payload: dict, wallet: Wallet) -> dict:
@@ -665,7 +665,7 @@ def test_xian_async_send_tx_reserves_nonces_locally_for_concurrent_calls() -> No
 
 def test_xian_async_send_tx_invalidates_reserved_nonce_after_checktx_failure() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     observed_nonces: list[int] = []
 
     def _capture_tx(payload: dict, wallet: Wallet) -> dict:
@@ -728,7 +728,7 @@ def test_xian_async_send_tx_retries_transport_errors_with_same_nonce() -> None:
     )
     client = XianAsync(
         "http://node",
-        chain_id="xian-1",
+        chain_id="xian-local-1",
         wallet=wallet,
         config=config,
     )
@@ -777,7 +777,7 @@ def test_xian_async_send_tx_retries_transport_errors_with_same_nonce() -> None:
 
 def test_xian_async_send_tx_can_wait_for_finalized_receipt() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
 
     async def run_send() -> TransactionSubmission:
         try:
@@ -828,7 +828,7 @@ def test_xian_async_send_tx_recovers_receipt_after_broadcast_timeout() -> None:
     wallet = Wallet()
     client = XianAsync(
         "http://node",
-        chain_id="xian-1",
+        chain_id="xian-local-1",
         wallet=wallet,
         config=XianClientConfig(
             retry=RetryPolicy(max_attempts=1),
@@ -896,7 +896,7 @@ def test_xian_async_send_tx_recovers_receipt_after_broadcast_timeout() -> None:
 
 def test_xian_async_send_tx_treats_duplicate_cache_checktx_as_accepted() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
 
     async def run_send() -> TransactionSubmission:
         try:
@@ -962,7 +962,7 @@ def test_xian_async_send_tx_treats_duplicate_cache_checktx_as_accepted() -> None
 
 def test_xian_async_send_tx_treats_duplicate_cache_rpc_error_as_accepted() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
 
     async def run_send() -> TransactionSubmission:
         try:
@@ -1004,7 +1004,7 @@ def test_xian_async_send_tx_treats_duplicate_cache_rpc_error_as_accepted() -> No
 
 def test_xian_async_send_tx_waits_for_duplicate_cache_rpc_error_by_local_hash() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
 
     async def run_send() -> TransactionSubmission:
         try:
@@ -1068,7 +1068,7 @@ def test_xian_async_send_tx_waits_for_duplicate_cache_rpc_error_by_local_hash() 
 
 def test_xian_async_send_tx_invalidates_reserved_nonce_after_wait_timeout() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     observed_nonces: list[int] = []
 
     def _capture_tx(payload: dict, wallet: Wallet) -> dict:
@@ -1126,7 +1126,7 @@ def test_xian_async_send_tx_invalidates_reserved_nonce_after_wait_timeout() -> N
 
 def test_xian_async_send_tx_async_mode_reports_submission_without_checktx() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
 
     async def run_send() -> TransactionSubmission:
         try:
@@ -1160,7 +1160,7 @@ def test_xian_async_send_tx_async_mode_reports_submission_without_checktx() -> N
 
 def test_xian_async_send_tx_commit_mode_does_not_report_finalized_when_checktx_fails() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
 
     async def run_send() -> TransactionSubmission:
         try:
@@ -1209,7 +1209,7 @@ def test_xian_async_send_tx_commit_mode_does_not_report_finalized_when_checktx_f
 
 def test_xian_async_get_balance_falls_back_to_abci_query() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse(
@@ -1236,7 +1236,7 @@ def test_xian_async_get_balance_falls_back_to_abci_query() -> None:
 
 
 def test_xian_async_get_tx_surfaces_error_payloads() -> None:
-    client = XianAsync("http://node", chain_id="xian-1")
+    client = XianAsync("http://node", chain_id="xian-local-1")
 
     with patch.object(
         tr,
@@ -1266,7 +1266,7 @@ def test_xian_async_get_tx_surfaces_error_payloads() -> None:
 
 
 def test_xian_async_get_tx_exposes_transaction_and_execution() -> None:
-    client = XianAsync("http://node", chain_id="xian-1")
+    client = XianAsync("http://node", chain_id="xian-local-1")
     tx = {"payload": {"contract": "currency", "function": "transfer"}}
     execution = {"status": 0, "result": "ok", "chi_used": 7}
 
@@ -1301,7 +1301,7 @@ def test_xian_async_get_tx_exposes_transaction_and_execution() -> None:
 
 def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse({"result": {"response": {"value": "AA=="}}}),
@@ -1362,7 +1362,7 @@ def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
 
 
 def test_xian_async_call_decodes_structured_return_value() -> None:
-    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
 
     with patch.object(
         client,
@@ -1380,7 +1380,7 @@ def test_xian_async_call_decodes_structured_return_value() -> None:
 
 
 def test_xian_async_call_decodes_structured_return_value_with_datetime_strings() -> None:
-    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
 
     with patch.object(
         client,
@@ -1406,7 +1406,7 @@ def test_xian_async_call_decodes_structured_return_value_with_datetime_strings()
 
 
 def test_xian_async_get_state_stringifies_non_string_keys() -> None:
-    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
 
     with patch.object(
         client,
@@ -1420,7 +1420,7 @@ def test_xian_async_get_state_stringifies_non_string_keys() -> None:
 
 
 def test_xian_async_call_returns_plain_string_results() -> None:
-    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
 
     with patch.object(
         client,
@@ -1438,7 +1438,7 @@ def test_xian_async_call_returns_plain_string_results() -> None:
 
 
 def test_xian_async_call_preserves_hex_string_results() -> None:
-    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
 
     with patch.object(
         client,
@@ -1457,7 +1457,7 @@ def test_xian_async_call_preserves_hex_string_results() -> None:
 
 
 def test_xian_async_call_raises_on_failed_simulated_execution() -> None:
-    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
 
     with patch.object(
         client,
@@ -1481,7 +1481,7 @@ def test_xian_async_call_raises_on_failed_simulated_execution() -> None:
 
 def test_xian_async_send_preserves_decimal_precision() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
 
     with patch.object(
         client,
@@ -1503,7 +1503,7 @@ def test_xian_async_send_preserves_decimal_precision() -> None:
 
 def test_xian_async_approve_preserves_decimal_precision() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
 
     with patch.object(
         client,
@@ -1525,7 +1525,7 @@ def test_xian_async_approve_preserves_decimal_precision() -> None:
 
 def test_xian_async_get_contract_source_returns_display_source() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse(
@@ -1544,7 +1544,7 @@ def test_xian_async_get_contract_source_returns_display_source() -> None:
 
 def test_xian_async_get_contract_ir_returns_vm_ir() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse(
@@ -1560,7 +1560,7 @@ def test_xian_async_get_contract_ir_returns_vm_ir() -> None:
 
 def test_xian_async_get_approved_amount_reads_approvals() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     client.get_state = AsyncMock(return_value=25)
 
     approved_amount = asyncio.run(client.get_approved_amount("dex"))
@@ -1576,7 +1576,7 @@ def test_xian_async_get_approved_amount_reads_approvals() -> None:
 
 def test_async_token_client_allowance_reads_approvals() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     client.get_state = AsyncMock(return_value=ContractingDecimal("10.0"))
 
     allowance = asyncio.run(client.token("currency").allowance("con_dex"))
@@ -1591,7 +1591,7 @@ def test_async_token_client_allowance_reads_approvals() -> None:
 
 
 def test_xian_async_get_nodes_returns_remote_ips() -> None:
-    client = XianAsync("http://node", chain_id="xian-1")
+    client = XianAsync("http://node", chain_id="xian-local-1")
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse(
@@ -1611,7 +1611,7 @@ def test_xian_async_get_nodes_returns_remote_ips() -> None:
 
 
 def test_xian_async_exposes_perf_status_as_typed_model() -> None:
-    client = XianAsync("http://node", chain_id="xian-1")
+    client = XianAsync("http://node", chain_id="xian-local-1")
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse(
@@ -1637,7 +1637,7 @@ def test_xian_async_exposes_perf_status_as_typed_model() -> None:
 
 
 def test_xian_async_exposes_bds_status_as_typed_model() -> None:
-    client = XianAsync("http://node", chain_id="xian-1")
+    client = XianAsync("http://node", chain_id="xian-local-1")
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse(
@@ -1665,7 +1665,7 @@ def test_xian_async_exposes_bds_status_as_typed_model() -> None:
 
 
 def test_xian_async_exposes_developer_rewards_as_typed_model() -> None:
-    client = XianAsync("http://node", chain_id="xian-1")
+    client = XianAsync("http://node", chain_id="xian-local-1")
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse(
@@ -1692,7 +1692,7 @@ def test_xian_async_exposes_developer_rewards_as_typed_model() -> None:
 
 
 def test_xian_async_exposes_token_balances_as_typed_page() -> None:
-    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
 
     with patch.object(
         client,
@@ -1758,7 +1758,7 @@ def test_xian_async_exposes_token_balances_as_typed_page() -> None:
 
 
 def test_xian_async_exposes_shielded_output_tags_as_typed_models() -> None:
-    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
 
     with patch.object(
         client,
@@ -1838,7 +1838,7 @@ def test_xian_async_exposes_shielded_output_tags_as_typed_models() -> None:
 
 
 def test_xian_async_exposes_shielded_wallet_history_as_typed_models() -> None:
-    client = XianAsync("http://node", chain_id="xian-1", wallet=Wallet())
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
 
     with patch.object(
         client,
@@ -1923,7 +1923,7 @@ def test_xian_async_exposes_shielded_wallet_history_as_typed_models() -> None:
 
 
 def test_xian_async_list_events_falls_back_to_graphql() -> None:
-    client = XianAsync("https://node.xian.org", chain_id="xian-1")
+    client = XianAsync("http://127.0.0.1:26657", chain_id="xian-local-1")
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse(
@@ -1972,7 +1972,7 @@ def test_xian_async_list_events_falls_back_to_graphql() -> None:
     assert events[0].tx_hash == "TX-11"
     assert events[0].block_height == 12
     graphql_call = client.session.post_calls[1]
-    assert graphql_call[0] == "https://node.xian.org/graphql"
+    assert graphql_call[0] == "http://127.0.0.1:26657/graphql"
     assert graphql_call[1]["json"]["variables"] == {
         "contract": "currency",
         "event": "Transfer",
@@ -1982,7 +1982,7 @@ def test_xian_async_list_events_falls_back_to_graphql() -> None:
 
 
 def test_xian_async_get_events_for_tx_falls_back_to_graphql() -> None:
-    client = XianAsync("https://node.xian.org", chain_id="xian-1")
+    client = XianAsync("http://127.0.0.1:26657", chain_id="xian-local-1")
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse(
@@ -2033,13 +2033,13 @@ def test_xian_async_get_events_for_tx_falls_back_to_graphql() -> None:
         (22, "con_staking_v1", "Withdraw"),
     ]
     graphql_call = client.session.post_calls[1]
-    assert graphql_call[0] == "https://node.xian.org/graphql"
+    assert graphql_call[0] == "http://127.0.0.1:26657/graphql"
     assert graphql_call[1]["json"]["variables"] == {"txHash": "TX-21"}
 
 
 def test_sync_client_reuses_background_runtime_until_closed() -> None:
     wallet = Wallet()
-    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    client = Xian("http://node", chain_id="xian-local-1", wallet=wallet)
     client._async_client.get_balance = AsyncMock(return_value=42)
     client._async_client.close = AsyncMock()
 
@@ -2053,7 +2053,7 @@ def test_sync_client_reuses_background_runtime_until_closed() -> None:
 
 def test_sync_client_exposes_token_balances() -> None:
     wallet = Wallet()
-    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    client = Xian("http://node", chain_id="xian-local-1", wallet=wallet)
     page = TokenBalancePage(
         available=True,
         address=wallet.public_key,
@@ -2073,7 +2073,7 @@ def test_sync_client_exposes_token_balances() -> None:
 
 def test_sync_client_exposes_shielded_output_tags() -> None:
     wallet = Wallet()
-    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    client = Xian("http://node", chain_id="xian-local-1", wallet=wallet)
     items = [
         ShieldedOutputTag(
             id=1,
@@ -2104,7 +2104,7 @@ def test_sync_client_exposes_shielded_output_tags() -> None:
 
 def test_sync_client_exposes_shielded_wallet_history() -> None:
     wallet = Wallet()
-    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    client = Xian("http://node", chain_id="xian-local-1", wallet=wallet)
     items = [
         ShieldedWalletHistoryEntry(
             event_id=1,
@@ -2136,7 +2136,7 @@ def test_sync_client_exposes_shielded_wallet_history() -> None:
 
 def test_sync_client_context_manager_closes_async_client() -> None:
     wallet = Wallet()
-    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    client = Xian("http://node", chain_id="xian-local-1", wallet=wallet)
     client._async_client.get_balance = AsyncMock(return_value=42)
     client._async_client.close = AsyncMock()
 
@@ -2163,7 +2163,7 @@ def test_sync_client_installs_delegates_for_public_async_api() -> None:
 
 
 def test_sync_client_rejects_calls_inside_running_loop() -> None:
-    client = Xian("http://node", chain_id="xian-1", wallet=Wallet())
+    client = Xian("http://node", chain_id="xian-local-1", wallet=Wallet())
 
     async def invoke() -> None:
         coroutine = client._async_client.get_balance()
@@ -2900,7 +2900,7 @@ def test_xian_async_reserve_nonce_retries_transport_errors() -> None:
     )
     client = XianAsync(
         "http://node",
-        chain_id="xian-1",
+        chain_id="xian-local-1",
         wallet=wallet,
         config=config,
     )
@@ -2933,7 +2933,7 @@ def test_xian_async_simulate_retries_transport_errors() -> None:
     )
     client = XianAsync(
         "http://node",
-        chain_id="xian-1",
+        chain_id="xian-local-1",
         wallet=wallet,
         config=config,
     )
@@ -2968,7 +2968,7 @@ def test_xian_async_wait_for_tx_retries_transport_errors() -> None:
     )
     client = XianAsync(
         "http://node",
-        chain_id="xian-1",
+        chain_id="xian-local-1",
         wallet=wallet,
         config=config,
     )
@@ -3075,7 +3075,7 @@ def test_xian_async_retry_callback_reports_broadcast_retries() -> None:
     )
     client = XianAsync(
         "http://node",
-        chain_id="xian-1",
+        chain_id="xian-local-1",
         wallet=wallet,
         config=config,
     )
@@ -3125,7 +3125,7 @@ def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:
     )
     client = XianAsync(
         "http://node",
-        chain_id="xian-1",
+        chain_id="xian-local-1",
         wallet=wallet,
         config=config,
     )
@@ -3182,7 +3182,7 @@ def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:
 
 def test_xian_async_send_tx_uses_per_call_chi_headroom() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
 
     async def run_send() -> TransactionSubmission:
         try:
@@ -3275,7 +3275,7 @@ def test_xian_async_watch_events_uses_watcher_defaults_from_config() -> None:
 
 def test_async_contract_client_send_merges_kwargs() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     contract = client.contract("currency")
     client.send_tx = AsyncMock(
         return_value=TransactionSubmission.from_dict(
@@ -3323,7 +3323,7 @@ def test_async_contract_client_send_merges_kwargs() -> None:
 
 def test_async_token_client_uses_token_helpers() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     token = client.token("currency")
     client.get_balance = AsyncMock(return_value=ContractingDecimal("12.5"))
     client.send = AsyncMock(
@@ -3372,7 +3372,7 @@ def test_async_token_client_uses_token_helpers() -> None:
 
 def test_token_client_allowance_reads_approvals() -> None:
     wallet = Wallet()
-    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    client = Xian("http://node", chain_id="xian-local-1", wallet=wallet)
     client.get_state = MagicMock(return_value=ContractingDecimal("7.0"))
 
     allowance = client.token("currency").allowance("con_dex")
@@ -3388,7 +3388,7 @@ def test_token_client_allowance_reads_approvals() -> None:
 
 def test_async_state_key_client_uses_exact_full_key() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     state_key = client.state_key("currency", "balances", "alice")
     client.get_state = AsyncMock(return_value=10)
     client.get_state_history = AsyncMock(return_value=[])
@@ -3409,7 +3409,7 @@ def test_async_state_key_client_uses_exact_full_key() -> None:
 
 def test_async_state_key_client_stringifies_non_string_keys() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-1", wallet=wallet)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     state_key = client.state_key("con_pairs", "pairs", 1, "reserve0")
     client.get_state = AsyncMock(return_value=500)
     client.get_state_history = AsyncMock(return_value=[])
@@ -3430,7 +3430,7 @@ def test_async_state_key_client_stringifies_non_string_keys() -> None:
 
 def test_sync_contract_and_event_helpers_delegate_to_root_client() -> None:
     wallet = Wallet()
-    client = Xian("http://node", chain_id="xian-1", wallet=wallet)
+    client = Xian("http://node", chain_id="xian-local-1", wallet=wallet)
     contract = client.contract("ledger")
     events = client.events("currency", "Transfer")
     state_key = client.state_key("currency", "balances", "alice")

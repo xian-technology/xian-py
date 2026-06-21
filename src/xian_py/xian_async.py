@@ -71,9 +71,9 @@ def _build_deployment_artifacts(
         from contracting.artifacts import build_contract_artifacts
     except ImportError as exc:
         raise ImportError(
-            "deploy_contract requires xian-tech-contracting, which is a "
-            "required xian-tech-py dependency. Reinstall xian-tech-py in this "
-            "environment, or build artifacts separately and call "
+            "deploy_contract requires xian-tech-contracting. Install "
+            "xian-tech-py[compile], install xian-tech-contracting explicitly, "
+            "or build artifacts separately and call "
             "submit_contract(name, deployment_artifacts)."
         ) from exc
 
