@@ -95,7 +95,7 @@ Optional extras:
 
 ```bash
 uv add "xian-tech-py[app]"   # FastAPI examples
-uv add "xian-tech-py[compile]" # Source-to-artifact contract deployment
+uv add "xian-tech-py[compile]" # Offline source-to-artifact utilities
 uv add "xian-tech-py[eth]"   # Ethereum-style key helpers
 uv add "xian-tech-py[hd]"    # HD-wallet derivation
 ```
@@ -187,7 +187,7 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
     )
     print(submission.tx_hash, submission.accepted, submission.finalized)
     if submission.receipt:
-        print(submission.receipt.success)
+        print(submission.receipt.success, submission.receipt.chi_used)
 ```
 
 Deploy a contract from source:
@@ -226,11 +226,9 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
     print(deployed.tx_hash, result.tx_hash)
 ```
 
-`deploy_contract` builds the Xian VM deployment artifacts locally before
-submitting and requires the `compile` extra (`uv add "xian-tech-py[compile]"`).
-To submit artifacts produced by another toolchain, such as
-`xian contract build-artifacts`, call
-`submit_contract(name, deployment_artifacts)` directly.
+`deploy_contract` and `submit_contract` submit cleartext source. Nodes compile
+submitted source and persist canonical IR, so normal deployment does not require
+the `compile` extra. Use `compile` only for offline artifact inspection.
 
 Query BDS-backed history:
 

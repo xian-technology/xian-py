@@ -32,6 +32,31 @@ def _coerce_bool(value: Any, *, default: bool) -> bool:
     return value if isinstance(value, bool) else default
 
 
+def _extract_receipt_chi_used(
+    raw: Mapping[str, Any],
+    execution: Mapping[str, Any] | None,
+) -> int | None:
+    candidates: list[Any] = []
+    if execution is not None:
+        candidates.append(execution.get("chi_used"))
+    candidates.append(raw.get("chi_used"))
+
+    result = raw.get("result")
+    if isinstance(result, Mapping):
+        tx_result = result.get("tx_result")
+        if isinstance(tx_result, Mapping):
+            data = tx_result.get("data")
+            if isinstance(data, Mapping):
+                candidates.append(data.get("chi_used"))
+            candidates.extend((tx_result.get("chi_used"), tx_result.get("gas_used")))
+
+    for candidate in candidates:
+        chi_used = _coerce_int(candidate)
+        if chi_used is not None:
+            return chi_used
+    return None
+
+
 def _normalize_submission_kinds(value: Any) -> list[str]:
     supported = (
         "shielded_note_relay_transfer",
@@ -56,6 +81,7 @@ class TransactionReceipt:
     transaction: dict[str, Any] | None
     execution: dict[str, Any] | None
     raw: dict[str, Any]
+    chi_used: int | None = None
 
     @classmethod
     def from_lookup(cls, raw: Mapping[str, Any]) -> "TransactionReceipt":
@@ -71,6 +97,10 @@ class TransactionReceipt:
             transaction=raw_dict.get("transaction"),
             execution=execution if isinstance(execution, dict) else None,
             raw=raw_dict,
+            chi_used=_extract_receipt_chi_used(
+                raw_dict,
+                execution if isinstance(execution, Mapping) else None,
+            ),
         )
 
 

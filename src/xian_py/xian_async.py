@@ -61,30 +61,6 @@ _SIMULATION_DATETIME_RE = re.compile(
 )
 
 
-def _build_deployment_artifacts(
-    *,
-    module_name: str,
-    source: str,
-    lint: bool,
-) -> dict[str, object]:
-    try:
-        from contracting.artifacts import build_contract_artifacts
-    except ImportError as exc:
-        raise ImportError(
-            "deploy_contract requires xian-tech-contracting. Install "
-            "xian-tech-py[compile], install xian-tech-contracting explicitly, "
-            "or build artifacts separately and call "
-            "submit_contract(name, deployment_artifacts)."
-        ) from exc
-
-    return build_contract_artifacts(
-        module_name=module_name,
-        source=source,
-        lint=lint,
-        vm_profile="xian_vm_v1",
-    )
-
-
 class XianAsync:
     """Async version of the Xian class for non-blocking operations."""
 
@@ -1063,7 +1039,7 @@ class XianAsync:
     async def submit_contract(
         self,
         name: str,
-        deployment_artifacts: dict,
+        code: str,
         args: dict = None,
         chi: int | None = None,
         mode: Literal["async", "checktx", "commit"] | None = None,
@@ -1076,16 +1052,11 @@ class XianAsync:
     ) -> TransactionSubmission:
         """Submit a contract to the network."""
         kwargs: dict[str, Any] = {"name": name}
-        if not isinstance(deployment_artifacts, dict):
-            raise TypeError("deployment_artifacts must be a dict")
-        if "runtime_code" in deployment_artifacts:
-            raise ValueError("deployment_artifacts must not include runtime_code")
-        hashes = deployment_artifacts.get("hashes")
-        if isinstance(hashes, dict) and "runtime_code_sha256" in hashes:
-            raise ValueError("deployment_artifacts hashes must not include runtime_code_sha256")
+        if not isinstance(code, str) or code == "":
+            raise TypeError("code must be a non-empty string")
         if args:
             kwargs["constructor_args"] = args
-        kwargs["deployment_artifacts"] = deployment_artifacts
+        kwargs["code"] = code
 
         return await self.send_tx(
             "submission",
@@ -1117,15 +1088,10 @@ class XianAsync:
         *,
         lint: bool = True,
     ) -> TransactionSubmission:
-        """Compile and submit a contract using the Xian VM artifact format."""
-        deployment_artifacts = _build_deployment_artifacts(
-            module_name=name,
-            source=source,
-            lint=lint,
-        )
+        """Submit contract source for node-side compilation and deployment."""
         return await self.submit_contract(
             name,
-            deployment_artifacts,
+            source,
             args=args,
             chi=chi,
             nonce=nonce,
