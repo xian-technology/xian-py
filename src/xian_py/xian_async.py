@@ -51,6 +51,7 @@ from xian_py.models import (
     ShieldedWalletHistoryEntry,
     StateEntry,
     TokenBalancePage,
+    TokenContractPage,
     TransactionReceipt,
     TransactionSubmission,
 )
@@ -1179,6 +1180,17 @@ class XianAsync:
         if not isinstance(payload, dict):
             raise XianException("Unexpected token balances payload")
         return TokenBalancePage.from_dict(payload)
+
+    async def get_token_contracts(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> TokenContractPage:
+        payload = await self._abci_query_value(f"/token_contracts/limit={limit}/offset={offset}")
+        if not isinstance(payload, dict):
+            raise XianException("Unexpected token contracts payload")
+        return TokenContractPage.from_dict(payload)
 
     async def list_blocks(
         self,

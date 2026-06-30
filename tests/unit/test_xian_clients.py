@@ -31,6 +31,8 @@ from xian_py.models import (
     ShieldedWalletHistoryEntry,
     TokenBalance,
     TokenBalancePage,
+    TokenContract,
+    TokenContractPage,
     TransactionReceipt,
     TransactionSubmission,
 )
@@ -1755,9 +1757,9 @@ def test_xian_async_exposes_token_balances_as_typed_page() -> None:
                     {
                         "contract": "currency",
                         "balance": "12.5",
-                        "name": "Xian",
-                        "symbol": "XIAN",
-                        "logo_url": "https://example.com/xian.svg",
+                        "name": '"Xian"',
+                        "symbol": '"XIAN"',
+                        "logo_url": '"https://example.com/xian.svg"',
                         "last_tx_hash": "TX-1",
                         "last_block_height": 12,
                         "updated_at": "2026-04-02T12:00:00Z",
@@ -1795,9 +1797,9 @@ def test_xian_async_exposes_token_balances_as_typed_page() -> None:
             raw={
                 "contract": "currency",
                 "balance": "12.5",
-                "name": "Xian",
-                "symbol": "XIAN",
-                "logo_url": "https://example.com/xian.svg",
+                "name": '"Xian"',
+                "symbol": '"XIAN"',
+                "logo_url": '"https://example.com/xian.svg"',
                 "last_tx_hash": "TX-1",
                 "last_block_height": 12,
                 "updated_at": "2026-04-02T12:00:00Z",
@@ -1805,6 +1807,60 @@ def test_xian_async_exposes_token_balances_as_typed_page() -> None:
         )
     ]
     query.assert_awaited_once_with("/token_balances/alice/limit=25/offset=5/include_zero=true")
+
+
+def test_xian_async_exposes_token_contracts_as_typed_page() -> None:
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
+
+    with patch.object(
+        client,
+        "_abci_query_value",
+        AsyncMock(
+            return_value={
+                "available": True,
+                "items": [
+                    {
+                        "contract": "currency",
+                        "name": '"Xian"',
+                        "symbol": '"XIAN"',
+                        "logo_url": '"https://example.com/xian.svg"',
+                        "last_tx_hash": "TX-1",
+                        "submitted_at_block": "12",
+                        "submitted_at": "2026-04-02T12:00:00Z",
+                    }
+                ],
+                "total": 1,
+                "limit": 25,
+                "offset": 5,
+            }
+        ),
+    ) as query:
+        page = asyncio.run(client.get_token_contracts(limit=25, offset=5))
+
+    assert isinstance(page, TokenContractPage)
+    assert page.available is True
+    assert page.total == 1
+    assert page.items == [
+        TokenContract(
+            contract="currency",
+            name="Xian",
+            symbol="XIAN",
+            logo_url="https://example.com/xian.svg",
+            last_tx_hash="TX-1",
+            submitted_at_block=12,
+            submitted_at="2026-04-02T12:00:00Z",
+            raw={
+                "contract": "currency",
+                "name": '"Xian"',
+                "symbol": '"XIAN"',
+                "logo_url": '"https://example.com/xian.svg"',
+                "last_tx_hash": "TX-1",
+                "submitted_at_block": "12",
+                "submitted_at": "2026-04-02T12:00:00Z",
+            },
+        )
+    ]
+    query.assert_awaited_once_with("/token_contracts/limit=25/offset=5")
 
 
 def test_xian_async_exposes_shielded_output_tags_as_typed_models() -> None:
@@ -2117,6 +2173,25 @@ def test_sync_client_exposes_token_balances() -> None:
     client._async_client.close = AsyncMock()
 
     assert client.get_token_balances() == page
+
+    client.close()
+
+
+def test_sync_client_exposes_token_contracts() -> None:
+    wallet = Wallet()
+    client = Xian("http://node", chain_id="xian-local-1", wallet=wallet)
+    page = TokenContractPage(
+        available=True,
+        items=[],
+        total=0,
+        limit=100,
+        offset=0,
+        raw={},
+    )
+    client._async_client.get_token_contracts = AsyncMock(return_value=page)
+    client._async_client.close = AsyncMock()
+
+    assert client.get_token_contracts() == page
 
     client.close()
 

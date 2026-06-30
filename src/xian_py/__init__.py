@@ -48,6 +48,8 @@ from xian_py.models import (
     StateEntry,
     TokenBalance,
     TokenBalancePage,
+    TokenContract,
+    TokenContractPage,
     TransactionReceipt,
     TransactionSubmission,
 )
@@ -142,6 +144,8 @@ __all__ = [
     "SubmissionConfig",
     "TokenBalance",
     "TokenBalancePage",
+    "TokenContract",
+    "TokenContractPage",
     "TransactionError",
     "TransactionReceipt",
     "TransactionSubmission",

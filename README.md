@@ -239,12 +239,14 @@ address = "bob"
 
 with Xian("http://127.0.0.1:26657") as client:
     recent_blocks = client.list_blocks(limit=5)
+    token_contracts = client.get_token_contracts(limit=20)
     token_balances = client.get_token_balances(address, include_zero=False)
     currency_txs = client.list_txs_by_contract("currency", limit=20)
     transfer_events = client.list_events("currency", "Transfer", after_id=0)
     balance_history = client.get_state_history(f"currency.balances:{address}")
     print(
         len(recent_blocks),
+        token_contracts.total,
         token_balances.total,
         len(currency_txs),
         len(transfer_events),

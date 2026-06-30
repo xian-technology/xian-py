@@ -28,6 +28,22 @@ def _coerce_str(value: Any) -> str | None:
     return value if isinstance(value, str) else str(value)
 
 
+def _coerce_json_scalar_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            return value
+        if decoded is None:
+            return None
+        if isinstance(decoded, (str, int, float, bool)):
+            return str(decoded)
+        return json.dumps(decoded, separators=(",", ":"))
+    return str(value)
+
+
 def _coerce_bool(value: Any, *, default: bool) -> bool:
     return value if isinstance(value, bool) else default
 
@@ -521,9 +537,9 @@ class TokenBalance:
         return cls(
             contract=str(raw_dict.get("contract", "")),
             balance=None if balance is None else str(balance),
-            name=raw_dict.get("name"),
-            symbol=raw_dict.get("symbol"),
-            logo_url=raw_dict.get("logo_url"),
+            name=_coerce_json_scalar_str(raw_dict.get("name")),
+            symbol=_coerce_json_scalar_str(raw_dict.get("symbol")),
+            logo_url=_coerce_json_scalar_str(raw_dict.get("logo_url")),
             last_tx_hash=raw_dict.get("last_tx_hash"),
             last_block_height=last_block_height,
             updated_at=raw_dict.get("updated_at"),
@@ -549,6 +565,62 @@ class TokenBalancePage:
         return cls(
             available=bool(raw_dict.get("available", False)),
             address=raw_dict.get("address"),
+            items=items,
+            total=int(raw_dict.get("total", len(items))),
+            limit=int(raw_dict.get("limit", len(items))),
+            offset=int(raw_dict.get("offset", 0)),
+            raw=raw_dict,
+        )
+
+
+@dataclass(frozen=True)
+class TokenContract:
+    contract: str
+    name: str | None
+    symbol: str | None
+    logo_url: str | None
+    last_tx_hash: str | None
+    submitted_at_block: int | None
+    submitted_at: str | None
+    raw: dict[str, Any]
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "TokenContract":
+        raw_dict = dict(raw)
+        submitted_at_block = raw_dict.get("submitted_at_block")
+        try:
+            submitted_at_block = int(submitted_at_block) if submitted_at_block is not None else None
+        except (TypeError, ValueError):
+            submitted_at_block = None
+
+        return cls(
+            contract=str(raw_dict.get("contract", "")),
+            name=_coerce_json_scalar_str(raw_dict.get("name")),
+            symbol=_coerce_json_scalar_str(raw_dict.get("symbol")),
+            logo_url=_coerce_json_scalar_str(raw_dict.get("logo_url")),
+            last_tx_hash=raw_dict.get("last_tx_hash"),
+            submitted_at_block=submitted_at_block,
+            submitted_at=raw_dict.get("submitted_at"),
+            raw=raw_dict,
+        )
+
+
+@dataclass(frozen=True)
+class TokenContractPage:
+    available: bool
+    items: list[TokenContract]
+    total: int
+    limit: int
+    offset: int
+    raw: dict[str, Any]
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "TokenContractPage":
+        raw_dict = dict(raw)
+        raw_items = raw_dict.get("items", [])
+        items = [TokenContract.from_dict(item) for item in raw_items if isinstance(item, Mapping)]
+        return cls(
+            available=bool(raw_dict.get("available", False)),
             items=items,
             total=int(raw_dict.get("total", len(items))),
             limit=int(raw_dict.get("limit", len(items))),
