@@ -793,6 +793,7 @@ class ShieldedOutputTag:
 
 @dataclass(frozen=True)
 class ShieldedWalletHistoryEntry:
+    output_id: int | None
     event_id: int | None
     tx_hash: str | None
     block_height: int | None
@@ -815,6 +816,7 @@ class ShieldedWalletHistoryEntry:
     def from_dict(cls, raw: Mapping[str, Any]) -> "ShieldedWalletHistoryEntry":
         raw_dict = dict(raw)
         return cls(
+            output_id=raw_dict.get("output_id"),
             event_id=raw_dict.get("event_id"),
             tx_hash=raw_dict.get("tx_hash"),
             block_height=raw_dict.get("block_height"),

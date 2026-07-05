@@ -24,6 +24,7 @@ from xian_py.models import (
     DeveloperRewardSummary,
     IndexedBlock,
     IndexedEvent,
+    IndexedTransaction,
     LiveEvent,
     NodeStatus,
     PerformanceStatus,
@@ -1863,6 +1864,23 @@ def test_xian_async_exposes_token_contracts_as_typed_page() -> None:
     query.assert_awaited_once_with("/token_contracts/limit=25/offset=5")
 
 
+def test_indexed_transaction_uses_canonical_tx_hash_field() -> None:
+    tx = IndexedTransaction.from_dict(
+        {
+            "tx_hash": "TX-1",
+            "block_height": 12,
+            "sender": "alice",
+            "nonce": 3,
+            "contract": "currency",
+            "function": "transfer",
+            "success": True,
+            "chi_used": 68,
+        }
+    )
+
+    assert tx.tx_hash == "TX-1"
+
+
 def test_xian_async_exposes_shielded_output_tags_as_typed_models() -> None:
     client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
 
@@ -1954,6 +1972,7 @@ def test_xian_async_exposes_shielded_wallet_history_as_typed_models() -> None:
                 "available": True,
                 "items": [
                     {
+                        "output_id": 19,
                         "event_id": 9,
                         "tx_hash": "TX-9",
                         "block_height": 45,
@@ -1987,6 +2006,7 @@ def test_xian_async_exposes_shielded_wallet_history_as_typed_models() -> None:
 
     assert items == [
         ShieldedWalletHistoryEntry(
+            output_id=19,
             event_id=9,
             tx_hash="TX-9",
             block_height=45,
@@ -2004,6 +2024,7 @@ def test_xian_async_exposes_shielded_wallet_history_as_typed_models() -> None:
             tag_value="tag-1",
             created="2026-04-07T10:00:00Z",
             raw={
+                "output_id": 19,
                 "event_id": 9,
                 "tx_hash": "TX-9",
                 "block_height": 45,
@@ -2232,6 +2253,7 @@ def test_sync_client_exposes_shielded_wallet_history() -> None:
     client = Xian("http://node", chain_id="xian-local-1", wallet=wallet)
     items = [
         ShieldedWalletHistoryEntry(
+            output_id=1,
             event_id=1,
             tx_hash="TX-1",
             block_height=10,
