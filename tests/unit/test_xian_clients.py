@@ -3,6 +3,7 @@ import base64
 import hashlib
 import inspect
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
@@ -22,6 +23,7 @@ from xian_py.exception import AbciError, SimulationError, TransportError, TxTime
 from xian_py.models import (
     BdsStatus,
     DeveloperRewardSummary,
+    DexCandle,
     IndexedBlock,
     IndexedEvent,
     IndexedTransaction,
@@ -2046,6 +2048,96 @@ def test_xian_async_exposes_shielded_wallet_history_as_typed_models() -> None:
     ]
     query.assert_awaited_once_with(
         "/shielded_wallet_history/tag-1/limit=10/kind=sync_hint/after_note_index=3"
+    )
+
+
+def test_xian_async_list_dex_candles_builds_bds_query_and_models() -> None:
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
+
+    with patch.object(
+        client,
+        "_abci_query_value",
+        AsyncMock(
+            return_value={
+                "available": True,
+                "pair_id": 7,
+                "interval_seconds": 300,
+                "items": [
+                    {
+                        "pair_id": 7,
+                        "source": "xian_pairs_v1",
+                        "market_id": "7",
+                        "bucket_start": "2026-01-01T00:00:00Z",
+                        "bucket_end": "2026-01-01T00:05:00Z",
+                        "open": "1.0",
+                        "high": "1.5",
+                        "low": "0.9",
+                        "close": "1.4",
+                        "volume_token0": "12.5",
+                        "volume_token1": "17.5",
+                        "trade_count": 2,
+                        "first_block_height": 100,
+                        "last_block_height": 101,
+                        "first_event_id": 40,
+                        "last_event_id": 41,
+                    }
+                ],
+            }
+        ),
+    ) as query:
+        items = asyncio.run(
+            client.list_dex_candles(
+                7,
+                source="xian_pairs_v1",
+                interval="5m",
+                limit=25,
+                offset=5,
+                start=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                end=1767225900,
+            )
+        )
+
+    assert items == [
+        DexCandle(
+            source="xian_pairs_v1",
+            market_id="7",
+            pair_id=7,
+            bucket_start="2026-01-01T00:00:00Z",
+            bucket_end="2026-01-01T00:05:00Z",
+            open="1.0",
+            high="1.5",
+            low="0.9",
+            close="1.4",
+            volume_token0="12.5",
+            volume_token1="17.5",
+            trade_count=2,
+            first_block_height=100,
+            last_block_height=101,
+            first_event_id=40,
+            last_event_id=41,
+            raw={
+                "pair_id": 7,
+                "source": "xian_pairs_v1",
+                "market_id": "7",
+                "bucket_start": "2026-01-01T00:00:00Z",
+                "bucket_end": "2026-01-01T00:05:00Z",
+                "open": "1.0",
+                "high": "1.5",
+                "low": "0.9",
+                "close": "1.4",
+                "volume_token0": "12.5",
+                "volume_token1": "17.5",
+                "trade_count": 2,
+                "first_block_height": 100,
+                "last_block_height": 101,
+                "first_event_id": 40,
+                "last_event_id": 41,
+            },
+        )
+    ]
+    query.assert_awaited_once_with(
+        "/dex_candles/7/interval=5m/limit=25/offset=5/source=xian_pairs_v1/"
+        "start=1767225600/end=1767225900"
     )
 
 

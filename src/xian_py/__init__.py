@@ -30,6 +30,7 @@ from xian_py.exception import (
 from xian_py.models import (
     BdsStatus,
     DeveloperRewardSummary,
+    DexCandle,
     IndexedBlock,
     IndexedEvent,
     IndexedTransaction,
@@ -106,6 +107,7 @@ __all__ = [
     "AsyncStateKeyClient",
     "AsyncTokenClient",
     "BdsStatus",
+    "DexCandle",
     "DeveloperRewardSummary",
     "ContractClient",
     "EventClient",

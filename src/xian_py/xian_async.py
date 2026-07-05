@@ -5,6 +5,7 @@ import inspect
 import json
 import math
 import re
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal, Optional
 
@@ -42,6 +43,7 @@ from xian_py.exception import (
 from xian_py.models import (
     BdsStatus,
     DeveloperRewardSummary,
+    DexCandle,
     IndexedBlock,
     IndexedEvent,
     IndexedTransaction,
@@ -1374,6 +1376,47 @@ class XianAsync:
             return []
         raise XianException("Unexpected event list payload")
 
+    async def list_dex_candles(
+        self,
+        market_id: int | str,
+        *,
+        source: str | None = None,
+        contract: str | None = None,
+        interval: int | str = "1m",
+        limit: int = 100,
+        offset: int = 0,
+        start: datetime | int | float | str | None = None,
+        end: datetime | int | float | str | None = None,
+    ) -> list[DexCandle]:
+        path_parts = [
+            f"dex_candles/{market_id}",
+            f"interval={interval}",
+            f"limit={limit}",
+            f"offset={offset}",
+        ]
+        if source is not None:
+            path_parts.append(f"source={source}")
+        if contract is not None:
+            path_parts.append(f"contract={contract}")
+        start_value = self._timestamp_path_param(start)
+        end_value = self._timestamp_path_param(end)
+        if start_value is not None:
+            path_parts.append(f"start={start_value}")
+        if end_value is not None:
+            path_parts.append(f"end={end_value}")
+
+        payload = await self._abci_query_value("/" + "/".join(path_parts))
+        if not isinstance(payload, dict):
+            raise XianException("Unexpected DEX candle payload")
+        items = payload.get("items")
+        if not isinstance(items, list):
+            raise XianException("Unexpected DEX candle item list")
+        return [
+            DexCandle.from_dict(item)
+            for item in items
+            if isinstance(item, dict)
+        ]
+
     async def get_state_history(
         self,
         key: str,
@@ -1821,6 +1864,19 @@ class XianAsync:
                 raise
             except Exception:
                 await asyncio.sleep(poll_interval_seconds)
+
+    @staticmethod
+    def _timestamp_path_param(value: datetime | int | float | str | None) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return str(int(value.timestamp()))
+        if isinstance(value, str):
+            text = value.strip()
+            if text.endswith("+00:00"):
+                return f"{text[:-6]}Z"
+            return text or None
+        return str(value)
 
     @staticmethod
     def _coerce_amount(

@@ -750,6 +750,50 @@ class IndexedEvent:
 
 
 @dataclass(frozen=True)
+class DexCandle:
+    source: str | None
+    market_id: str | None
+    pair_id: int | None
+    bucket_start: str | None
+    bucket_end: str | None
+    open: str | None
+    high: str | None
+    low: str | None
+    close: str | None
+    volume_token0: str | None
+    volume_token1: str | None
+    trade_count: int | None
+    first_block_height: int | None
+    last_block_height: int | None
+    first_event_id: int | None
+    last_event_id: int | None
+    raw: dict[str, Any]
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "DexCandle":
+        raw_dict = dict(raw)
+        return cls(
+            source=_coerce_str(raw_dict.get("source")),
+            market_id=_coerce_str(raw_dict.get("market_id")),
+            pair_id=_coerce_int(raw_dict.get("pair_id")),
+            bucket_start=_coerce_str(raw_dict.get("bucket_start")),
+            bucket_end=_coerce_str(raw_dict.get("bucket_end")),
+            open=_coerce_str(raw_dict.get("open")),
+            high=_coerce_str(raw_dict.get("high")),
+            low=_coerce_str(raw_dict.get("low")),
+            close=_coerce_str(raw_dict.get("close")),
+            volume_token0=_coerce_str(raw_dict.get("volume_token0")),
+            volume_token1=_coerce_str(raw_dict.get("volume_token1")),
+            trade_count=_coerce_int(raw_dict.get("trade_count")),
+            first_block_height=_coerce_int(raw_dict.get("first_block_height")),
+            last_block_height=_coerce_int(raw_dict.get("last_block_height")),
+            first_event_id=_coerce_int(raw_dict.get("first_event_id")),
+            last_event_id=_coerce_int(raw_dict.get("last_event_id")),
+            raw=raw_dict,
+        )
+
+
+@dataclass(frozen=True)
 class ShieldedOutputTag:
     id: int | None
     tx_hash: str | None
