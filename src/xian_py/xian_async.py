@@ -33,6 +33,7 @@ from xian_py.config import (
     XianClientConfig,
 )
 from xian_py.exception import (
+    AbciError,
     RpcError,
     SimulationError,
     TransportError,
@@ -1204,7 +1205,12 @@ class XianAsync:
         return [IndexedBlock.from_dict(item) for item in payload]
 
     async def get_block(self, height: int) -> IndexedBlock | None:
-        payload = await self._abci_query_value(f"/block/{height}")
+        try:
+            payload = await self._abci_query_value(f"/block/{height}")
+        except AbciError as exc:
+            if self._is_unknown_query_path_error(exc):
+                return await self._get_live_block(height)
+            raise
         if payload is None:
             return None
         if not isinstance(payload, dict):
@@ -1212,7 +1218,12 @@ class XianAsync:
         return IndexedBlock.from_dict(payload)
 
     async def get_block_by_hash(self, block_hash: str) -> IndexedBlock | None:
-        payload = await self._abci_query_value(f"/block_by_hash/{block_hash}")
+        try:
+            payload = await self._abci_query_value(f"/block_by_hash/{block_hash}")
+        except AbciError as exc:
+            if self._is_unknown_query_path_error(exc):
+                return await self._get_live_block_by_hash(block_hash)
+            raise
         if payload is None:
             return None
         if not isinstance(payload, dict):
@@ -1415,18 +1426,12 @@ class XianAsync:
             raise XianException("Node status did not include latest_block_height")
         return status.latest_block_height
 
-    async def _get_live_block(self, height: int) -> IndexedBlock | None:
-        payload = await self._retry_read(
-            lambda: tr.request_json_async(
-                "GET",
-                f"{self.node_url}/block?height={height}",
-                session=self.session,
-                raise_for_status=True,
-            )
-        )
-        if not isinstance(payload, dict):
-            raise XianException("Unexpected live block payload")
+    @staticmethod
+    def _is_unknown_query_path_error(exc: AbciError) -> bool:
+        return "Unknown query path" in str(exc)
 
+    @staticmethod
+    def _indexed_block_from_live_payload(payload: dict) -> IndexedBlock | None:
         result = payload.get("result", {})
         block = result.get("block")
         if not isinstance(block, dict):
@@ -1449,6 +1454,35 @@ class XianAsync:
             block_time_iso=header.get("time"),
             raw=payload,
         )
+
+    async def _get_live_block(self, height: int) -> IndexedBlock | None:
+        payload = await self._retry_read(
+            lambda: tr.request_json_async(
+                "GET",
+                f"{self.node_url}/block?height={height}",
+                session=self.session,
+                raise_for_status=True,
+            )
+        )
+        if not isinstance(payload, dict):
+            raise XianException("Unexpected live block payload")
+
+        return self._indexed_block_from_live_payload(payload)
+
+    async def _get_live_block_by_hash(self, block_hash: str) -> IndexedBlock | None:
+        normalized_hash = block_hash if block_hash.startswith("0x") else f"0x{block_hash}"
+        payload = await self._retry_read(
+            lambda: tr.request_json_async(
+                "GET",
+                f"{self.node_url}/block_by_hash?hash={normalized_hash}",
+                session=self.session,
+                raise_for_status=True,
+            )
+        )
+        if not isinstance(payload, dict):
+            raise XianException("Unexpected live block payload")
+
+        return self._indexed_block_from_live_payload(payload)
 
     async def _receive_ws_json(
         self,

@@ -18,7 +18,7 @@ from xian_py.config import (
     WatcherConfig,
     XianClientConfig,
 )
-from xian_py.exception import SimulationError, TransportError, TxTimeoutError
+from xian_py.exception import AbciError, SimulationError, TransportError, TxTimeoutError
 from xian_py.models import (
     BdsStatus,
     DeveloperRewardSummary,
@@ -2407,6 +2407,76 @@ def test_xian_async_watch_blocks_yields_new_blocks_from_rpc() -> None:
 
     assert [block.height for block in blocks] == [12, 13]
     assert [block.tx_count for block in blocks] == [1, 2]
+
+
+def test_xian_async_get_block_falls_back_to_live_rpc_when_index_is_missing() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", wallet=wallet)
+    live_block = IndexedBlock(
+        height=12,
+        block_hash="BLOCK-12",
+        tx_count=1,
+        app_hash="APP-12",
+        block_time_iso="2026-03-23T12:00:12Z",
+        raw={},
+    )
+
+    async def run_get_block() -> IndexedBlock | None:
+        try:
+            return await client.get_block(12)
+        finally:
+            await client.close()
+
+    with (
+        patch.object(
+            client,
+            "_abci_query_value",
+            AsyncMock(side_effect=AbciError("Unknown query path: block")),
+        ) as indexed_query,
+        patch.object(client, "_get_live_block", AsyncMock(return_value=live_block)) as live_query,
+    ):
+        block = asyncio.run(run_get_block())
+
+    assert block == live_block
+    indexed_query.assert_awaited_once_with("/block/12")
+    live_query.assert_awaited_once_with(12)
+
+
+def test_xian_async_get_block_by_hash_falls_back_to_live_rpc_when_index_is_missing() -> None:
+    wallet = Wallet()
+    client = XianAsync("http://node", wallet=wallet)
+    live_block = IndexedBlock(
+        height=12,
+        block_hash="BLOCK-12",
+        tx_count=1,
+        app_hash="APP-12",
+        block_time_iso="2026-03-23T12:00:12Z",
+        raw={},
+    )
+
+    async def run_get_block() -> IndexedBlock | None:
+        try:
+            return await client.get_block_by_hash("BLOCK-12")
+        finally:
+            await client.close()
+
+    with (
+        patch.object(
+            client,
+            "_abci_query_value",
+            AsyncMock(side_effect=AbciError("Unknown query path: block_by_hash")),
+        ) as indexed_query,
+        patch.object(
+            client,
+            "_get_live_block_by_hash",
+            AsyncMock(return_value=live_block),
+        ) as live_query,
+    ):
+        block = asyncio.run(run_get_block())
+
+    assert block == live_block
+    indexed_query.assert_awaited_once_with("/block_by_hash/BLOCK-12")
+    live_query.assert_awaited_once_with("BLOCK-12")
 
 
 def test_xian_async_watch_events_uses_after_id_cursor() -> None:
