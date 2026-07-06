@@ -1411,11 +1411,7 @@ class XianAsync:
         items = payload.get("items")
         if not isinstance(items, list):
             raise XianException("Unexpected DEX candle item list")
-        return [
-            DexCandle.from_dict(item)
-            for item in items
-            if isinstance(item, dict)
-        ]
+        return [DexCandle.from_dict(item) for item in items if isinstance(item, dict)]
 
     async def get_state_history(
         self,
