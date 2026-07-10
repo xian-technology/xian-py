@@ -8,34 +8,67 @@ on:
     branches:
       - "*"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  workflow-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Lint GitHub Actions workflows
+        uses: raven-actions/actionlint@e01d1ea33dd6a5ed517d95b4c0c357560ac6f518 # v2.1.1
+        with:
+          version: 1.7.12
+          pyflakes: false
+
   validate:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout xian-py
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           path: xian-py
 
       - name: Checkout xian-contracting
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           repository: xian-technology/xian-contracting
           ref: main
           path: xian-contracting
 
-      - name: Set up Python 3.14
-        uses: actions/setup-python@v6
+      - name: Checkout xian-meta
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
-          python-version: "3.14"
+          repository: ${{ github.repository_owner }}/xian-meta
+          ref: main
+          path: xian-meta
+
+      - name: Report resolved sibling SHAs
+        run: python3 xian-meta/scripts/report_workspace_shas.py --workspace-root .
+
+      - name: Set up Python 3.14.6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14.6"
 
       - name: Install uv
-        run: python -m pip install uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.11.25"
+          enable-cache: true
+          cache-dependency-glob: xian-py/uv.lock
 
       - name: Sync dependencies
         working-directory: xian-py
-        run: uv sync --group dev --extra compile
+        run: uv sync --frozen --group dev --extra compile
 
       - name: Ruff lint
         working-directory: xian-py
@@ -51,7 +84,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: xian-py-coverage
           path: xian-py/coverage.xml

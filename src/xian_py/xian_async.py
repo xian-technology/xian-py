@@ -1,6 +1,5 @@
 import ast
 import asyncio
-import hashlib
 import inspect
 import json
 import math
@@ -440,10 +439,6 @@ class XianAsync:
             or "tx already exists in mempool" in normalized
         )
 
-    @staticmethod
-    def _local_tx_hash(tx: dict[str, Any]) -> str:
-        return hashlib.sha256(json.dumps(tx).encode("utf-8")).hexdigest().upper()
-
     async def _abci_query_value(self, path: str) -> Any:
         data = await self._retry_read(
             lambda: tr.abci_query_async(
@@ -721,7 +716,8 @@ class XianAsync:
         }
 
         tx = tr.create_tx(payload, self.wallet)
-        local_tx_hash = self._local_tx_hash(tx)
+        prepared_tx = tr.prepare_transaction(tx)
+        local_tx_hash = prepared_tx.tx_hash
 
         result: dict[str, Any] = {
             "submitted": False,
@@ -743,18 +739,18 @@ class XianAsync:
                 if mode == "async":
                     return await tr.broadcast_tx_nowait_async(
                         self.node_url,
-                        tx,
+                        prepared_tx,
                         session=self.session,
                     )
                 if mode == "commit":
                     return await tr.broadcast_tx_commit_async(
                         self.node_url,
-                        tx,
+                        prepared_tx,
                         session=self.session,
                     )
                 return await tr.broadcast_tx_wait_async(
                     self.node_url,
-                    tx,
+                    prepared_tx,
                     session=self.session,
                 )
 

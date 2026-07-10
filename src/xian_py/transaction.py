@@ -10,6 +10,7 @@ import json
 from asyncio import get_running_loop, sleep
 from base64 import b64decode
 from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import Any
 
 import aiohttp
@@ -26,6 +27,54 @@ from xian_py.exception import (
 )
 from xian_py.formatting import check_format_of_payload, format_dictionary
 from xian_py.wallet import Wallet
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedTransaction:
+    """Immutable JSON and exact CometBFT transaction bytes derived from it."""
+
+    json_bytes: bytes
+    submitted_bytes: bytes = field(init=False)
+    tx_hash: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        json_bytes = bytes(self.json_bytes)
+        try:
+            decoded = json.loads(json_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("Transaction bytes must contain valid UTF-8 JSON") from exc
+        if not isinstance(decoded, dict):
+            raise ValueError("Transaction JSON must contain an object")
+        submitted_bytes = json_bytes.hex().encode("ascii")
+        object.__setattr__(self, "json_bytes", json_bytes)
+        object.__setattr__(self, "submitted_bytes", submitted_bytes)
+        object.__setattr__(
+            self,
+            "tx_hash",
+            hashlib.sha256(submitted_bytes).hexdigest().upper(),
+        )
+
+    @property
+    def rpc_hex(self) -> str:
+        """Return the RPC value whose ASCII bytes CometBFT stores and hashes."""
+        return self.submitted_bytes.decode("ascii")
+
+
+def prepare_transaction(
+    tx: PreparedTransaction | dict[str, Any] | str | bytes | bytearray | memoryview,
+) -> PreparedTransaction:
+    """Prepare the exact JSON, submitted bytes, and CometBFT transaction hash."""
+    if isinstance(tx, PreparedTransaction):
+        return tx
+    if isinstance(tx, dict):
+        json_bytes = json.dumps(tx).encode("utf-8")
+    elif isinstance(tx, str):
+        json_bytes = tx.encode("utf-8")
+    elif isinstance(tx, (bytes, bytearray, memoryview)):
+        json_bytes = bytes(tx)
+    else:
+        raise TypeError("Transaction must be a JSON object, JSON text, or prepared bytes")
+    return PreparedTransaction(json_bytes)
 
 
 def decode_str(encoded_data: str) -> str:
@@ -284,7 +333,7 @@ def create_tx(payload: dict, wallet: Wallet) -> dict:
 
 async def broadcast_tx_commit_async(
     node_url: str,
-    tx: dict,
+    tx: PreparedTransaction | dict[str, Any] | str | bytes | bytearray | memoryview,
     *,
     session: aiohttp.ClientSession | None = None,
 ) -> dict:
@@ -293,17 +342,17 @@ async def broadcast_tx_commit_async(
     Submits a transaction to be included in the blockchain and
     returns the response from CheckTx and DeliverTx.
     :param node_url: Node URL in format 'http://<IP>:<Port>'
-    :param tx: Transaction data in JSON format (dict)
+    :param tx: Transaction object or exact UTF-8 JSON prepared for broadcast
     :return: JSON data with tx hash, CheckTx and DeliverTx results
     """
-    payload = json.dumps(tx).encode().hex()
+    prepared_tx = prepare_transaction(tx)
 
     try:
         data = await request_json_async(
             "POST",
             f"{node_url}/broadcast_tx_commit",
             session=session,
-            request_kwargs={"data": {"tx": f'"{payload}"'}},
+            request_kwargs={"data": {"tx": f'"{prepared_tx.rpc_hex}"'}},
         )
     except XianException:
         raise
@@ -315,7 +364,7 @@ async def broadcast_tx_commit_async(
 
 async def broadcast_tx_wait_async(
     node_url: str,
-    tx: dict,
+    tx: PreparedTransaction | dict[str, Any] | str | bytes | bytearray | memoryview,
     *,
     session: aiohttp.ClientSession | None = None,
 ) -> dict:
@@ -323,17 +372,17 @@ async def broadcast_tx_wait_async(
     Submits a transaction to be included in the blockchain and returns
     the response from CheckTx. Does not wait for DeliverTx result.
     :param node_url: Node URL in format 'http://<IP>:<Port>'
-    :param tx: Transaction data in JSON format (dict)
+    :param tx: Transaction object or exact UTF-8 JSON prepared for broadcast
     :return: JSON data with tx hash and CheckTx result
     """
-    payload = json.dumps(tx).encode().hex()
+    prepared_tx = prepare_transaction(tx)
 
     try:
         data = await request_json_async(
             "POST",
             f"{node_url}/broadcast_tx_sync",
             session=session,
-            request_kwargs={"data": {"tx": f'"{payload}"'}},
+            request_kwargs={"data": {"tx": f'"{prepared_tx.rpc_hex}"'}},
         )
     except XianException:
         raise
@@ -345,7 +394,7 @@ async def broadcast_tx_wait_async(
 
 async def broadcast_tx_nowait_async(
     node_url: str,
-    tx: dict,
+    tx: PreparedTransaction | dict[str, Any] | str | bytes | bytearray | memoryview,
     *,
     session: aiohttp.ClientSession | None = None,
 ):
@@ -357,9 +406,9 @@ async def broadcast_tx_nowait_async(
     that the transaction was accepted or processed.
 
     :param node_url: Node URL in format 'http://<IP>:<Port>'
-    :param tx: Transaction data in JSON format (dict)
+    :param tx: Transaction object or exact UTF-8 JSON prepared for broadcast
     """
-    payload = json.dumps(tx).encode().hex()
+    prepared_tx = prepare_transaction(tx)
 
     try:
         return await request_json_async(
@@ -367,7 +416,7 @@ async def broadcast_tx_nowait_async(
             f"{node_url}/broadcast_tx_async",
             session=session,
             raise_for_status=True,
-            request_kwargs={"data": {"tx": f'"{payload}"'}},
+            request_kwargs={"data": {"tx": f'"{prepared_tx.rpc_hex}"'}},
         )
     except XianException:
         raise

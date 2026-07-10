@@ -12,12 +12,14 @@ from xian_runtime_types.decimal import ContractingDecimal
 from xian_py.exception import TransportError, XianException
 from xian_py.formatting import format_dictionary
 from xian_py.transaction import (
+    PreparedTransaction,
     broadcast_tx_commit_async,
     broadcast_tx_nowait_async,
     broadcast_tx_wait_async,
     canonical_json,
     create_tx,
     get_nonce_async,
+    prepare_transaction,
     simulate_tx_async,
     wait_for_tx_async,
 )
@@ -404,6 +406,56 @@ def test_broadcast_tx_async_posts_tx_in_request_body(broadcast_fn, path: str) ->
 
     assert fake_session.calls == [("post", f"http://node{path}")]
     assert fake_session.call_kwargs == [{"data": {"tx": f'"{json.dumps(tx).encode().hex()}"'}}]
+
+
+def test_prepare_transaction_preserves_json_and_matches_submitted_byte_hash() -> None:
+    raw_variants = [
+        b'{"payload":{"memo":"caf\\u00e9","amount":1},"metadata":{}}',
+        '{ "metadata": {}, "payload": {"amount": 1, "memo": "caf\u00e9"} }'.encode(),
+    ]
+
+    prepared = [prepare_transaction(raw) for raw in raw_variants]
+
+    assert [json.loads(item.json_bytes) for item in prepared] == [
+        {"payload": {"memo": "caf\u00e9", "amount": 1}, "metadata": {}},
+        {"metadata": {}, "payload": {"amount": 1, "memo": "caf\u00e9"}},
+    ]
+    assert [item.json_bytes for item in prepared] == raw_variants
+    assert [item.submitted_bytes for item in prepared] == [
+        raw.hex().encode("ascii") for raw in raw_variants
+    ]
+    assert [item.tx_hash for item in prepared] == [
+        hashlib.sha256(raw.hex().encode("ascii")).hexdigest().upper() for raw in raw_variants
+    ]
+    assert prepared[0].tx_hash != prepared[1].tx_hash
+    assert prepare_transaction(prepared[0]) is prepared[0]
+
+
+@pytest.mark.parametrize(
+    ("broadcast_fn", "path"),
+    [
+        (broadcast_tx_wait_async, "/broadcast_tx_sync"),
+        (broadcast_tx_nowait_async, "/broadcast_tx_async"),
+        (broadcast_tx_commit_async, "/broadcast_tx_commit"),
+    ],
+)
+def test_broadcast_prepared_transaction_posts_exact_submitted_bytes(
+    broadcast_fn, path: str
+) -> None:
+    fake_session = _FakeClientSession(
+        post_responses=[_FakeResponse({"result": {"hash": "abc123"}})]
+    )
+    raw_tx = b'{ "metadata": {}, "payload": {"memo": "caf\\u00e9"} }\n'
+    prepared_tx = prepare_transaction(raw_tx)
+
+    with patch("xian_py.transaction.aiohttp.ClientSession", return_value=fake_session):
+        asyncio.run(broadcast_fn("http://node", prepared_tx))
+
+    assert isinstance(prepared_tx, PreparedTransaction)
+    assert fake_session.calls == [("post", f"http://node{path}")]
+    assert fake_session.call_kwargs == [{"data": {"tx": f'"{raw_tx.hex()}"'}}]
+    assert prepared_tx.submitted_bytes == raw_tx.hex().encode("ascii")
+    assert prepared_tx.tx_hash == hashlib.sha256(prepared_tx.submitted_bytes).hexdigest().upper()
 
 
 def test_wait_for_tx_async_returns_decoded_transaction_once_found() -> None:

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "components": {
+    "xian-contracting": {
+      "repository": "xian-technology/xian-contracting",
+      "ref": "548ad9fc996f5adf7c4101ba18ead298f9f21f45",
+      "packages": {
+        "xian-tech-accounts": {
+          "version": "0.1.3-beta.1",
+          "path": "packages/xian-accounts/pyproject.toml"
+        },
+        "xian-tech-compiler-core": {
+          "version": "0.1.4-beta.1",
+          "path": "packages/xian-compiler-core/pyproject.toml"
+        },
+        "xian-tech-contracting": {
+          "version": "1.0.11-beta.1",
+          "path": "pyproject.toml"
+        },
+        "xian-tech-runtime-types": {
+          "version": "0.1.4-beta.1",
+          "path": "packages/xian-runtime-types/pyproject.toml"
+        }
+      }
+    }
+  }
+}

@@ -6,5 +6,5 @@ Start with:
 
 - `ARCHITECTURE.md`
 - `BACKLOG.md`
+- `RELEASING.md`
 - `SDK_REVIEW_BACKLOG.md`
-

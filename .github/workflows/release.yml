@@ -10,59 +10,113 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  release-context:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      source_sha: ${{ steps.resolve.outputs.source_sha }}
+      version: ${{ steps.resolve.outputs.version }}
+      xian_contracting_repository: ${{ steps.resolve.outputs.xian_contracting_repository }}
+      xian_contracting_ref: ${{ steps.resolve.outputs.xian_contracting_ref }}
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14.6"
+
+      - name: Resolve immutable release context
+        id: resolve
+        env:
+          GITHUB_REF_TYPE: ${{ github.ref_type }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          TRIGGER_SHA: ${{ github.sha }}
+        run: python ./scripts/release_context.py resolve
+
   build:
+    needs: release-context
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
+      - name: Check out immutable release source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          path: xian-py
+          ref: ${{ needs.release-context.outputs.source_sha }}
+
+      - name: Check out pinned xian-contracting source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: ${{ needs.release-context.outputs.xian_contracting_repository }}
+          ref: ${{ needs.release-context.outputs.xian_contracting_ref }}
+          path: xian-contracting
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.14"
+          python-version: "3.14.6"
 
-      - name: Install build tooling
-        run: python -m pip install --upgrade build
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.11.25"
+          enable-cache: true
+          cache-dependency-glob: xian-py/uv.lock
 
-      - name: Build distributions
-        run: python -m build
+      - name: Verify pinned source and package context
+        working-directory: xian-py
+        env:
+          COMPONENT_CHECKOUT: ${{ github.workspace }}/xian-contracting
+          EXPECTED_SOURCE_SHA: ${{ needs.release-context.outputs.source_sha }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python ./scripts/release_context.py verify-component
 
-      - name: Verify built version matches tag
-        run: |
-          python - <<'PY'
-          import pathlib
-          import re
+      - name: Sync locked validation environment
+        working-directory: xian-py
+        run: uv sync --frozen --group dev --extra compile
 
-          def python_dist_version(version):
-              match = re.fullmatch(r"(\d+\.\d+\.\d+)-(alpha|beta|rc)\.(\d+)", version)
-              if not match:
-                  return version
-              marker = {"alpha": "a", "beta": "b", "rc": "rc"}[match.group(2)]
-              return f"{match.group(1)}{marker}{match.group(3)}"
+      - name: Ruff lint
+        working-directory: xian-py
+        run: uv run ruff check .
 
-          expected = "${{ github.ref_name }}".removeprefix("v")
-          accepted = {expected, python_dist_version(expected)}
-          files = [path.name for path in pathlib.Path("dist").iterdir() if path.is_file()]
-          if not files:
-              raise SystemExit("No distribution artifacts were built")
-          if not all(any(version in name for version in accepted) for name in files):
-              raise SystemExit(
-                  f"Built artifacts do not match tag version {expected}: {files}"
-              )
-          PY
+      - name: Ruff format check
+        working-directory: xian-py
+        run: uv run ruff format --check .
 
-      - name: Upload release artifacts
-        uses: actions/upload-artifact@v7
+      - name: Run tests with coverage
+        working-directory: xian-py
+        run: uv run pytest --cov=xian_py --cov-report=term-missing --cov-report=xml
+
+      - name: Build publishable distributions without local sources
+        working-directory: xian-py
+        run: uv build --no-sources --out-dir dist
+
+      - name: Verify release artifact metadata
+        working-directory: xian-py
+        env:
+          ARTIFACT_DIRECTORY: dist
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: uv run python ./scripts/release_context.py verify-artifacts
+
+      - name: Upload validated release artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-dist
-          path: dist/*
+          path: xian-py/dist/*
           if-no-files-found: error
           retention-days: 14
 
   publish:
-    needs: build
+    needs:
+      - release-context
+      - build
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -70,25 +124,26 @@ jobs:
       name: pypi
       url: https://pypi.org/p/xian-tech-py
     steps:
-      - name: Download release artifacts
-        uses: actions/download-artifact@v8
+      - name: Download validated release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: release-dist
           path: dist
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
 
   github-release:
     needs:
+      - release-context
       - build
       - publish
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download release artifacts
-        uses: actions/download-artifact@v8
+      - name: Download validated release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: release-dist
           path: dist
@@ -96,6 +151,7 @@ jobs:
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.release-context.outputs.version }}
         run: |
           release_flags=()
           if [[ "${GITHUB_REF_NAME}" == *"-"* ]]; then
@@ -104,6 +160,6 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" dist/* \
             --repo "${GITHUB_REPOSITORY}" \
             --verify-tag \
-            --title "xian-tech-py ${GITHUB_REF_NAME#v}" \
+            --title "xian-tech-py ${RELEASE_VERSION}" \
             --generate-notes \
             "${release_flags[@]}"

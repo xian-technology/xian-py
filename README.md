@@ -478,5 +478,6 @@ uv run pytest
 - [docs/README.md](docs/README.md) — index of internal docs
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — major components and dependency direction
 - [docs/BACKLOG.md](docs/BACKLOG.md) — open work and follow-ups
+- [docs/RELEASING.md](docs/RELEASING.md) — fail-closed tag and package release process
 - [docs/API_COMPATIBILITY.md](docs/API_COMPATIBILITY.md) — compatibility surface and stability guarantees
 - [docs/SDK_REVIEW_BACKLOG.md](docs/SDK_REVIEW_BACKLOG.md) — SDK review queue

@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import hashlib
 import inspect
 import json
 from datetime import datetime, timezone
@@ -342,11 +341,12 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
     assert create_payload["chain_id"] == "xian-mainnet-1"
     assert create_payload["nonce"] == 11
     assert create_payload["chi_supplied"] == 77
-    broadcast_tx_wait_async.assert_awaited_once_with(
-        "http://node",
-        {"signed": True},
-        session=ANY,
-    )
+    broadcast_tx_wait_async.assert_awaited_once()
+    broadcast_args = broadcast_tx_wait_async.await_args
+    assert broadcast_args.args[0] == "http://node"
+    assert isinstance(broadcast_args.args[1], tr.PreparedTransaction)
+    assert broadcast_args.args[1].json_bytes == json.dumps({"signed": True}).encode("utf-8")
+    assert broadcast_args.kwargs["session"] is not None
     assert result.submitted is True
     assert result.accepted is True
     assert result.finalized is False
@@ -857,7 +857,20 @@ def test_xian_async_send_tx_recovers_receipt_after_broadcast_timeout() -> None:
         ),
     )
     signed_tx = {"signed": True}
-    local_hash = hashlib.sha256(json.dumps(signed_tx).encode("utf-8")).hexdigest().upper()
+    submitted_bytes = b'{ "signed" : true }\n'
+    prepared_tx = tr.prepare_transaction(submitted_bytes)
+    local_hash = prepared_tx.tx_hash
+    broadcast_inputs: list[tr.PreparedTransaction] = []
+
+    async def ambiguous_broadcast(
+        _node_url: str,
+        submitted_tx: tr.PreparedTransaction,
+        *,
+        session: object,
+    ) -> dict:
+        assert session is not None
+        broadcast_inputs.append(submitted_tx)
+        raise TransportError("Timeout on reading data from socket")
 
     async def run_send() -> TransactionSubmission:
         try:
@@ -875,34 +888,38 @@ def test_xian_async_send_tx_recovers_receipt_after_broadcast_timeout() -> None:
 
     with patch.object(tr, "get_nonce_async", AsyncMock(return_value=11)):
         with patch.object(tr, "create_tx", MagicMock(return_value=signed_tx)):
-            with patch.object(
-                tr,
-                "broadcast_tx_wait_async",
-                AsyncMock(side_effect=TransportError("Timeout on reading data from socket")),
-            ):
+            with patch.object(tr, "prepare_transaction", return_value=prepared_tx):
                 with patch.object(
-                    client,
-                    "wait_for_tx",
-                    AsyncMock(
-                        return_value=TransactionReceipt.from_lookup(
-                            {
-                                "success": True,
-                                "result": {
-                                    "hash": local_hash,
-                                    "height": "12",
-                                    "index": 0,
-                                    "tx_result": {
-                                        "code": 0,
-                                        "data": {"result": "ok"},
+                    tr,
+                    "broadcast_tx_wait_async",
+                    AsyncMock(side_effect=ambiguous_broadcast),
+                ):
+                    with patch.object(
+                        client,
+                        "wait_for_tx",
+                        AsyncMock(
+                            return_value=TransactionReceipt.from_lookup(
+                                {
+                                    "success": True,
+                                    "result": {
+                                        "hash": local_hash,
+                                        "height": "12",
+                                        "index": 0,
+                                        "tx_result": {
+                                            "code": 0,
+                                            "data": {"result": "ok"},
+                                        },
                                     },
-                                },
-                                "execution": {"result": "ok"},
-                            }
-                        )
-                    ),
-                ) as wait_for_tx:
-                    result = asyncio.run(run_send())
+                                    "execution": {"result": "ok"},
+                                }
+                            )
+                        ),
+                    ) as wait_for_tx:
+                        result = asyncio.run(run_send())
 
+    assert broadcast_inputs == [prepared_tx]
+    assert broadcast_inputs[0].json_bytes == submitted_bytes
+    assert broadcast_inputs[0].submitted_bytes == submitted_bytes.hex().encode("ascii")
     wait_for_tx.assert_awaited_once_with(
         local_hash,
         timeout_seconds=1.0,
@@ -914,6 +931,59 @@ def test_xian_async_send_tx_recovers_receipt_after_broadcast_timeout() -> None:
     assert result.tx_hash == local_hash
     assert result.receipt is not None
     assert "broadcast response unavailable" in str(result.message)
+
+
+def test_xian_sync_and_async_send_tx_prepare_identical_submitted_bytes() -> None:
+    wallet = Wallet()
+    broadcast_inputs: list[tr.PreparedTransaction] = []
+
+    async def capture_broadcast(
+        _node_url: str,
+        submitted_tx: tr.PreparedTransaction,
+        *,
+        session: object,
+    ) -> dict:
+        assert session is not None
+        broadcast_inputs.append(submitted_tx)
+        return {"result": {"code": 0, "hash": submitted_tx.tx_hash}}
+
+    async def run_async_send() -> TransactionSubmission:
+        client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
+        try:
+            return await client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+                chi=100,
+                nonce=11,
+            )
+        finally:
+            await client.close()
+
+    with patch.object(
+        tr,
+        "broadcast_tx_wait_async",
+        AsyncMock(side_effect=capture_broadcast),
+    ):
+        async_result = asyncio.run(run_async_send())
+        sync_client = Xian("http://node", chain_id="xian-local-1", wallet=wallet)
+        try:
+            sync_result = sync_client.send_tx(
+                "currency",
+                "transfer",
+                {"amount": 1, "to": wallet.public_key},
+                chi=100,
+                nonce=11,
+            )
+        finally:
+            sync_client.close()
+
+    assert len(broadcast_inputs) == 2
+    assert broadcast_inputs[0].json_bytes == broadcast_inputs[1].json_bytes
+    assert broadcast_inputs[0].submitted_bytes == broadcast_inputs[1].submitted_bytes
+    assert broadcast_inputs[0].tx_hash == broadcast_inputs[1].tx_hash
+    assert async_result.tx_hash == broadcast_inputs[0].tx_hash
+    assert sync_result.tx_hash == broadcast_inputs[1].tx_hash
 
 
 def test_xian_async_send_tx_treats_duplicate_cache_checktx_as_accepted() -> None:
