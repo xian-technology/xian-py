@@ -405,9 +405,7 @@ def test_broadcast_tx_async_posts_tx_in_request_body(broadcast_fn, path: str) ->
         asyncio.run(broadcast_fn("http://node", tx))
 
     assert fake_session.calls == [("post", f"http://node{path}")]
-    assert fake_session.call_kwargs == [
-        {"data": {"tx": f'"{canonical_json(tx).encode().hex()}"'}}
-    ]
+    assert fake_session.call_kwargs == [{"data": {"tx": f'"{canonical_json(tx).encode().hex()}"'}}]
 
 
 def test_prepare_transaction_preserves_json_and_matches_submitted_byte_hash() -> None:
