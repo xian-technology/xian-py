@@ -345,7 +345,7 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
     broadcast_args = broadcast_tx_wait_async.await_args
     assert broadcast_args.args[0] == "http://node"
     assert isinstance(broadcast_args.args[1], tr.PreparedTransaction)
-    assert broadcast_args.args[1].json_bytes == json.dumps({"signed": True}).encode("utf-8")
+    assert broadcast_args.args[1].json_bytes == tr.canonical_json({"signed": True}).encode("utf-8")
     assert broadcast_args.kwargs["session"] is not None
     assert result.submitted is True
     assert result.accepted is True

@@ -67,7 +67,7 @@ def prepare_transaction(
     if isinstance(tx, PreparedTransaction):
         return tx
     if isinstance(tx, dict):
-        json_bytes = json.dumps(tx).encode("utf-8")
+        json_bytes = canonical_json(tx).encode("utf-8")
     elif isinstance(tx, str):
         json_bytes = tx.encode("utf-8")
     elif isinstance(tx, (bytes, bytearray, memoryview)):
