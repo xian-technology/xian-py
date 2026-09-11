@@ -425,8 +425,7 @@ async def broadcast_tx_nowait_async(
 
 
 def _hash_block_tx(block_tx: str) -> str:
-    encoded = b64decode(block_tx).decode("utf-8")
-    return hashlib.sha256(bytes.fromhex(encoded)).hexdigest().upper()
+    return hashlib.sha256(b64decode(block_tx, validate=True)).hexdigest().upper()
 
 
 def _decode_block_result_data(value: Any) -> Any:
@@ -467,11 +466,18 @@ async def _lookup_tx_in_recent_blocks_async(
                 session=session,
             )
             txs_results = block_results.get("result", {}).get("txs_results") or []
-            tx_result = (
-                dict(txs_results[index])
-                if index < len(txs_results) and isinstance(txs_results[index], dict)
-                else {"code": 0, "data": None, "log": ""}
-            )
+            if index >= len(txs_results) or not isinstance(txs_results[index], dict):
+                raise RpcError(
+                    "Transaction execution results are unavailable",
+                    details={
+                        "tx_hash": target_hash,
+                        "height": height,
+                        "index": index,
+                    },
+                )
+            tx_result = dict(txs_results[index])
+            if "code" not in tx_result:
+                raise RpcError("Transaction execution result is missing its status code")
             tx_result["data"] = _decode_block_result_data(tx_result.get("data"))
             return {
                 "result": {
@@ -542,7 +548,9 @@ async def wait_for_tx_async(
                         end_height=latest_height,
                         session=session,
                     )
-                except TransportError as exc:
+                except (TransportError, RpcError) as exc:
+                    # The block store can advance before execution results are
+                    # available. Keep the scan cursor so this block is retried.
                     last_error = str(exc)
                 else:
                     if fallback is not None:

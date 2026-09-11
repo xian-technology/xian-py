@@ -53,3 +53,7 @@ class TransactionError(XianException):
 
 class TxTimeoutError(TransactionError):
     pass
+
+
+class NonceReservationError(TransactionError):
+    pass

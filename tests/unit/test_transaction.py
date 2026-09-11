@@ -557,7 +557,7 @@ def test_wait_for_tx_async_falls_back_to_recent_block_scan() -> None:
     }
     tx_hex = json.dumps(tx_payload).encode("utf-8").hex()
     block_tx = _b64(tx_hex)
-    tx_hash = hashlib.sha256(bytes.fromhex(tx_hex)).hexdigest().upper()
+    tx_hash = hashlib.sha256(tx_hex.encode("ascii")).hexdigest().upper()
 
     fake_session = _FakeClientSession(
         get_responses=[

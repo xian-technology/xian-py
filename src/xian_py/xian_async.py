@@ -57,6 +57,7 @@ from xian_py.models import (
     TransactionReceipt,
     TransactionSubmission,
 )
+from xian_py.nonce import NonceState, Reservation
 from xian_py.wallet import Wallet
 
 _SIMULATION_DATETIME_RE = re.compile(
@@ -96,14 +97,18 @@ class XianAsync:
         )
         self._connector = connector
         self._session: Optional[aiohttp.ClientSession] = session
-        self._nonce_lock: asyncio.Lock | None = None
-        self._next_nonce: int | None = None
+        self._nonce_states: dict[tuple[str | None, str], NonceState] = {}
 
-    @property
-    def _nonce_reservation_lock(self) -> asyncio.Lock:
-        if self._nonce_lock is None:
-            self._nonce_lock = asyncio.Lock()
-        return self._nonce_lock
+    def _nonce_state(self, chain_id=None):
+        scope = (chain_id or self.chain_id, self.wallet.public_key)
+        if scope not in self._nonce_states:
+            self._nonce_states[scope] = NonceState()
+        return self._nonce_states[scope]
+
+    async def _read_network_nonce(self):
+        return await self._retry_read(
+            lambda: tr.get_nonce_async(self.node_url, self.wallet.public_key, session=self.session)
+        )
 
     async def __aenter__(self) -> "XianAsync":
         if self._session is None:
@@ -460,17 +465,11 @@ class XianAsync:
         )
 
     async def refresh_nonce(self) -> int:
-        """Refresh and return the next nonce from the node."""
-        nonce = await self._retry_read(
-            lambda: tr.get_nonce_async(
-                self.node_url,
-                self.wallet.public_key,
-                session=self.session,
-            )
-        )
-        async with self._nonce_reservation_lock:
-            self._next_nonce = nonce
-        return nonce
+        """Refresh without releasing an unresolved automatic submission."""
+        await self.ensure_chain_id()
+        state = self._nonce_state()
+        async with state.send_lock:
+            return await state.reserve(self._read_network_nonce, refresh=True)
 
     async def get_tx(self, tx_hash: str) -> TransactionReceipt:
         """Return a decoded transaction receipt."""
@@ -633,30 +632,10 @@ class XianAsync:
             "simulation": simulation,
         }
 
-    async def _reserve_nonce(self, explicit_nonce: int | None) -> int:
+    async def _reserve_nonce(self, explicit_nonce: int | None, chain_id=None) -> int:
         if explicit_nonce is not None:
-            async with self._nonce_reservation_lock:
-                if self._next_nonce is None or explicit_nonce >= self._next_nonce:
-                    self._next_nonce = explicit_nonce + 1
             return explicit_nonce
-
-        async with self._nonce_reservation_lock:
-            if self._next_nonce is None:
-                self._next_nonce = await self._retry_read(
-                    lambda: tr.get_nonce_async(
-                        self.node_url,
-                        self.wallet.public_key,
-                        session=self.session,
-                    )
-                )
-            nonce = self._next_nonce
-            self._next_nonce += 1
-            return nonce
-
-    async def _invalidate_reserved_nonce(self, nonce: int) -> None:
-        async with self._nonce_reservation_lock:
-            if self._next_nonce is not None and nonce < self._next_nonce:
-                self._next_nonce = None
+        return await self._nonce_state(chain_id).reserve(self._read_network_nonce)
 
     async def send_tx(
         self,
@@ -672,6 +651,80 @@ class XianAsync:
         poll_interval_seconds: float | None = None,
         chi_margin: float | None = None,
         min_chi_headroom: int | None = None,
+    ) -> TransactionSubmission:
+        """Submit in nonce order; uncertain broadcasts retain their reservation."""
+        if chain_id is None:
+            await self.ensure_chain_id()
+            chain_id = self.chain_id
+        if nonce is not None:
+            return await self._send_tx(
+                contract=contract,
+                function=function,
+                kwargs=kwargs,
+                chi=chi,
+                nonce=nonce,
+                chain_id=chain_id,
+                mode=mode,
+                wait_for_tx=wait_for_tx,
+                timeout_seconds=timeout_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+                chi_margin=chi_margin,
+                min_chi_headroom=min_chi_headroom,
+            )
+        state = self._nonce_state(chain_id)
+        async with state.send_lock:
+            reservation = Reservation()
+            try:
+                result = await self._send_tx(
+                    contract=contract,
+                    function=function,
+                    kwargs=kwargs,
+                    chi=chi,
+                    nonce=nonce,
+                    chain_id=chain_id,
+                    mode=mode,
+                    wait_for_tx=wait_for_tx,
+                    timeout_seconds=timeout_seconds,
+                    poll_interval_seconds=poll_interval_seconds,
+                    chi_margin=chi_margin,
+                    min_chi_headroom=min_chi_headroom,
+                    _reservation=reservation,
+                )
+            except BaseException as exc:
+                if reservation.nonce is not None:
+                    if reservation.broadcast_started:
+                        state.quarantine(reservation)
+                        if isinstance(exc, XianException):
+                            exc.details.update(nonce=reservation.nonce, tx_hash=reservation.tx_hash)
+                    else:
+                        state.release(reservation)
+                raise
+            if result.accepted is False:
+                response = result.response.get("result", {})
+                code = response.get("check_tx", response).get("code")
+                if code is not None and code != 0:
+                    state.reject()
+                else:
+                    state.quarantine(reservation)
+            elif result.accepted is None and not result.finalized:
+                state.quarantine(reservation)
+            return result
+
+    async def _send_tx(
+        self,
+        contract: str,
+        function: str,
+        kwargs: dict,
+        chi: int | None = None,
+        nonce: int = None,
+        chain_id: str = None,
+        mode: Literal["async", "checktx", "commit"] | None = None,
+        wait_for_tx: bool | None = None,
+        timeout_seconds: float | None = None,
+        poll_interval_seconds: float | None = None,
+        chi_margin: float | None = None,
+        min_chi_headroom: int | None = None,
+        _reservation: Reservation | None = None,
     ) -> TransactionSubmission:
         """Send a transaction using an explicit broadcast mode."""
         mode = mode or self.config.submission.mode
@@ -704,7 +757,9 @@ class XianAsync:
             estimated_stamps = chi_estimate["estimated"]
             supplied_stamps = int(chi_estimate["suggested"])
 
-        reserved_nonce = await self._reserve_nonce(nonce)
+        reserved_nonce = await self._reserve_nonce(nonce, chain_id)
+        if _reservation is not None:
+            _reservation.nonce = reserved_nonce
         payload = {
             "chain_id": chain_id,
             "contract": contract,
@@ -718,6 +773,8 @@ class XianAsync:
         tx = tr.create_tx(payload, self.wallet)
         prepared_tx = tr.prepare_transaction(tx)
         local_tx_hash = prepared_tx.tx_hash
+        if _reservation is not None:
+            _reservation.tx_hash = local_tx_hash
 
         result: dict[str, Any] = {
             "submitted": False,
@@ -754,6 +811,8 @@ class XianAsync:
                     session=self.session,
                 )
 
+            if _reservation is not None:
+                _reservation.broadcast_started = True
             data = await self._retry_broadcast(_broadcast_once)
         except TransportError as exc:
             if wait_for_tx:
@@ -764,7 +823,6 @@ class XianAsync:
                         poll_interval_seconds=poll_interval_seconds,
                     )
                 except Exception as recovery_exc:
-                    await self._invalidate_reserved_nonce(reserved_nonce)
                     raise exc from recovery_exc
 
                 result.update(
@@ -785,10 +843,6 @@ class XianAsync:
                 )
                 return TransactionSubmission.from_dict(result)
 
-            await self._invalidate_reserved_nonce(reserved_nonce)
-            raise
-        except Exception:
-            await self._invalidate_reserved_nonce(reserved_nonce)
             raise
 
         result["response"] = data
@@ -807,19 +861,14 @@ class XianAsync:
                     else local_tx_hash
                 )
                 if wait_for_tx and result["tx_hash"] is not None:
-                    try:
-                        receipt = await self.wait_for_tx(
-                            result["tx_hash"],
-                            timeout_seconds=timeout_seconds,
-                            poll_interval_seconds=poll_interval_seconds,
-                        )
-                    except Exception:
-                        await self._invalidate_reserved_nonce(reserved_nonce)
-                        raise
+                    receipt = await self.wait_for_tx(
+                        result["tx_hash"],
+                        timeout_seconds=timeout_seconds,
+                        poll_interval_seconds=poll_interval_seconds,
+                    )
                     result["receipt"] = receipt
                     result["finalized"] = True
                 return TransactionSubmission.from_dict(result)
-            await self._invalidate_reserved_nonce(reserved_nonce)
             return TransactionSubmission.from_dict(result)
 
         result["submitted"] = True
@@ -838,7 +887,6 @@ class XianAsync:
                 result["accepted"] and deliver_tx.get("code", 1) == 0 and commit_height != "0"
             )
             if not result["accepted"]:
-                await self._invalidate_reserved_nonce(reserved_nonce)
                 result["message"] = check_tx.get("log") or "CheckTx failed"
             elif duplicate_tx:
                 result["message"] = check_tx.get("log")
@@ -851,15 +899,11 @@ class XianAsync:
         if mode == "async":
             result["accepted"] = None
             if wait_for_tx and result["tx_hash"] is not None:
-                try:
-                    receipt = await self.wait_for_tx(
-                        result["tx_hash"],
-                        timeout_seconds=timeout_seconds,
-                        poll_interval_seconds=poll_interval_seconds,
-                    )
-                except Exception:
-                    await self._invalidate_reserved_nonce(reserved_nonce)
-                    raise
+                receipt = await self.wait_for_tx(
+                    result["tx_hash"],
+                    timeout_seconds=timeout_seconds,
+                    poll_interval_seconds=poll_interval_seconds,
+                )
                 result["receipt"] = receipt
                 result["finalized"] = True
             return TransactionSubmission.from_dict(result)
@@ -869,24 +913,17 @@ class XianAsync:
         if duplicate_tx:
             result["accepted"] = True
         if not result["accepted"]:
-            await self._invalidate_reserved_nonce(reserved_nonce)
             result["message"] = checktx_result.get("log") or "CheckTx failed"
             return TransactionSubmission.from_dict(result)
         if duplicate_tx:
             result["message"] = checktx_result.get("log")
 
         if wait_for_tx and result["tx_hash"] is not None:
-            try:
-                receipt = await self.wait_for_tx(
-                    result["tx_hash"],
-                    timeout_seconds=timeout_seconds,
-                    poll_interval_seconds=poll_interval_seconds,
-                )
-            except Exception:
-                # The tx may still commit later, but the local reservation is no
-                # longer trustworthy once finalization lookup fails.
-                await self._invalidate_reserved_nonce(reserved_nonce)
-                raise
+            receipt = await self.wait_for_tx(
+                result["tx_hash"],
+                timeout_seconds=timeout_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+            )
             result["receipt"] = receipt
             result["finalized"] = True
 

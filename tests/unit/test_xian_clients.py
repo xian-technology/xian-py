@@ -1158,7 +1158,7 @@ def test_xian_async_send_tx_waits_for_duplicate_cache_rpc_error_by_local_hash() 
     assert result.tx_hash is not None
 
 
-def test_xian_async_send_tx_invalidates_reserved_nonce_after_wait_timeout() -> None:
+def test_xian_async_send_tx_wait_timeout_requires_nonce_reconciliation() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     observed_nonces: list[int] = []
@@ -1191,7 +1191,7 @@ def test_xian_async_send_tx_invalidates_reserved_nonce_after_wait_timeout() -> N
     with patch.object(
         tr,
         "get_nonce_async",
-        AsyncMock(side_effect=[11, 11]),
+        AsyncMock(side_effect=[11, 12]),
     ) as get_nonce_async:
         with patch.object(tr, "create_tx", side_effect=_capture_tx):
             with patch.object(
@@ -1212,7 +1212,7 @@ def test_xian_async_send_tx_invalidates_reserved_nonce_after_wait_timeout() -> N
                     succeeded = asyncio.run(run_sends())
 
     assert succeeded.accepted is True
-    assert observed_nonces == [11, 11]
+    assert observed_nonces == [11, 12]
     assert get_nonce_async.await_count == 2
 
 

@@ -20,6 +20,7 @@ from xian_py.config import (
 )
 from xian_py.exception import (
     AbciError,
+    NonceReservationError,
     RpcError,
     SimulationError,
     TransactionError,
@@ -102,6 +103,7 @@ from xian_py.xian_async import XianAsync
 
 __all__ = [
     "AbciError",
+    "NonceReservationError",
     "AsyncContractClient",
     "AsyncEventClient",
     "AsyncStateKeyClient",

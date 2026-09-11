@@ -27,3 +27,15 @@ def test_shared_transaction_wire(vector):
     prepared = prepare_transaction(tx)
     assert prepared.json_bytes.decode() == vector["transaction_json"]
     assert prepared.submitted_bytes == vector["transaction_json"].encode().hex().encode()
+
+
+@pytest.mark.parametrize("receipt", VECTORS["node_receipts"], ids=lambda item: item["name"])
+def test_node_receipt_hash_matches_prepared_and_block_scan(receipt):
+    import base64
+
+    from xian_py.transaction import _hash_block_tx
+
+    submitted = base64.b64decode(receipt["block_tx_base64"])
+    signed = json.loads(bytes.fromhex(submitted.decode()).decode())
+    assert prepare_transaction(signed).tx_hash == receipt["tx_hash"]
+    assert _hash_block_tx(receipt["block_tx_base64"]) == receipt["tx_hash"]
