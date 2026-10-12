@@ -132,6 +132,16 @@ second_account = Wallet.from_mnemonic(
 )
 ```
 
+`Wallet.from_mnemonic` uses the browser/mobile indexed scheme:
+SHA-256 of the BIP39 seed, `xian-wallet-seed-v2`, and the four-byte big-endian
+account index. `HDWallet.get_wallet(path)` instead uses hardened SLIP-0010
+Ed25519 derivation. These are distinct schemes and produce different accounts;
+restore with the same scheme and index/path used when creating the account.
+
+Hybrid masters are fresh per account and chain. Neither mnemonic scheme
+recreates an enrolled account's hybrid keys. Retain its verified master backup;
+key replacement preserves its address but creates a replacement master.
+
 Inspect node and indexer health:
 
 ```python
@@ -405,10 +415,12 @@ with ShieldedRelayerClient("http://127.0.0.1:38480") as relayer:
   - `projectors.py` — reusable polling, ordering, and checkpoint primitives.
   - `models.py` — typed transaction, event, block, and status models.
   - `shielded_relayer.py` — client for the private-submission relayer.
-  - `x402.py` — native-Xian x402 exact-payment helpers.
+  - `hybrid.py`, `account_master.py`, `signers.py` — hybrid signing, portable
+    master backups, and active-credential loading.
+  - `x402.py` — historical permit-message helpers, unsupported by current currency.
 - `examples/` — service, worker, and reference-app examples built on the SDK
   (`credits_ledger/`, `registry_approval/`, `workflow_backend/`,
-  `x402_exact/`, `fastapi_service.py`, `event_worker.py`, `admin_job.py`).
+  `fastapi_service.py`, `event_worker.py`, `admin_job.py`).
 - `tests/` — SDK transport, decoding, and integration-shape coverage.
 - `docs/` — compatibility notes and SDK backlog items.
 
@@ -425,7 +437,6 @@ with ShieldedRelayerClient("http://127.0.0.1:38480") as relayer:
   matters more than replayable cursors
 - use thin helper clients for common patterns: contract, token, event, and
   state-key access
-- sign, verify, settle, and retry native-Xian x402 exact-payment requests
 - build SQLite-backed read models with the shared projector primitives, using
   CometBFT websocket wakeups and BDS cursor reconciliation
 
@@ -461,7 +472,7 @@ websocket-only, non-resumable delivery.
 - credits-ledger reference app: [examples/credits_ledger/README.md](examples/credits_ledger/README.md)
 - registry-approval reference app: [examples/registry_approval/README.md](examples/registry_approval/README.md)
 - workflow-backend reference app: [examples/workflow_backend/README.md](examples/workflow_backend/README.md)
-- x402 exact-payment reference app: [examples/x402_exact/README.md](examples/x402_exact/README.md)
+- Retired historical x402 profile (unsupported on fresh chains): [examples/x402_exact/README.md](examples/x402_exact/README.md)
 
 ## Validation
 
@@ -481,3 +492,28 @@ uv run pytest
 - [docs/RELEASING.md](docs/RELEASING.md) — fail-closed tag and package release process
 - [docs/API_COMPATIBILITY.md](docs/API_COMPATIBILITY.md) — compatibility surface and stability guarantees
 - [docs/SDK_REVIEW_BACKLOG.md](docs/SDK_REVIEW_BACKLOG.md) — SDK review queue
+
+The `hybrid` extra supplies `HybridWallet` in `xian_py.hybrid` and
+`MasterAccountTransitionDraft` in `xian_py.account_master`. Save one
+`export_master_backup()` file and reopen it with `verify_master_backup()` before
+signing. Password encryption is optional; the plaintext file is the secret.
+`import_account_master()` and `account_backup_from_master(master, role)` restore
+active or recovery credentials. Keep the master offline and retain only active
+credentials in an everyday wallet. Older independently generated role backups
+remain importable. Applications must persist candidate keys and exact signed
+transactions before broadcast and reconcile committed state themselves.
+See [the recovery guide](../xian-docs-web/concepts/hybrid-account-recovery.md).
+Enrollment is disabled in the checked-in network policies.
+
+## Existing hybrid account signers
+
+Install the SDK with its `hybrid` extra. Applications can use
+`xian_py.signers.load_signing_wallet(active_backup_file=path,
+backup_password=password, expected_address=address, chain_id=chain_id)` with
+`Xian` or `XianAsync`. This decrypts a verified active backup and retains the
+original account address. Recovery files cannot spend. Mixed legacy/hybrid
+inputs, wrong passwords, wrong chains and mismatched addresses fail closed.
+The loader does not enroll accounts or manage transition persistence. Use the
+backup/recovery workflow before migrating custody and retain the master
+backup offline. Derive an active-only service credential from the master; do not
+install the master on an automated signer. Old private keys alone cannot restore an enrolled account.

@@ -1,3 +1,10 @@
+"""Historical permit-based x402 profile, unsupported on fresh Xian chains.
+
+The fresh-chain currency has no permit authorizer. These wire-format helpers
+remain for external legacy integrations; do not deploy them as a new-chain
+payment or enrolled-account authorization protocol.
+"""
+
 from __future__ import annotations
 
 import base64

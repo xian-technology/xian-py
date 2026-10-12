@@ -23,3 +23,10 @@ building Python services around them.
 - Prefer thin, composable abstractions over hidden framework behavior.
 - If you add a high-level convenience layer here, it should still be possible
   to trace it back to an explicit node/API capability.
+
+## Account custody
+
+`hybrid.py` implements hybrid signers and transition primitives;
+`account_master.py` derives both roles from one portable master backup;
+`signers.py` loads active-only service credentials. See the root README for
+mnemonic derivation, backup scope and the persistence required before broadcast.

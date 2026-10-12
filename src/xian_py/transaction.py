@@ -321,6 +321,8 @@ def create_tx(payload: dict, wallet: Wallet) -> dict:
     payload = normalize_transaction_payload(payload)
     if not check_format_of_payload(payload):
         raise TransactionError("Invalid payload provided")
+    if hasattr(wallet, "sign_transaction"):
+        return wallet.sign_transaction(payload)
     canonical_payload = canonical_json(payload)
 
     tx = {
