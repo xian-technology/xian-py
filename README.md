@@ -97,7 +97,7 @@ Optional extras:
 uv add "xian-tech-py[app]"   # FastAPI examples
 uv add "xian-tech-py[compile]" # Offline source-to-artifact utilities
 uv add "xian-tech-py[eth]"   # Ethereum-style key helpers
-uv add "xian-tech-py[hd]"    # HD-wallet derivation
+uv add "xian-tech-py[hd]"    # Mnemonic account derivation
 ```
 
 ## SDK Cookbook
@@ -121,9 +121,9 @@ print(wallet.public_key)
 # Restore an existing account from a hex private key.
 wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
 
-# Optional HD-wallet derivation. Requires: uv add "xian-tech-py[hd]".
+# Generate a recovery phrase and its first account. Requires [hd].
 hd = HDWallet()
-derived_wallet = hd.get_wallet([44, 734, 0, 0, 0])
+derived_wallet = hd.get_wallet(account_index=0)
 
 # Browser/mobile wallet recovery. Also requires [hd].
 wallet = Wallet.from_mnemonic(os.environ["XIAN_RECOVERY_PHRASE"])
@@ -132,12 +132,15 @@ second_account = Wallet.from_mnemonic(
 )
 ```
 
-`Wallet.from_mnemonic` uses the browser/mobile indexed scheme:
-SHA-256 of the BIP39 seed, `xian-wallet-seed-v2`, and the four-byte big-endian
-account index. `HDWallet.get_wallet(path)` instead uses hardened SLIP-0010
-Ed25519 derivation. These are distinct schemes and produce different accounts;
-restore with the same scheme and index/path used when creating the account.
-Changing the derivation scheme does not migrate balances or permissions.
+`HDWallet(phrase).get_wallet(account_index=i)` and
+`Wallet.from_mnemonic(phrase, account_index=i)` produce the same account as
+the browser and mobile wallets. Both default to account index `0`. Recovery
+requires the same phrase and index; indices are integers from `0` through
+`4294967295`.
+
+All Xian mnemonic accounts use SHA-256 of the BIP39 seed (empty passphrase),
+`xian-wallet-seed-v2`, and the four-byte big-endian account index. Derivation
+paths are not accepted by `HDWallet.get_wallet`; use `account_index` instead.
 
 Inspect node and indexer health:
 

@@ -1,5 +1,4 @@
 import hashlib
-import hmac
 import secrets
 from functools import lru_cache
 from typing import TypeAlias
@@ -37,21 +36,6 @@ def _load_mnemonic_library():
             "install with 'uv add \"xian-tech-py[hd]\"'"
         ) from exc
     return Mnemonic
-
-
-def _derive_slip10_ed25519_private_key(seed: bytes, derivation_path: list[int]) -> str:
-    digest = hmac.new(b"ed25519 seed", seed, hashlib.sha512).digest()
-    private_key = digest[:32]
-    chain_code = digest[32:]
-
-    for index in derivation_path:
-        hardened_index = index + 0x80000000
-        data = b"\x00" + private_key + hardened_index.to_bytes(4, "big")
-        digest = hmac.new(chain_code, data, hashlib.sha512).digest()
-        private_key = digest[:32]
-        chain_code = digest[32:]
-
-    return private_key.hex()
 
 
 WalletPrivateKey: TypeAlias = str | None
@@ -170,18 +154,13 @@ class EthereumWallet:
 
 
 class HDWallet:
+    """Generate or restore indexed Xian accounts from a BIP39 mnemonic."""
+
     def __init__(self, mnemonic: str | None = None):
-        mnemonic_type = _load_mnemonic_library()
-        mnemonic_library = mnemonic_type("english")
-
-        if mnemonic:
-            if not mnemonic_library.check(mnemonic):
-                raise ValueError("invalid BIP39 mnemonic")
-            self.mnemonic = mnemonic
-        else:
-            self.mnemonic = mnemonic_library.generate(strength=256)
-
-        self.seed_bytes = mnemonic_type.to_seed(self.mnemonic)
+        if mnemonic is None:
+            mnemonic_type = _load_mnemonic_library()
+            mnemonic = mnemonic_type("english").generate(strength=256)
+        self.mnemonic = _normalize_bip39_mnemonic(mnemonic)
 
     @property
     def mnemonic_str(self) -> str:
@@ -193,10 +172,9 @@ class HDWallet:
         """Returns the mnemonic seed as a list of strings"""
         return self.mnemonic.split()
 
-    def get_wallet(self, derivation_path):
-        """Get ED25519 wallet for custom derivation path"""
-        private_key_hex = _derive_slip10_ed25519_private_key(self.seed_bytes, derivation_path)
-        return Wallet(private_key=private_key_hex)
+    def get_wallet(self, account_index: int = 0) -> Wallet:
+        """Derive the same indexed account as the browser and mobile wallets."""
+        return Wallet.from_mnemonic(self.mnemonic, account_index=account_index)
 
     def get_ethereum_wallet(self, account_idx: int = 0):
         """Get Ethereum wallet for specific account index"""

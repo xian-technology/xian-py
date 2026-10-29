@@ -25,6 +25,13 @@ client calls, or call the explicit `*_async` functions from async code.
 Ethereum wallet helpers expose `address`; they no longer alias that value as
 `public_key`.
 
+`HDWallet.get_wallet(account_index=0)` now uses the same indexed Xian mnemonic
+derivation as `Wallet.from_mnemonic`, the browser wallet, and the mobile wallet.
+The former SLIP-0010 derivation-path API is removed. Callers must pass an
+integer account index, not a path list. This pre-launch change intentionally
+changes accounts previously derived through the path API. It does not change
+Ethereum derivation or existing private-key imports.
+
 ## Additive Surface
 
 - `Wallet.from_mnemonic(mnemonic, account_index=0)` derives accounts with the
