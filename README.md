@@ -132,6 +132,13 @@ second_account = Wallet.from_mnemonic(
 )
 ```
 
+`Wallet.from_mnemonic` uses the browser/mobile indexed scheme:
+SHA-256 of the BIP39 seed, `xian-wallet-seed-v2`, and the four-byte big-endian
+account index. `HDWallet.get_wallet(path)` instead uses hardened SLIP-0010
+Ed25519 derivation. These are distinct schemes and produce different accounts;
+restore with the same scheme and index/path used when creating the account.
+Changing the derivation scheme does not migrate balances or permissions.
+
 Inspect node and indexer health:
 
 ```python

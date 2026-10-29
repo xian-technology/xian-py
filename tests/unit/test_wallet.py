@@ -75,6 +75,24 @@ def test_wallet_rejects_invalid_xian_mnemonic_index(monkeypatch) -> None:
         Wallet.from_mnemonic(VALID_MNEMONIC, account_index=True)
 
 
+@pytest.mark.parametrize(
+    ("path", "expected_address"),
+    [
+        ([44, 734, 0, 0, 0], "294e9ba64538e04fac537760241ab3d10151a2fdb35cfb567f244689019c8850"),
+        ([44, 0, 0, 0, 0], "7c2e79f3a1701fb2a86a2c24a3fdf8634b7aad80886c0c0a526d44d23fe8e19a"),
+    ],
+)
+def test_hd_wallet_preserves_distinct_recovery_scheme(monkeypatch, path, expected_address) -> None:
+    monkeypatch.setattr(wallet_module, "_load_mnemonic_library", lambda: _FakeMnemonic)
+
+    restored = wallet_module.HDWallet(VALID_MNEMONIC).get_wallet(path)
+    indexed = Wallet.from_mnemonic(VALID_MNEMONIC, account_index=0)
+
+    assert restored.public_key == expected_address
+    assert indexed.public_key == "7e15e2e068cb41b5c4b51dafef23d944aa7d120d362097d1f7c02100da5c2be5"
+    assert restored.public_key != indexed.public_key
+
+
 def test_ethereum_address_validation_accepts_prefixed_and_plain_hex() -> None:
     assert wallet_module.EthereumWallet.is_valid_key("0x" + "a" * 40) is True
     assert wallet_module.EthereumWallet.is_valid_key("b" * 40) is True
