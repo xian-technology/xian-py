@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import aiohttp
-from xian_runtime_types.encoding import encode
+from xian_runtime_types.encoding import encode_wire
 
 from xian_py.exception import (
     AbciError,
@@ -229,11 +229,11 @@ def canonical_json(value: dict) -> str:
 
 
 def normalize_transaction_payload(payload: dict) -> dict:
-    payload = format_dictionary(deepcopy(payload))
+    payload = dict(payload)
     if "kwargs" in payload:
-        payload["kwargs"] = json.loads(encode(payload["kwargs"]))
-        payload = format_dictionary(payload)
-    return payload
+        # Bound traversal before recursive formatting; wire tags are valid SDK inputs.
+        payload["kwargs"] = json.loads(encode_wire(payload["kwargs"]))
+    return format_dictionary(payload)
 
 
 async def simulate_tx_async(
@@ -243,7 +243,7 @@ async def simulate_tx_async(
     session: aiohttp.ClientSession | None = None,
 ) -> dict:
     """Estimate the amount of chi a tx will cost"""
-    encoded = encode(payload).encode().hex()
+    encoded = encode_wire(payload).encode().hex()
 
     try:
         data = await abci_query_async(

@@ -15,12 +15,14 @@ VECTORS = json.loads(
 )
 
 
+@pytest.mark.parametrize("typed", [False, True], ids=["raw-tags", "runtime-values"])
 @pytest.mark.parametrize("vector", VECTORS["cases"], ids=lambda item: item["name"])
-def test_shared_transaction_wire(vector):
+def test_shared_transaction_wire(vector, typed):
     wallet = Wallet(VECTORS["private_key"])
     payload = dict(vector["payload"])
-    # Exercise normalization of actual runtime values, including nested wrappers.
-    payload["kwargs"] = convert_dict(payload["kwargs"])
+    # Raw JSON is a public SDK input too; converting every fixture hides that boundary.
+    if typed:
+        payload["kwargs"] = convert_dict(payload["kwargs"])
     tx = create_tx(payload, wallet)
     assert canonical_json(tx["payload"]) == vector["canonical_payload"]
     assert tx["metadata"]["signature"] == vector["signature"]
