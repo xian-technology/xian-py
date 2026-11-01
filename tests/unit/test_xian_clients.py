@@ -3839,3 +3839,42 @@ def test_sync_contract_and_event_helpers_delegate_to_root_client() -> None:
     assert event_payload[0]["limit"] == 5
     assert state_value == ("currency", "balances", ("alice",))
     assert state_history[0]["key"] == "currency.balances:alice"
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_get_state_preserves_versioned_set_member_types(nested):
+    from decimal import Decimal
+
+    from xian_runtime_types.collections import ContractingFrozenSet, ContractingSet
+
+    wire = {
+        "__set__": {
+            "codec": "xian-set-1",
+            "items": [
+                ["tuple", [["str", "decimal"], ["raw_decimal", 0, "1234567890123456789", -18]]],
+                ["tuple", [["str", "large"], ["int", "9007199254740993"]]],
+                ["tuple", [["str", "negative-zero"], ["float", "8000000000000000"]]],
+                ["frozenset", [["bytes", "00ff"]]],
+            ],
+        },
+    }
+    payload = {"stored": wire} if nested else wire
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
+    client._session = _FakeSession(
+        post_responses=[
+            _FakeResponse(
+                {"result": {"response": {"value": _b64(json.dumps(payload)), "info": "dict"}}},
+            ),
+        ],
+    )
+    result = asyncio.run(client.get_state("con_demo", "state"))
+    value = result["stored"] if nested else result
+    assert isinstance(value, ContractingSet)
+    pairs = dict(member for member in value if isinstance(member, tuple))
+    assert pairs["large"] == 9007199254740993
+    assert isinstance(pairs["large"], int)
+    assert pairs["negative-zero"].hex() == "-0x0.0p+0"
+    assert isinstance(pairs["decimal"], Decimal)
+    assert pairs["decimal"] == Decimal("1.234567890123456789")
+    frozen = next(member for member in value if isinstance(member, ContractingFrozenSet))
+    assert list(frozen) == [b"\x00\xff"]
