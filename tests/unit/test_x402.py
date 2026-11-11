@@ -49,6 +49,9 @@ def test_payment_id_generation_uses_supported_shape() -> None:
 
 def test_canonical_amount_rejects_floats_for_exact_payments() -> None:
     assert canonical_amount("1.2300") == "1.23"
+    precise = "9007199254740993.123456789012345678901234567891"
+    assert canonical_amount(precise) == precise
+    assert canonical_permit_amount(precise) == precise
     assert canonical_amount(10) == "10"
     assert amount_for_contract("10") == 10
     assert amount_for_contract("0.001") == Decimal("0.001")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from xian_py import Xian
+from xian_py import Xian, XianClientConfig
 
 try:
     from .common import (
@@ -32,7 +32,12 @@ def main() -> None:
     wallet = require_wallet()
     ledger_name = contract_name()
 
-    with Xian(node_url(), chain_id=chain_id(), wallet=wallet) as client:
+    with Xian(
+        node_url(),
+        chain_id=chain_id(),
+        wallet=wallet,
+        config=XianClientConfig(vm_profile="xian_vm_v2"),
+    ) as client:
         status = client.get_node_status()
         print(
             f"Connected to {status.network} at height "

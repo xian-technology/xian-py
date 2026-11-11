@@ -9,7 +9,7 @@ TransferEvent = LogEvent(
     {
         "from": {"type": str, "idx": True},
         "to": {"type": str, "idx": True},
-        "amount": {"type": (int, float, decimal)},
+        "amount": {"type": (int, decimal)},
     },
 )
 
@@ -18,7 +18,7 @@ ApproveEvent = LogEvent(
     {
         "from": {"type": str, "idx": True},
         "to": {"type": str, "idx": True},
-        "amount": {"type": (int, float, decimal)},
+        "amount": {"type": (int, decimal)},
     },
 )
 
@@ -26,7 +26,7 @@ IssueEvent = LogEvent(
     "Issue",
     {
         "to": {"type": str, "idx": True},
-        "amount": {"type": (int, float, decimal)},
+        "amount": {"type": (int, decimal)},
         "issuer": {"type": str, "idx": True},
     },
 )
@@ -35,7 +35,7 @@ BurnEvent = LogEvent(
     "Burn",
     {
         "from": {"type": str, "idx": True},
-        "amount": {"type": (int, float, decimal)},
+        "amount": {"type": (int, decimal)},
         "actor": {"type": str, "idx": True},
     },
 )
@@ -119,7 +119,7 @@ def remove_issuer(account: str):
 
 
 @export
-def issue(to: str, amount: float):
+def issue(to: str, amount: decimal):
     require_issuer()
     assert amount > 0, "Amount must be positive."
     balances[to] += amount
@@ -128,7 +128,7 @@ def issue(to: str, amount: float):
 
 
 @export
-def transfer(amount: float, to: str):
+def transfer(amount: decimal, to: str):
     assert amount > 0, "Amount must be positive."
     assert balances[ctx.caller] >= amount, "Insufficient balance."
     balances[ctx.caller] -= amount
@@ -137,14 +137,14 @@ def transfer(amount: float, to: str):
 
 
 @export
-def approve(amount: float, to: str):
+def approve(amount: decimal, to: str):
     assert amount >= 0, "Cannot approve negative balances."
     approvals[ctx.caller, to] = amount
     ApproveEvent({"from": ctx.caller, "to": to, "amount": amount})
 
 
 @export
-def transfer_from(amount: float, to: str, main_account: str):
+def transfer_from(amount: decimal, to: str, main_account: str):
     assert amount > 0, "Amount must be positive."
     assert approvals[main_account, ctx.caller] >= amount, "Insufficient approved balance."
     assert balances[main_account] >= amount, "Insufficient balance."
@@ -155,7 +155,7 @@ def transfer_from(amount: float, to: str, main_account: str):
 
 
 @export
-def burn(amount: float):
+def burn(amount: decimal):
     assert amount > 0, "Amount must be positive."
     assert balances[ctx.caller] >= amount, "Insufficient balance."
     balances[ctx.caller] -= amount
@@ -164,7 +164,7 @@ def burn(amount: float):
 
 
 @export
-def burn_from(account: str, amount: float):
+def burn_from(account: str, amount: decimal):
     require_issuer()
     assert amount > 0, "Amount must be positive."
     assert balances[account] >= amount, "Insufficient balance."

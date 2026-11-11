@@ -9,8 +9,8 @@ from decimal import Decimal
 from typing import Any, Literal, Optional
 
 import aiohttp
-from xian_runtime_types.decimal import ContractingDecimal
-from xian_runtime_types.encoding import decode
+from xian_runtime_types.decimal import ContractingDecimal, canonical_fixed
+from xian_runtime_types.encoding import decode, decode_wire_numbers
 
 import xian_py.transaction as tr
 from xian_py._async_helpers import (
@@ -459,8 +459,21 @@ class XianAsync:
         if byte_string is None or byte_string == "AA==":
             return None
 
+        text = tr.decode_str(byte_string)
+        if type_of_data == "json":
+            return json.loads(text)
+        if self.config.vm_profile == "xian_vm_v2":
+            if type_of_data == "int":
+                value = int(text)
+                if str(value) != text or value.bit_length() > 512:
+                    raise ValueError("Invalid V2 integer state")
+                return value
+            if type_of_data == "decimal":
+                return decode_wire_numbers({"__fixed__": text})
+            if type_of_data in {"dict", "list"}:
+                return decode(text, vm_profile=self.config.vm_profile)
         return self._decode_abci_value(
-            tr.decode_str(byte_string),
+            text,
             type_of_data,
         )
 
@@ -477,6 +490,7 @@ class XianAsync:
             lambda: tr.get_tx_async(
                 self.node_url,
                 tx_hash,
+                vm_profile=self.config.vm_profile,
                 session=self.session,
             )
         )
@@ -499,6 +513,7 @@ class XianAsync:
             data = await tr.simulate_tx_async(
                 self.node_url,
                 payload,
+                vm_profile=self.config.vm_profile,
                 session=self.session,
             )
             return data["result"]
@@ -541,6 +556,8 @@ class XianAsync:
         if tx is not None:
             normalized["transaction"] = tx
         if isinstance(execution, dict):
+            if self.config.vm_profile == "xian_vm_v2":
+                execution = decode_wire_numbers(execution)
             normalized["execution"] = execution
 
         if "error" in normalized:
@@ -583,6 +600,7 @@ class XianAsync:
             lambda: tr.wait_for_tx_async(
                 self.node_url,
                 tx_hash,
+                vm_profile=self.config.vm_profile,
                 timeout_seconds=timeout_seconds,
                 poll_interval_seconds=poll_interval_seconds,
                 session=self.session,
@@ -617,6 +635,7 @@ class XianAsync:
             lambda: tr.simulate_tx_async(
                 self.node_url,
                 payload,
+                vm_profile=self.config.vm_profile,
                 session=self.session,
             )
         )
@@ -770,7 +789,7 @@ class XianAsync:
             "chi_supplied": supplied_stamps,
         }
 
-        tx = tr.create_tx(payload, self.wallet)
+        tx = tr.create_tx(payload, self.wallet, vm_profile=self.config.vm_profile)
         prepared_tx = tr.prepare_transaction(tx)
         local_tx_hash = prepared_tx.tx_hash
         if _reservation is not None:
@@ -967,6 +986,7 @@ class XianAsync:
             lambda: tr.simulate_tx_async(
                 self.node_url,
                 payload,
+                vm_profile=self.config.vm_profile,
                 session=self.session,
             )
         )
@@ -979,7 +999,7 @@ class XianAsync:
                 details=simulation,
             )
         result = simulation.get("result")
-        if not isinstance(result, str):
+        if self.config.vm_profile == "xian_vm_v2" or not isinstance(result, str):
             return result
         if result.startswith("0x"):
             return result
@@ -1822,6 +1842,7 @@ class XianAsync:
 
                         live_events = _extract_matching_live_events(
                             payload,
+                            vm_profile=self.config.vm_profile,
                             contract=contract,
                             event=event,
                         )
@@ -1884,6 +1905,7 @@ class XianAsync:
                         payload = buffered.pop(0) if buffered else await self._receive_ws_json(ws)
                         live_events = _extract_matching_live_events(
                             payload,
+                            vm_profile=self.config.vm_profile,
                             contract=contract,
                             event=event,
                         )
@@ -1907,10 +1929,14 @@ class XianAsync:
             return text or None
         return str(value)
 
-    @staticmethod
     def _coerce_amount(
+        self,
         amount: int | float | str | Decimal | ContractingDecimal,
     ) -> int | ContractingDecimal:
+        if self.config.vm_profile == "xian_vm_v2":
+            if type(amount) is int:
+                return amount
+            return ContractingDecimal(canonical_fixed(amount))
         if isinstance(amount, ContractingDecimal):
             return amount
         if isinstance(amount, Decimal):

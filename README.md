@@ -444,6 +444,15 @@ node for cursorable indexed catch-up and canonical event IDs. Use
 `watch_live_events()` or `.watch_live()` when you explicitly want
 websocket-only, non-resumable delivery.
 
+For a chain configured for `xian_vm_v2`, pass
+`config=XianClientConfig(vm_profile="xian_vm_v2")` to `Xian` or `XianAsync`.
+Use Python integers and `Decimal("0.000000000000000000000000000001")`
+for contract arguments. Token helpers also accept decimal text. Offline
+`create_tx` accepts the same `vm_profile` keyword. The SDK checks decimal
+range and precision before signing or simulation. Successful calls return
+typed integers and `ContractingDecimal` values. The default client profile
+is `xian_vm_v1`.
+
 ## Core API Layers
 
 - `Xian` / `XianAsync` — primary sync and async clients

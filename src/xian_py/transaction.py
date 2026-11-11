@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import aiohttp
-from xian_runtime_types.encoding import encode_wire
+from xian_runtime_types.encoding import decode, encode_wire, loads_wire_json
 
 from xian_py.exception import (
     AbciError,
@@ -81,10 +81,14 @@ def decode_str(encoded_data: str) -> str:
     return b64decode(encoded_data).decode("utf-8")
 
 
-def decode_dict(encoded_dict: str) -> dict:
+def _load_contract_json(text: str, vm_profile: str):
+    return loads_wire_json(text) if vm_profile == "xian_vm_v2" else json.loads(text)
+
+
+def decode_dict(encoded_dict: str, *, vm_profile: str = "xian_vm_v1") -> dict:
     decoded_data = decode_str(encoded_dict)
     decoded_tx = bytes.fromhex(decoded_data).decode("utf-8")
-    return json.loads(decoded_tx)
+    return _load_contract_json(decoded_tx, vm_profile)
 
 
 async def request_json_async(
@@ -189,6 +193,7 @@ async def get_tx_async(
     tx_hash: str,
     decode: bool = True,
     *,
+    vm_profile: str = "xian_vm_v1",
     session: aiohttp.ClientSession | None = None,
 ) -> dict:
     """
@@ -210,12 +215,12 @@ async def get_tx_async(
         raise XianException(e) from e
 
     if decode and "result" in data:
-        decoded = decode_dict(data["result"]["tx"])
+        decoded = decode_dict(data["result"]["tx"], vm_profile=vm_profile)
         data["result"]["tx"] = decoded
 
         if data["result"]["tx_result"]["data"] is not None:
             decoded = decode_str(data["result"]["tx_result"]["data"])
-            data["result"]["tx_result"]["data"] = json.loads(decoded)
+            data["result"]["tx_result"]["data"] = _load_contract_json(decoded, vm_profile)
 
     return data
 
@@ -228,11 +233,11 @@ def canonical_json(value: dict) -> str:
     )
 
 
-def normalize_transaction_payload(payload: dict) -> dict:
+def normalize_transaction_payload(payload: dict, *, vm_profile: str = "xian_vm_v1") -> dict:
     payload = dict(payload)
     if "kwargs" in payload:
         # Bound traversal before recursive formatting; wire tags are valid SDK inputs.
-        payload["kwargs"] = json.loads(encode_wire(payload["kwargs"]))
+        payload["kwargs"] = json.loads(encode_wire(payload["kwargs"], vm_profile=vm_profile))
     return format_dictionary(payload)
 
 
@@ -241,9 +246,10 @@ async def simulate_tx_async(
     payload: dict,
     *,
     session: aiohttp.ClientSession | None = None,
+    vm_profile: str = "xian_vm_v1",
 ) -> dict:
     """Estimate the amount of chi a tx will cost"""
-    encoded = encode_wire(payload).encode().hex()
+    encoded = encode_wire(payload, vm_profile=vm_profile).encode().hex()
 
     try:
         data = await abci_query_async(
@@ -263,7 +269,8 @@ async def simulate_tx_async(
     if res["code"] != 0:
         raise SimulationError(res["log"], details=res)
 
-    return json.loads(decode_str(res["value"]))
+    text = decode_str(res["value"])
+    return decode(text, vm_profile=vm_profile) if vm_profile == "xian_vm_v2" else json.loads(text)
 
 
 async def get_status_async(
@@ -304,7 +311,7 @@ async def get_block_results_async(
     )
 
 
-def create_tx(payload: dict, wallet: Wallet) -> dict:
+def create_tx(payload: dict, wallet: Wallet, *, vm_profile: str = "xian_vm_v1") -> dict:
     """
     Create offline transaction that can be broadcast
     :param payload: Transaction payload with following keys:
@@ -318,7 +325,7 @@ def create_tx(payload: dict, wallet: Wallet) -> dict:
     :param wallet: Wallet object with public and private key
     :return: Encoded transaction data
     """
-    payload = normalize_transaction_payload(payload)
+    payload = normalize_transaction_payload(payload, vm_profile=vm_profile)
     if not check_format_of_payload(payload):
         raise TransactionError("Invalid payload provided")
     canonical_payload = canonical_json(payload)
@@ -428,13 +435,15 @@ def _hash_block_tx(block_tx: str) -> str:
     return hashlib.sha256(b64decode(block_tx, validate=True)).hexdigest().upper()
 
 
-def _decode_block_result_data(value: Any) -> Any:
+def _decode_block_result_data(value: Any, *, vm_profile: str) -> Any:
     if value in (None, ""):
         return value
     try:
         decoded = decode_str(value)
     except Exception:
         return value
+    if vm_profile == "xian_vm_v2":
+        return loads_wire_json(decoded)
     try:
         return json.loads(decoded)
     except json.JSONDecodeError:
@@ -447,6 +456,7 @@ async def _lookup_tx_in_recent_blocks_async(
     *,
     start_height: int,
     end_height: int,
+    vm_profile: str = "xian_vm_v1",
     session: aiohttp.ClientSession | None = None,
 ) -> dict[str, Any] | None:
     target_hash = tx_hash.upper()
@@ -478,13 +488,15 @@ async def _lookup_tx_in_recent_blocks_async(
             tx_result = dict(txs_results[index])
             if "code" not in tx_result:
                 raise RpcError("Transaction execution result is missing its status code")
-            tx_result["data"] = _decode_block_result_data(tx_result.get("data"))
+            tx_result["data"] = _decode_block_result_data(
+                tx_result.get("data"), vm_profile=vm_profile
+            )
             return {
                 "result": {
                     "hash": target_hash,
                     "height": str(height),
                     "index": index,
-                    "tx": decode_dict(block_tx),
+                    "tx": decode_dict(block_tx, vm_profile=vm_profile),
                     "tx_result": tx_result,
                 }
             }
@@ -495,6 +507,7 @@ async def wait_for_tx_async(
     node_url: str,
     tx_hash: str,
     *,
+    vm_profile: str = "xian_vm_v1",
     timeout_seconds: float = 30.0,
     poll_interval_seconds: float = 0.25,
     session: aiohttp.ClientSession | None = None,
@@ -513,6 +526,7 @@ async def wait_for_tx_async(
             data = await get_tx_async(
                 node_url,
                 tx_hash,
+                vm_profile=vm_profile,
                 session=session,
             )
         except TransportError as exc:
@@ -546,6 +560,7 @@ async def wait_for_tx_async(
                         tx_hash,
                         start_height=scan_from,
                         end_height=latest_height,
+                        vm_profile=vm_profile,
                         session=session,
                     )
                 except (TransportError, RpcError) as exc:

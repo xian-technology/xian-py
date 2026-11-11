@@ -4,6 +4,8 @@ import os
 from decimal import Decimal
 from pathlib import Path
 
+from xian_runtime_types.decimal import canonical_fixed
+
 from xian_py import Wallet
 from xian_py.models import TransactionSubmission
 
@@ -73,15 +75,6 @@ def ensure_submission_succeeded(
 
 
 def parse_amount(value: object) -> int | Decimal:
-    if isinstance(value, int | Decimal):
+    if type(value) is int:
         return value
-    if isinstance(value, float):
-        return Decimal(str(value))
-    if isinstance(value, str):
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("Amount must not be empty.")
-        if normalized.isdigit():
-            return int(normalized)
-        return Decimal(normalized)
-    raise TypeError(f"Unsupported amount value: {value!r}")
+    return Decimal(canonical_fixed(value))

@@ -645,7 +645,7 @@ def test_xian_async_send_tx_reserves_nonces_locally_for_concurrent_calls() -> No
     client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     observed_nonces: list[int] = []
 
-    def _capture_tx(payload: dict, wallet: Wallet) -> dict:
+    def _capture_tx(payload: dict, wallet: Wallet, *, vm_profile: str) -> dict:
         observed_nonces.append(payload["nonce"])
         return {"signed": payload["nonce"]}
 
@@ -690,7 +690,7 @@ def test_xian_async_send_tx_invalidates_reserved_nonce_after_checktx_failure() -
     client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     observed_nonces: list[int] = []
 
-    def _capture_tx(payload: dict, wallet: Wallet) -> dict:
+    def _capture_tx(payload: dict, wallet: Wallet, *, vm_profile: str) -> dict:
         observed_nonces.append(payload["nonce"])
         return {"signed": payload["nonce"]}
 
@@ -756,7 +756,7 @@ def test_xian_async_send_tx_retries_transport_errors_with_same_nonce() -> None:
     )
     observed_nonces: list[int] = []
 
-    def _capture_tx(payload: dict, wallet: Wallet) -> dict:
+    def _capture_tx(payload: dict, wallet: Wallet, *, vm_profile: str) -> dict:
         observed_nonces.append(payload["nonce"])
         return {"signed": payload["nonce"]}
 
@@ -1163,7 +1163,7 @@ def test_xian_async_send_tx_wait_timeout_requires_nonce_reconciliation() -> None
     client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
     observed_nonces: list[int] = []
 
-    def _capture_tx(payload: dict, wallet: Wallet) -> dict:
+    def _capture_tx(payload: dict, wallet: Wallet, *, vm_profile: str) -> dict:
         observed_nonces.append(payload["nonce"])
         return {"signed": payload["nonce"]}
 

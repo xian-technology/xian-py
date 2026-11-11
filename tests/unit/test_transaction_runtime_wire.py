@@ -145,3 +145,77 @@ def test_cyclic_kwargs_fail_before_recursive_formatting():
 def test_nonstring_nested_dictionary_key_remains_invalid():
     with pytest.raises(TypeError, match="keys"):
         create_tx(payload({"data": {1: "invalid"}}), Wallet("01" * 32))
+
+
+def test_v2_client_call_preserves_exact_results_and_numeric_looking_strings():
+    from xian_runtime_types.decimal import ContractingDecimal
+
+    from xian_py import XianAsync, XianClientConfig
+
+    amount = "9007199254740993.123456789012345678901234567891"
+    tag = {"__fixed__": amount}
+    result = {"status": 0, "result": [tag, {"__big_int__": str(2**53)}, amount]}
+    response = {
+        "result": {
+            "response": {"code": 0, "value": base64.b64encode(json.dumps(result).encode()).decode()}
+        }
+    }
+    query = AsyncMock(return_value=response)
+
+    async def exercise():
+        async with XianAsync(
+            "http://node", chain_id="local", config=XianClientConfig(vm_profile="xian_vm_v2")
+        ) as client:
+            assert await client.call("token", "echo", {"values": [Decimal(amount)]}) == [
+                ContractingDecimal(amount),
+                2**53,
+                amount,
+            ]
+            with pytest.raises(TypeError):
+                await client.call("token", "echo", {"nested": [0.1]})
+            # A numeric-looking ABI string must survive without ast.literal_eval.
+            result["result"] = "1.00000000000000001"
+            response["result"]["response"]["value"] = base64.b64encode(
+                json.dumps(result).encode()
+            ).decode()
+            assert await client.call("token", "echo", {}) == result["result"]
+
+    with patch("xian_py.transaction.abci_query_async", query):
+        asyncio.run(exercise())
+    raw = bytes.fromhex(query.await_args_list[0].args[1].removeprefix("/simulate_tx/"))
+    assert json.loads(raw)["kwargs"]["values"] == [tag]
+
+
+def test_v2_operator_telemetry_and_receipt():
+    from xian_runtime_types.decimal import ContractingDecimal
+
+    from xian_py import XianAsync, XianClientConfig
+
+    async def exercise():
+        amount = "9007199254740993.000000000000000000000000000001"
+        async with XianAsync(
+            "http://node", chain_id="local", config=XianClientConfig(vm_profile="xian_vm_v2")
+        ) as client:
+            response = {
+                "info": "json",
+                "value": base64.b64encode(b'{"queue_ratio":0.125}').decode(),
+            }
+            query = AsyncMock(return_value={"result": {"response": response}})
+            with patch("xian_py.transaction.abci_query_async", query):
+                assert (await client.get_bds_status()).raw["queue_ratio"] == 0.125
+            execution = {"result": [{"__fixed__": amount}, {"__big_int__": str(2**53)}, "001.2"]}
+            lookup = {"result": {"tx_result": {"code": 0, "data": execution}}}
+            with patch("xian_py.transaction.get_tx_async", AsyncMock(return_value=lookup)):
+                receipt = await client.get_tx("A")
+            assert receipt.execution["result"] == [ContractingDecimal(amount), 2**53, "001.2"]
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("token", ["-0", "1e-400", "1.0000000000000001", "9007199254740993"])
+def test_v2_rejects_uncanonical_numbers_in_node_simulation(token):
+    raw_result = '{"status":0,"result":[' + token + "]}"
+    response = {"code": 0, "value": base64.b64encode(raw_result.encode()).decode()}
+    query = AsyncMock(return_value={"result": {"response": response}})
+    with patch("xian_py.transaction.abci_query_async", query), pytest.raises(ValueError):
+        asyncio.run(simulate_tx_async("http://node", {}, vm_profile="xian_vm_v2"))

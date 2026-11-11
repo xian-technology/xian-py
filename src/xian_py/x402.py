@@ -7,10 +7,11 @@ import re
 import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any
 
 import aiohttp
+from xian_runtime_types.decimal import canonical_fixed
 
 from xian_py.models import TransactionSubmission
 from xian_py.wallet import Wallet, verify_msg
@@ -59,35 +60,14 @@ def _canonical_decimal_text(
     allow_zero: bool,
     reject_float: bool,
 ) -> str:
-    if isinstance(value, bool):
-        raise TypeError("Amount must not be a boolean.")
-    if reject_float and isinstance(value, float):
-        raise TypeError("Use str, int, or Decimal for exact x402 amounts.")
-
-    if isinstance(value, Decimal):
-        amount = value
-    elif isinstance(value, (int, float)):
-        amount = Decimal(str(value))
-    elif isinstance(value, str):
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("Amount must not be empty.")
-        try:
-            amount = Decimal(normalized)
-        except InvalidOperation as exc:
-            raise ValueError(f"Invalid amount: {value!r}") from exc
-    else:
-        raise TypeError(f"Unsupported amount value: {value!r}")
-
-    if allow_zero:
-        if amount < 0:
-            raise ValueError("Amount must be non-negative.")
-    elif amount <= 0:
-        raise ValueError("Amount must be positive.")
-
-    text = format(amount.normalize(), "f")
-    if "." in text:
-        text = text.rstrip("0").rstrip(".")
+    if isinstance(value, float) and not reject_float:
+        # Legacy permit callers supplied floats. Preserve that API only for permit messages.
+        value = str(value)
+    text = canonical_fixed(value)
+    if text.startswith("-") or (text == "0" and not allow_zero):
+        raise ValueError(
+            "Amount must be non-negative." if allow_zero else "Amount must be positive."
+        )
     return text
 
 

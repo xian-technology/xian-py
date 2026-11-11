@@ -13,6 +13,8 @@ import json
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+from xian_runtime_types.encoding import decode
+
 import xian_py.transaction as tr
 from xian_py._coercion import coerce_int as _coerce_int
 from xian_py.models import LiveEvent
@@ -71,7 +73,7 @@ def _build_cometbft_event_query(contract: str, event: str) -> str:
     return f"tm.event='Tx' AND {event}.contract={_quote_cometbft_query_value(contract)}"
 
 
-def _decode_ws_tx_execution(payload: dict[str, Any]) -> dict[str, Any] | None:
+def _decode_ws_tx_execution(payload: dict[str, Any], vm_profile: str) -> dict[str, Any] | None:
     tx_result = (
         payload.get("result", {})
         .get("data", {})
@@ -86,6 +88,9 @@ def _decode_ws_tx_execution(payload: dict[str, Any]) -> dict[str, Any] | None:
         decoded = tr.decode_str(encoded)
     except Exception:
         return None
+    if vm_profile == "xian_vm_v2":
+        result = decode(decoded, vm_profile=vm_profile)
+        return result if isinstance(result, dict) else None
     try:
         parsed = ast.literal_eval(decoded)
     except Exception:
@@ -101,12 +106,12 @@ def _decode_ws_tx_execution(payload: dict[str, Any]) -> dict[str, Any] | None:
 
 def _ws_tx_metadata(
     payload: dict[str, Any],
+    execution: dict[str, Any],
 ) -> tuple[str | None, int | None, int | None]:
     ws_result = payload.get("result", {})
     value = ws_result.get("data", {}).get("value", {})
     tx_result = value.get("TxResult", {})
     result = tx_result.get("result", {})
-    execution = _decode_ws_tx_execution(payload)
     tx_hash = None
     ws_events = ws_result.get("events")
     if isinstance(ws_events, dict):
@@ -133,11 +138,12 @@ def _extract_matching_live_events(
     *,
     contract: str,
     event: str,
+    vm_profile: str = "xian_vm_v1",
 ) -> list[LiveEvent]:
-    execution = _decode_ws_tx_execution(payload)
+    execution = _decode_ws_tx_execution(payload, vm_profile)
     if not isinstance(execution, dict):
         return []
-    tx_hash, block_height, tx_index = _ws_tx_metadata(payload)
+    tx_hash, block_height, tx_index = _ws_tx_metadata(payload, execution)
     events = execution.get("events")
     if not isinstance(events, list):
         return []

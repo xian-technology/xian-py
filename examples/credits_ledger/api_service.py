@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 
-from xian_py import XianAsync
+from xian_py import XianAsync, XianClientConfig
 
 try:
     from .common import (
@@ -55,6 +55,7 @@ async def startup() -> None:
         node_url(),
         chain_id=chain_id(),
         wallet=optional_wallet(),
+        config=XianClientConfig(vm_profile="xian_vm_v2"),
     )
     await app.state.client.__aenter__()
     app.state.projection = CreditsLedgerProjection(

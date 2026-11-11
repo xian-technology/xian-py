@@ -41,3 +41,32 @@ def test_node_receipt_hash_matches_prepared_and_block_scan(receipt):
     signed = json.loads(bytes.fromhex(submitted.decode()).decode())
     assert prepare_transaction(signed).tx_hash == receipt["tx_hash"]
     assert _hash_block_tx(receipt["block_tx_base64"]) == receipt["tx_hash"]
+
+
+@pytest.mark.parametrize(
+    "vector",
+    json.loads(
+        (
+            Path(__file__).resolve().parents[3]
+            / "xian-contracting/tests/fixtures/transaction_numeric_v2.json"
+        ).read_text()
+    )["cases"],
+    ids=lambda item: item["name"],
+)
+def test_exact_numeric_profile_wire(vector):
+    from decimal import Decimal
+
+    kwargs = vector["payload"]["kwargs"]
+
+    def native(value):
+        if isinstance(value, dict) and "__fixed__" in value:
+            return Decimal(value["__fixed__"])
+        if isinstance(value, dict) and "__big_int__" in value:
+            return int(value["__big_int__"])
+        return value
+
+    typed = {"values": [native(value) for value in kwargs["values"]]}
+    for values in [typed, kwargs]:
+        payload = {**vector["payload"], "kwargs": values}
+        signed = create_tx(payload, Wallet(VECTORS["private_key"]), vm_profile="xian_vm_v2")
+        assert prepare_transaction(signed).json_bytes.decode() == vector["transaction_json"]

@@ -61,3 +61,8 @@ class XianClientConfig:
     retry: RetryPolicy = field(default_factory=RetryPolicy)
     submission: SubmissionConfig = field(default_factory=SubmissionConfig)
     watcher: WatcherConfig = field(default_factory=WatcherConfig)
+    vm_profile: Literal["xian_vm_v1", "xian_vm_v2"] = "xian_vm_v1"
+
+    def __post_init__(self):
+        if self.vm_profile not in ("xian_vm_v1", "xian_vm_v2"):
+            raise ValueError(f"Unsupported VM profile: {self.vm_profile}")
