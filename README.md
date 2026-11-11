@@ -238,7 +238,18 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
 
 `deploy_contract` and `submit_contract` submit cleartext source. Nodes compile
 submitted source and persist canonical IR, so normal deployment does not require
-the `compile` extra. Use `compile` only for offline artifact inspection.
+the `compile` extra. To inspect the same V2 profile offline, install
+`xian-tech-py[compile]` and use the compiler's artifact API.
+
+```python
+from contracting.artifacts import build_contract_artifacts
+
+artifact = build_contract_artifacts(module_name="con_counter", source=source)
+assert artifact["vm_profile"] == "xian_vm_v2"
+```
+
+To reproduce an archived V1 artifact, pass `vm_profile="xian_vm_v1"` to
+`build_contract_artifacts`.
 
 Query BDS-backed history:
 
@@ -450,7 +461,7 @@ for contract arguments. Token helpers also accept decimal text. The SDK checks
 range and precision before signing or simulation. Successful calls return typed
 integers and `ContractingDecimal` values.
 
-For historical V1 chains, pass `config=XianClientConfig(vm_profile="xian_vm_v1")`
+For archived V1 test configurations, pass `config=XianClientConfig(vm_profile="xian_vm_v1")`
 to `Xian` or `XianAsync`. Standalone helpers such as `create_tx`,
 `simulate_tx_async` and `get_tx_async` accept `vm_profile="xian_vm_v1"`.
 

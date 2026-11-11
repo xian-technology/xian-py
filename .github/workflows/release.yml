@@ -92,7 +92,7 @@ jobs:
 
       - name: Run tests with coverage
         working-directory: xian-py
-        run: uv run pytest --cov=xian_py --cov-report=term-missing --cov-report=xml
+        run: uv run --frozen --extra compile pytest --cov=xian_py --cov-report=term-missing --cov-report=xml
 
       - name: Build publishable distributions without local sources
         working-directory: xian-py

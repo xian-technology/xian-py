@@ -1,3 +1,5 @@
+import pytest
+
 from xian_py import (
     BdsStatus,
     DeveloperRewardSummary,
@@ -29,6 +31,19 @@ from xian_py import (
     run_sync,
     to_contract_time,
 )
+
+
+def test_optional_compiler_extra_defaults_to_exact_v2_artifacts() -> None:
+    pytest.importorskip("contracting")
+    import xian_compiler_core
+    from contracting.artifacts import build_contract_artifacts
+
+    amount = "9007199254740993.000000000000000000000000000001"
+    source = f"@export\ndef amount():\n    return {amount}\n"
+    artifact = build_contract_artifacts(module_name="con_amount", source=source)
+    assert artifact["vm_profile"] == "xian_vm_v2"
+    assert amount in artifact["vm_ir_json"]
+    assert xian_compiler_core.compile_contract_artifact("con_amount", source) == artifact
 
 
 def test_public_exports_are_available() -> None:

@@ -24,7 +24,7 @@ def test_shared_transaction_wire(vector, typed):
     payload = dict(vector["payload"])
     # Raw JSON is a public SDK input too; converting every fixture hides that boundary.
     if typed:
-        payload["kwargs"] = convert_dict(payload["kwargs"])
+        payload["kwargs"] = convert_dict(payload["kwargs"], vm_profile="xian_vm_v1")
     tx = create_tx(payload, wallet, vm_profile="xian_vm_v1")
     assert canonical_json(tx["payload"]) == vector["canonical_payload"]
     assert tx["metadata"]["signature"] == vector["signature"]

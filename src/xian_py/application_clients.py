@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 from xian_runtime_types.decimal import ContractingDecimal
@@ -346,7 +347,7 @@ class AsyncTokenClient(AsyncContractClient):
     async def transfer(
         self,
         to_address: str,
-        amount: int | float | str | ContractingDecimal,
+        amount: int | str | Decimal | ContractingDecimal,
         *,
         chi: int | None = None,
         mode: str | None = None,
@@ -373,7 +374,7 @@ class AsyncTokenClient(AsyncContractClient):
         self,
         spender: str,
         *,
-        amount: int | float | str | ContractingDecimal = 999999999999,
+        amount: int | str | Decimal | ContractingDecimal = 999999999999,
         chi: int | None = None,
         mode: str | None = None,
         wait_for_tx: bool | None = None,
@@ -425,7 +426,7 @@ class TokenClient(ContractClient):
     def transfer(
         self,
         to_address: str,
-        amount: int | float | str | ContractingDecimal,
+        amount: int | str | Decimal | ContractingDecimal,
         *,
         chi: int | None = None,
         mode: str | None = None,
@@ -452,7 +453,7 @@ class TokenClient(ContractClient):
         self,
         spender: str,
         *,
-        amount: int | float | str | ContractingDecimal = 999999999999,
+        amount: int | str | Decimal | ContractingDecimal = 999999999999,
         chi: int | None = None,
         mode: str | None = None,
         wait_for_tx: bool | None = None,

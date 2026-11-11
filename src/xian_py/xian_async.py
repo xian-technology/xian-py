@@ -950,7 +950,7 @@ class XianAsync:
 
     async def send(
         self,
-        amount: int | float | str | Decimal | ContractingDecimal,
+        amount: int | str | Decimal | ContractingDecimal,
         to_address: str,
         token: str = "currency",
         chi: int | None = None,
@@ -1070,7 +1070,7 @@ class XianAsync:
         self,
         contract: str,
         token: str = "currency",
-        amount: int | float | str | Decimal | ContractingDecimal = 999999999999,
+        amount: int | str | Decimal | ContractingDecimal = 999999999999,
         chi: int | None = None,
         mode: Literal["async", "checktx", "commit"] | None = None,
         wait_for_tx: bool | None = None,

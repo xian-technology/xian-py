@@ -80,7 +80,7 @@ def test_typed_and_raw_inputs_produce_same_signature_and_round_trip(value, wire)
     typed = create_tx(payload({"data": value}), wallet, vm_profile="xian_vm_v1")
     raw = create_tx(payload({"data": wire}), wallet, vm_profile="xian_vm_v1")
     assert typed == raw
-    restored = convert_dict(raw["payload"]["kwargs"])["data"]
+    restored = convert_dict(raw["payload"]["kwargs"], vm_profile="xian_vm_v1")["data"]
     assert restored == value
     if isinstance(value, ContractingSet):
         assert next(iter(restored)).as_tuple() == Decimal("1.2300").as_tuple()
