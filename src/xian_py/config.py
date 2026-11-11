@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Literal
 
+DEFAULT_VM_PROFILE: Literal["xian_vm_v2"] = "xian_vm_v2"
+
 
 @dataclass(frozen=True)
 class TransportConfig:
@@ -61,7 +63,7 @@ class XianClientConfig:
     retry: RetryPolicy = field(default_factory=RetryPolicy)
     submission: SubmissionConfig = field(default_factory=SubmissionConfig)
     watcher: WatcherConfig = field(default_factory=WatcherConfig)
-    vm_profile: Literal["xian_vm_v1", "xian_vm_v2"] = "xian_vm_v1"
+    vm_profile: Literal["xian_vm_v1", "xian_vm_v2"] = DEFAULT_VM_PROFILE
 
     def __post_init__(self):
         if self.vm_profile not in ("xian_vm_v1", "xian_vm_v2"):

@@ -8,7 +8,6 @@ from xian_py import (
     EventProjectorError,
     EventSource,
     XianAsync,
-    XianClientConfig,
     merged_event_payload,
 )
 
@@ -150,7 +149,6 @@ async def main() -> None:
         async with XianAsync(
             node_url(),
             chain_id=chain_id(),
-            config=XianClientConfig(vm_profile="xian_vm_v2"),
             wallet=optional_wallet(),
         ) as client:
             await sync_projection(client, projection)

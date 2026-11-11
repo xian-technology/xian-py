@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from xian_py import EventProjector, EventProjectorError, EventSource, XianAsync, XianClientConfig
+from xian_py import EventProjector, EventProjectorError, EventSource, XianAsync
 
 try:
     from .common import (
@@ -90,7 +90,6 @@ async def main() -> None:
             node_url(),
             chain_id=chain_id(),
             wallet=optional_wallet(),
-            config=XianClientConfig(vm_profile="xian_vm_v2"),
         ) as client:
             await sync_projection(client, projection)
     finally:

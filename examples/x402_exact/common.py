@@ -91,7 +91,6 @@ def build_requirement(
 
 def build_config() -> XianClientConfig:
     return XianClientConfig(
-        vm_profile="xian_vm_v2",
         transport=TransportConfig(total_timeout_seconds=20.0),
         retry=RetryPolicy(max_attempts=3, initial_delay_seconds=0.25),
         submission=SubmissionConfig(wait_for_tx=True),

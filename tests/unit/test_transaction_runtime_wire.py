@@ -52,7 +52,7 @@ def test_raw_tag_kwargs_preserve_signed_bytes_and_input(value):
     original = payload({"data": [[deepcopy(value)]]})
     before = deepcopy(original)
     wallet = Wallet("01" * 32)
-    tx = create_tx(original, wallet)
+    tx = create_tx(original, wallet, vm_profile="xian_vm_v1")
     expected_payload = json.dumps(before, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     assert canonical_json(tx["payload"]) == expected_payload
     assert wallet.verify_msg(expected_payload, tx["metadata"]["signature"])
@@ -60,7 +60,7 @@ def test_raw_tag_kwargs_preserve_signed_bytes_and_input(value):
     assert prepared.json_bytes == canonical_json(tx).encode()
     assert prepared.submitted_bytes == prepared.json_bytes.hex().encode("ascii")
     assert original == before
-    assert normalize_transaction_payload(tx["payload"]) == tx["payload"]
+    assert normalize_transaction_payload(tx["payload"], vm_profile="xian_vm_v1") == tx["payload"]
 
 
 @pytest.mark.parametrize(
@@ -77,8 +77,8 @@ def test_raw_tag_kwargs_preserve_signed_bytes_and_input(value):
 )
 def test_typed_and_raw_inputs_produce_same_signature_and_round_trip(value, wire):
     wallet = Wallet("01" * 32)
-    typed = create_tx(payload({"data": value}), wallet)
-    raw = create_tx(payload({"data": wire}), wallet)
+    typed = create_tx(payload({"data": value}), wallet, vm_profile="xian_vm_v1")
+    raw = create_tx(payload({"data": wire}), wallet, vm_profile="xian_vm_v1")
     assert typed == raw
     restored = convert_dict(raw["payload"]["kwargs"])["data"]
     assert restored == value
@@ -96,7 +96,9 @@ def test_simulation_sends_raw_and_typed_kwargs_without_loss():
     }
     query = AsyncMock(return_value=response)
     with patch("xian_py.transaction.abci_query_async", query):
-        assert asyncio.run(simulate_tx_async("http://node", original)) == {"chi_used": 1}
+        assert asyncio.run(simulate_tx_async("http://node", original, vm_profile="xian_vm_v1")) == {
+            "chi_used": 1
+        }
     path = query.await_args.args[1]
     actual_bytes = bytes.fromhex(path.removeprefix("/simulate_tx/"))
     expected = deepcopy(before)
@@ -150,7 +152,7 @@ def test_nonstring_nested_dictionary_key_remains_invalid():
 def test_v2_client_call_preserves_exact_results_and_numeric_looking_strings():
     from xian_runtime_types.decimal import ContractingDecimal
 
-    from xian_py import XianAsync, XianClientConfig
+    from xian_py import XianAsync
 
     amount = "9007199254740993.123456789012345678901234567891"
     tag = {"__fixed__": amount}
@@ -163,9 +165,7 @@ def test_v2_client_call_preserves_exact_results_and_numeric_looking_strings():
     query = AsyncMock(return_value=response)
 
     async def exercise():
-        async with XianAsync(
-            "http://node", chain_id="local", config=XianClientConfig(vm_profile="xian_vm_v2")
-        ) as client:
+        async with XianAsync("http://node", chain_id="local") as client:
             assert await client.call("token", "echo", {"values": [Decimal(amount)]}) == [
                 ContractingDecimal(amount),
                 2**53,
@@ -189,13 +189,11 @@ def test_v2_client_call_preserves_exact_results_and_numeric_looking_strings():
 def test_v2_operator_telemetry_and_receipt():
     from xian_runtime_types.decimal import ContractingDecimal
 
-    from xian_py import XianAsync, XianClientConfig
+    from xian_py import XianAsync
 
     async def exercise():
         amount = "9007199254740993.000000000000000000000000000001"
-        async with XianAsync(
-            "http://node", chain_id="local", config=XianClientConfig(vm_profile="xian_vm_v2")
-        ) as client:
+        async with XianAsync("http://node", chain_id="local") as client:
             response = {
                 "info": "json",
                 "value": base64.b64encode(b'{"queue_ratio":0.125}').decode(),

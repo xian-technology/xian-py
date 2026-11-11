@@ -276,7 +276,7 @@ def test_create_tx_normalizes_runtime_kwargs_before_signing() -> None:
 def test_create_tx_rejects_float_kwargs() -> None:
     wallet = Wallet()
 
-    with pytest.raises(XianException, match="Invalid payload provided"):
+    with pytest.raises(TypeError, match="binary float"):
         create_tx(
             {
                 "sender": wallet.public_key,

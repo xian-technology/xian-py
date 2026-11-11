@@ -7,7 +7,7 @@ from decimal import Decimal, localcontext
 
 from xian_runtime_types.decimal import canonical_fixed
 
-from xian_py import Xian, XianClientConfig
+from xian_py import Xian
 
 try:
     from .common import (
@@ -49,7 +49,6 @@ def main() -> None:
         node_url(),
         chain_id=chain_id(),
         wallet=wallet,
-        config=XianClientConfig(vm_profile="xian_vm_v2"),
     ) as client:
         status = client.get_node_status()
         print(f"Connected to {status.network} at height {status.latest_block_height}")

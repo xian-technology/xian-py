@@ -38,11 +38,11 @@ Read state and submit a transaction with the synchronous client:
 ```python
 import os
 
-from xian_py import Wallet, Xian, XianClientConfig
+from xian_py import Wallet, Xian
 
 wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
 
-with Xian("http://127.0.0.1:26657", wallet=wallet, config=XianClientConfig(vm_profile="xian_vm_v2")) as client:
+with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
     balance = client.token().balance_of(wallet.public_key)
     submission = client.token().transfer("bob", 5, mode="checktx")
     print(balance, submission.accepted)
@@ -53,11 +53,11 @@ Watch indexed events with the async client:
 ```python
 import asyncio
 
-from xian_py import XianAsync, XianClientConfig
+from xian_py import XianAsync
 
 
 async def main() -> None:
-    async with XianAsync("http://127.0.0.1:26657", config=XianClientConfig(vm_profile="xian_vm_v2")) as client:
+    async with XianAsync("http://127.0.0.1:26657") as client:
         async for event in client.token().transfers().watch(after_id=0):
             print(event.id, event.data)
 
@@ -71,11 +71,11 @@ events:
 ```python
 import asyncio
 
-from xian_py import XianAsync, XianClientConfig
+from xian_py import XianAsync
 
 
 async def main() -> None:
-    async with XianAsync("http://127.0.0.1:26657", config=XianClientConfig(vm_profile="xian_vm_v2")) as client:
+    async with XianAsync("http://127.0.0.1:26657") as client:
         async for event in client.token().transfers().watch_live():
             print(event.tx_hash, event.data)
 
@@ -145,9 +145,9 @@ paths are not accepted by `HDWallet.get_wallet`; use `account_index` instead.
 Inspect node and indexer health:
 
 ```python
-from xian_py import Xian, XianClientConfig
+from xian_py import Xian
 
-with Xian("http://127.0.0.1:26657", config=XianClientConfig(vm_profile="xian_vm_v2")) as client:
+with Xian("http://127.0.0.1:26657") as client:
     status = client.get_node_status()
     bds = client.get_bds_status()
     print(status.network, status.latest_block_height, status.catching_up)
@@ -157,11 +157,11 @@ with Xian("http://127.0.0.1:26657", config=XianClientConfig(vm_profile="xian_vm_
 Read state, simulate a call, and retrieve contract source:
 
 ```python
-from xian_py import Xian, XianClientConfig
+from xian_py import Xian
 
 address = "bob"
 
-with Xian("http://127.0.0.1:26657", config=XianClientConfig(vm_profile="xian_vm_v2")) as client:
+with Xian("http://127.0.0.1:26657") as client:
     balance = client.token().balance_of(address)
     raw_balance = client.state_key("currency", "balances", address).get()
     simulated = client.contract("currency").simulate(
@@ -178,11 +178,11 @@ Estimate chi, submit a transaction, and wait for finality:
 ```python
 import os
 
-from xian_py import Wallet, Xian, XianClientConfig
+from xian_py import Wallet, Xian
 
 wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
 
-with Xian("http://127.0.0.1:26657", wallet=wallet, config=XianClientConfig(vm_profile="xian_vm_v2")) as client:
+with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
     estimate = client.estimate_chi(
         "currency",
         "transfer",
@@ -205,7 +205,7 @@ Deploy a contract from source:
 ```python
 import os
 
-from xian_py import Wallet, Xian, XianClientConfig
+from xian_py import Wallet, Xian
 
 wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
 source = """
@@ -221,7 +221,7 @@ def increment():
     return counter.get()
 """
 
-with Xian("http://127.0.0.1:26657", wallet=wallet, config=XianClientConfig(vm_profile="xian_vm_v2")) as client:
+with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
     deployed = client.deploy_contract(
         "con_counter",
         source,
@@ -243,11 +243,11 @@ the `compile` extra. Use `compile` only for offline artifact inspection.
 Query BDS-backed history:
 
 ```python
-from xian_py import Xian, XianClientConfig
+from xian_py import Xian
 
 address = "bob"
 
-with Xian("http://127.0.0.1:26657", config=XianClientConfig(vm_profile="xian_vm_v2")) as client:
+with Xian("http://127.0.0.1:26657") as client:
     recent_blocks = client.list_blocks(limit=5)
     token_contracts = client.get_token_contracts(limit=20)
     token_balances = client.get_token_balances(address, include_zero=False)
@@ -270,12 +270,12 @@ Use the async client in a service or worker:
 import asyncio
 import os
 
-from xian_py import Wallet, XianAsync, XianClientConfig
+from xian_py import Wallet, XianAsync
 
 
 async def main() -> None:
     wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
-    async with XianAsync("http://127.0.0.1:26657", wallet=wallet, config=XianClientConfig(vm_profile="xian_vm_v2")) as client:
+    async with XianAsync("http://127.0.0.1:26657", wallet=wallet) as client:
         chain_id = await client.get_chain_id()
         balance = await client.token().balance_of(wallet.public_key)
         submission = await client.token().transfer(
@@ -301,7 +301,6 @@ from xian_py import (
     EventSource,
     SQLiteProjectionState,
     XianAsync,
-    XianClientConfig,
     merged_event_payload,
 )
 
@@ -328,7 +327,7 @@ async def main() -> None:
         connection.commit()
         return True
 
-    async with XianAsync("http://127.0.0.1:26657", config=XianClientConfig(vm_profile="xian_vm_v2")) as client:
+    async with XianAsync("http://127.0.0.1:26657") as client:
         projector = EventProjector(
             client=client,
             event_sources=[source],
@@ -365,7 +364,6 @@ def log_retry(event: RetryEvent) -> None:
 
 
 config = XianClientConfig(
-    vm_profile="xian_vm_v2",
     retry=RetryPolicy(max_attempts=5, on_retry=log_retry),
     submission=SubmissionConfig(mode="checktx", wait_for_tx=True),
     watcher=WatcherConfig(mode="auto", batch_limit=250),
@@ -446,14 +444,15 @@ node for cursorable indexed catch-up and canonical event IDs. Use
 `watch_live_events()` or `.watch_live()` when you explicitly want
 websocket-only, non-resumable delivery.
 
-For a chain configured for `xian_vm_v2`, pass
-`config=XianClientConfig(vm_profile="xian_vm_v2")` to `Xian` or `XianAsync`.
-Use Python integers and `Decimal("0.000000000000000000000000000001")`
-for contract arguments. Token helpers also accept decimal text. Offline
-`create_tx` accepts the same `vm_profile` keyword. The SDK checks decimal
-range and precision before signing or simulation. Successful calls return
-typed integers and `ContractingDecimal` values. The default client profile
-is `xian_vm_v1`.
+The Python SDK defaults to `xian_vm_v2` for clients, signing, simulation and
+receipt decoding. Use Python integers and `Decimal("0.000000000000000000000000000001")`
+for contract arguments. Token helpers also accept decimal text. The SDK checks
+range and precision before signing or simulation. Successful calls return typed
+integers and `ContractingDecimal` values.
+
+For historical V1 chains, pass `config=XianClientConfig(vm_profile="xian_vm_v1")`
+to `Xian` or `XianAsync`. Standalone helpers such as `create_tx`,
+`simulate_tx_async` and `get_tx_async` accept `vm_profile="xian_vm_v1"`.
 
 ## Core API Layers
 

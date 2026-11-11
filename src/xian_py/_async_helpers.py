@@ -17,6 +17,7 @@ from xian_runtime_types.encoding import decode
 
 import xian_py.transaction as tr
 from xian_py._coercion import coerce_int as _coerce_int
+from xian_py.config import DEFAULT_VM_PROFILE
 from xian_py.models import LiveEvent
 from xian_py.wallet import Wallet
 
@@ -138,7 +139,7 @@ def _extract_matching_live_events(
     *,
     contract: str,
     event: str,
-    vm_profile: str = "xian_vm_v1",
+    vm_profile: str = DEFAULT_VM_PROFILE,
 ) -> list[LiveEvent]:
     execution = _decode_ws_tx_execution(payload, vm_profile)
     if not isinstance(execution, dict):

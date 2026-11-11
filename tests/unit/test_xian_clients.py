@@ -1424,9 +1424,14 @@ def test_transaction_receipt_exposes_chi_used_from_raw_fallbacks() -> None:
     )
 
 
-def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
+def test_v1_xian_async_get_state_decodes_supported_value_shapes() -> None:
     wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
+    client = XianAsync(
+        "http://node",
+        chain_id="xian-local-1",
+        wallet=wallet,
+        config=XianClientConfig(vm_profile="xian_vm_v1"),
+    )
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse({"result": {"response": {"value": "AA=="}}}),
@@ -1486,8 +1491,13 @@ def test_xian_async_get_state_decodes_supported_value_shapes() -> None:
     assert asyncio.run(client.get_state("currency", "balances", "alice")) is True
 
 
-def test_xian_async_call_decodes_structured_return_value() -> None:
-    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
+def test_v1_xian_async_call_decodes_structured_return_value() -> None:
+    client = XianAsync(
+        "http://node",
+        chain_id="xian-local-1",
+        wallet=Wallet(),
+        config=XianClientConfig(vm_profile="xian_vm_v1"),
+    )
 
     with patch.object(
         client,
@@ -1504,8 +1514,13 @@ def test_xian_async_call_decodes_structured_return_value() -> None:
     assert result == {"owner": "alice", "count": 2}
 
 
-def test_xian_async_call_decodes_structured_return_value_with_datetime_strings() -> None:
-    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
+def test_v1_xian_async_call_decodes_structured_return_value_with_datetime_strings() -> None:
+    client = XianAsync(
+        "http://node",
+        chain_id="xian-local-1",
+        wallet=Wallet(),
+        config=XianClientConfig(vm_profile="xian_vm_v1"),
+    )
 
     with patch.object(
         client,
@@ -3842,7 +3857,7 @@ def test_sync_contract_and_event_helpers_delegate_to_root_client() -> None:
 
 
 @pytest.mark.parametrize("nested", [False, True])
-def test_get_state_preserves_versioned_set_member_types(nested):
+def test_v1_get_state_preserves_versioned_set_member_types(nested):
     from decimal import Decimal
 
     from xian_runtime_types.collections import ContractingFrozenSet, ContractingSet
@@ -3859,7 +3874,12 @@ def test_get_state_preserves_versioned_set_member_types(nested):
         },
     }
     payload = {"stored": wire} if nested else wire
-    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
+    client = XianAsync(
+        "http://node",
+        chain_id="xian-local-1",
+        wallet=Wallet(),
+        config=XianClientConfig(vm_profile="xian_vm_v1"),
+    )
     client._session = _FakeSession(
         post_responses=[
             _FakeResponse(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from xian_py import Xian, XianClientConfig
+from xian_py import Xian
 
 try:
     from .common import (
@@ -36,7 +36,6 @@ def main() -> None:
         node_url(),
         chain_id=chain_id(),
         wallet=wallet,
-        config=XianClientConfig(vm_profile="xian_vm_v2"),
     ) as client:
         status = client.get_node_status()
         print(

@@ -17,6 +17,7 @@ import aiohttp
 from xian_runtime_types.encoding import decode, encode_wire, loads_wire_json
 from xian_runtime_types.numeric_wire import SAFE_INTEGER
 
+from xian_py.config import DEFAULT_VM_PROFILE
 from xian_py.exception import (
     AbciError,
     RpcError,
@@ -86,7 +87,7 @@ def _load_contract_json(text: str, vm_profile: str):
     return loads_wire_json(text) if vm_profile == "xian_vm_v2" else json.loads(text)
 
 
-def decode_dict(encoded_dict: str, *, vm_profile: str = "xian_vm_v1") -> dict:
+def decode_dict(encoded_dict: str, *, vm_profile: str = DEFAULT_VM_PROFILE) -> dict:
     decoded_data = decode_str(encoded_dict)
     decoded_tx = bytes.fromhex(decoded_data).decode("utf-8")
     return _load_contract_json(decoded_tx, vm_profile)
@@ -194,7 +195,7 @@ async def get_tx_async(
     tx_hash: str,
     decode: bool = True,
     *,
-    vm_profile: str = "xian_vm_v1",
+    vm_profile: str = DEFAULT_VM_PROFILE,
     session: aiohttp.ClientSession | None = None,
 ) -> dict:
     """
@@ -234,7 +235,7 @@ def canonical_json(value: dict) -> str:
     )
 
 
-def normalize_transaction_payload(payload: dict, *, vm_profile: str = "xian_vm_v1") -> dict:
+def normalize_transaction_payload(payload: dict, *, vm_profile: str = DEFAULT_VM_PROFILE) -> dict:
     payload = dict(payload)
     if "kwargs" in payload:
         # Bound traversal before recursive formatting; wire tags are valid SDK inputs.
@@ -247,7 +248,7 @@ async def simulate_tx_async(
     payload: dict,
     *,
     session: aiohttp.ClientSession | None = None,
-    vm_profile: str = "xian_vm_v1",
+    vm_profile: str = DEFAULT_VM_PROFILE,
 ) -> dict:
     """Estimate the amount of chi a tx will cost"""
     encoded = encode_wire(payload, vm_profile=vm_profile).encode().hex()
@@ -312,7 +313,7 @@ async def get_block_results_async(
     )
 
 
-def create_tx(payload: dict, wallet: Wallet, *, vm_profile: str = "xian_vm_v1") -> dict:
+def create_tx(payload: dict, wallet: Wallet, *, vm_profile: str = DEFAULT_VM_PROFILE) -> dict:
     """
     Create offline transaction that can be broadcast
     :param payload: Transaction payload with following keys:
@@ -461,7 +462,7 @@ async def _lookup_tx_in_recent_blocks_async(
     *,
     start_height: int,
     end_height: int,
-    vm_profile: str = "xian_vm_v1",
+    vm_profile: str = DEFAULT_VM_PROFILE,
     session: aiohttp.ClientSession | None = None,
 ) -> dict[str, Any] | None:
     target_hash = tx_hash.upper()
@@ -512,7 +513,7 @@ async def wait_for_tx_async(
     node_url: str,
     tx_hash: str,
     *,
-    vm_profile: str = "xian_vm_v1",
+    vm_profile: str = DEFAULT_VM_PROFILE,
     timeout_seconds: float = 30.0,
     poll_interval_seconds: float = 0.25,
     session: aiohttp.ClientSession | None = None,

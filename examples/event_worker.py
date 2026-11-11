@@ -42,7 +42,6 @@ def serialize_event(event: Any) -> dict[str, Any]:
 
 async def main() -> None:
     config = XianClientConfig(
-        vm_profile="xian_vm_v2",
         retry=RetryPolicy(max_attempts=3, initial_delay_seconds=0.25),
         watcher=WatcherConfig(poll_interval_seconds=1.0, batch_limit=100),
     )

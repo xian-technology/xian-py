@@ -1982,7 +1982,7 @@ class XianAsync:
         if type_of_data == "decimal":
             return ContractingDecimal(data)
         if type_of_data in {"dict", "list"}:
-            return decode(data)
+            return decode(data, vm_profile="xian_vm_v1")
         if type_of_data == "str":
             return data
 
@@ -1994,6 +1994,6 @@ class XianAsync:
             return None
 
         try:
-            return decode(data)
+            return decode(data, vm_profile="xian_vm_v1")
         except Exception:
             return data
