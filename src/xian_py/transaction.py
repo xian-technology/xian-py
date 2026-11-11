@@ -15,6 +15,7 @@ from typing import Any
 
 import aiohttp
 from xian_runtime_types.encoding import decode, encode_wire, loads_wire_json
+from xian_runtime_types.numeric_wire import SAFE_INTEGER
 
 from xian_py.exception import (
     AbciError,
@@ -328,6 +329,10 @@ def create_tx(payload: dict, wallet: Wallet, *, vm_profile: str = "xian_vm_v1") 
     payload = normalize_transaction_payload(payload, vm_profile=vm_profile)
     if not check_format_of_payload(payload):
         raise TransactionError("Invalid payload provided")
+    if vm_profile == "xian_vm_v2":
+        for field in ("nonce", "chi_supplied"):
+            if payload[field] > SAFE_INTEGER:
+                raise TransactionError(f"{field} exceeds the maximum safe JSON integer")
     canonical_payload = canonical_json(payload)
 
     tx = {

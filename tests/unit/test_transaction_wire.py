@@ -1,10 +1,12 @@
 import json
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from xian_runtime_types.encoding import convert_dict
 
 from xian_py import Wallet
+from xian_py.exception import TransactionError
 from xian_py.transaction import canonical_json, create_tx, prepare_transaction
 
 VECTORS = json.loads(
@@ -70,3 +72,21 @@ def test_exact_numeric_profile_wire(vector):
         payload = {**vector["payload"], "kwargs": values}
         signed = create_tx(payload, Wallet(VECTORS["private_key"]), vm_profile="xian_vm_v2")
         assert prepare_transaction(signed).json_bytes.decode() == vector["transaction_json"]
+
+
+@pytest.mark.parametrize("field", ["nonce", "chi_supplied"])
+def test_v2_envelope_uses_bare_safe_integers_before_calling_signer(field):
+    wallet = Wallet(VECTORS["private_key"])
+    unsigned = {**VECTORS["cases"][0]["payload"], "kwargs": {"amount": 2**53}}
+    tx = create_tx({**unsigned, field: 2**53 - 1}, wallet, vm_profile="xian_vm_v2")
+    assert type(tx["payload"][field]) is int
+    assert tx["payload"][field] == 2**53 - 1
+    assert tx["payload"]["kwargs"]["amount"] == {"__big_int__": str(2**53)}
+
+    signer = Mock(spec=wallet)
+    for invalid in (2**53, {"__big_int__": str(2**53)}, True, -1):
+        with pytest.raises(TransactionError):
+            create_tx({**unsigned, field: invalid}, signer, vm_profile="xian_vm_v2")
+    signer.sign_msg.assert_not_called()
+    legacy = create_tx({**unsigned, field: 2**53}, wallet, vm_profile="xian_vm_v1")
+    assert legacy["payload"][field] == 2**53
