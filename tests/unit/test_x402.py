@@ -343,8 +343,9 @@ def test_facilitator_settlement_forwards_chi_defaults() -> None:
     assert result.transaction == "tx-x402"
     function, kwargs = client.fake_contract.calls[0]
     assert function == "settle"
-    assert kwargs["chi_margin"] == 0.0
-    assert kwargs["min_chi_headroom"] == 0
+    # None defers to the client's SubmissionConfig headroom.
+    assert kwargs["chi_margin"] is None
+    assert kwargs["min_chi_headroom"] is None
     assert kwargs["settlement_contract"] == "con_x402_settlement"
     assert kwargs["permit_nonce"] == payload.permit_nonce
 
@@ -376,3 +377,126 @@ def test_facilitator_rejects_mismatched_payment_before_submission() -> None:
     assert result.success is False
     assert result.error == "Payment payload does not match requirements."
     assert client.fake_contract.calls == []
+
+
+def _serve_payment_required(accepts: list[dict]) -> tuple[list[XianX402PaymentPayload], object]:
+    """Run x402_request against a loopback server offering ``accepts``."""
+    from aiohttp import web
+
+    from xian_py import PAYMENT_SIGNATURE_HEADER
+
+    signed: list[XianX402PaymentPayload] = []
+    payment_required = {"x402Version": 2, "accepts": accepts, "extensions": {}}
+
+    async def handler(request: web.Request) -> web.Response:
+        header = request.headers.get(PAYMENT_SIGNATURE_HEADER)
+        if header:
+            signed.append(XianX402PaymentPayload.from_header(header))
+            return web.Response(text="paid")
+        return web.Response(
+            status=402,
+            headers={"PAYMENT-REQUIRED": encode_json_header(payment_required)},
+        )
+
+    async def call(**kwargs):
+        from xian_py import x402_request
+
+        app = web.Application()
+        app.router.add_get("/", handler)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        await web.TCPSite(runner, "127.0.0.1", 0).start()
+        try:
+            port = runner.addresses[0][1]
+            return await x402_request("GET", f"http://127.0.0.1:{port}/", **kwargs)
+        finally:
+            await runner.cleanup()
+
+    return signed, call
+
+
+def _accepts(**overrides) -> dict:
+    item = _requirement().to_accepts_item()
+    item.update(overrides)
+    return item
+
+
+_EXPECTED = {
+    "chain_id": "xian-local-1",
+    "asset": "currency",
+    "settlement_contract": "con_x402_settlement",
+    "max_amount": "0.001",
+}
+
+
+def test_x402_request_requires_explicit_payment_expectations() -> None:
+    from xian_py import x402_request
+
+    for missing in _EXPECTED:
+        kwargs = {key: value for key, value in _EXPECTED.items() if key != missing}
+        with pytest.raises(TypeError, match=missing):
+            asyncio.run(x402_request("GET", "http://127.0.0.1:9/", wallet=Wallet(), **kwargs))
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"network": "xian:other-chain"},
+        {"asset": "con_valuable_token"},
+        {"settlementContract": "con_attacker_controlled"},
+        {"maxAmountRequired": "0.0011", "amount": "0.0011"},
+        {"payTo": "attacker"},
+    ],
+)
+def test_x402_request_refuses_to_sign_unexpected_terms(override: dict) -> None:
+    signed, call = _serve_payment_required([_accepts(**override)])
+
+    with pytest.raises(ValueError, match="No x402 payment option matches"):
+        asyncio.run(call(wallet=Wallet(), pay_to="seller", **_EXPECTED))
+
+    assert signed == []
+
+
+def test_x402_request_signs_the_first_option_matching_expectations() -> None:
+    signed, call = _serve_payment_required(
+        [
+            _accepts(settlementContract="con_attacker_controlled"),
+            _accepts(),
+        ]
+    )
+
+    response = asyncio.run(call(wallet=Wallet(), **_EXPECTED))
+
+    assert response.status == 200
+    assert [(p.network, p.asset, p.amount, p.settlement_contract) for p in signed] == [
+        ("xian:xian-local-1", "currency", "0.001", "con_x402_settlement")
+    ]
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"chain_id": ""},
+        {"chain_id": 5},
+        {"asset": ""},
+        {"settlement_contract": None},
+        {"pay_to": ""},
+        {"pay_to": 5},
+        {"max_amount": 0},
+        {"max_amount": 0.5},
+    ],
+)
+def test_x402_payment_expectation_rejects_unusable_terms(override: dict) -> None:
+    from xian_py import XianX402PaymentExpectation
+
+    with pytest.raises((TypeError, ValueError)):
+        XianX402PaymentExpectation(**{**_EXPECTED, **override})
+
+
+def test_x402_payment_expectation_rejects_payloads_without_options() -> None:
+    from xian_py import XianX402PaymentExpectation
+
+    expectation = XianX402PaymentExpectation(**_EXPECTED)
+    for payload in ({}, {"accepts": "x"}, {"accepts": [None, {"network": "bogus"}]}):
+        with pytest.raises(ValueError, match="No x402 payment option matches"):
+            expectation.select(payload)

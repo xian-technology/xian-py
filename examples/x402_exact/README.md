@@ -41,6 +41,14 @@ export XIAN_X402_RESOURCE_URL=http://127.0.0.1:8000/data
 uv run python -m examples.x402_exact.buyer_client
 ```
 
+`x402_request` pays a `402 Payment Required` challenge only within terms the
+buyer states up front: `chain_id`, `asset` (token contract),
+`settlement_contract` (the contract the signed permit lets spend the token)
+and `max_amount` are required, and `pay_to` can pin the recipient. The server
+chooses which options it offers; the client signs the first option inside those
+terms and raises `ValueError` without signing anything if none matches. The
+same check is available as `XianX402PaymentExpectation` for custom clients.
+
 The same primitives are also exposed by
 `examples.x402_exact.facilitator_service` as `/verify` and `/settle`
 endpoints for services that want a separate facilitator process.

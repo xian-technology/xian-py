@@ -2,8 +2,8 @@ import ast
 import asyncio
 import inspect
 import json
-import math
 import re
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal, Optional
@@ -31,6 +31,7 @@ from xian_py.config import (
     RetryEvent,
     SubmissionConfig,
     XianClientConfig,
+    suggest_chi_supplied,
 )
 from xian_py.exception import (
     AbciError,
@@ -60,6 +61,7 @@ from xian_py.models import (
 from xian_py.nonce import NonceState, Reservation
 from xian_py.wallet import Wallet
 
+_DUPLICATE_TX_RE = re.compile(r"tx already exists in (?:cache|mempool)", re.IGNORECASE)
 _SIMULATION_DATETIME_RE = re.compile(
     r"(?<=:\s)(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)(?=[,}])"
 )
@@ -426,14 +428,20 @@ class XianAsync:
         return False
 
     @staticmethod
-    def _is_duplicate_tx_log(message: object) -> bool:
-        if not isinstance(message, str):
-            return False
-        normalized = message.lower()
-        return (
-            "tx already exists in cache" in normalized
-            or "tx already exists in mempool" in normalized
-        )
+    def _duplicate_tx_log(data: dict[str, Any]) -> str | None:
+        """Return the node's duplicate-transaction message from any broadcast mode."""
+        error = data.get("error") if isinstance(data.get("error"), dict) else {}
+        response = data.get("result") if isinstance(data.get("result"), dict) else {}
+        check_tx = response.get("check_tx") if isinstance(response.get("check_tx"), dict) else {}
+        for message in (
+            error.get("data"),
+            error.get("message"),
+            response.get("log"),
+            check_tx.get("log"),
+        ):
+            if isinstance(message, str) and _DUPLICATE_TX_RE.search(message):
+                return message
+        return None
 
     async def _abci_query_value(self, path: str) -> Any:
         data = await self._retry_read(
@@ -631,10 +639,10 @@ class XianAsync:
             )
         )
         estimated = int(simulation["chi_used"])
-        suggested = max(
+        suggested = suggest_chi_supplied(
             estimated,
-            math.ceil(estimated * (1 + resolved_chi_margin)),
-            estimated + resolved_min_chi_headroom,
+            chi_margin=resolved_chi_margin,
+            min_chi_headroom=resolved_min_chi_headroom,
         )
         return {
             "estimated": estimated,
@@ -737,18 +745,12 @@ class XianAsync:
         _reservation: Reservation | None = None,
     ) -> TransactionSubmission:
         """Send a transaction using an explicit broadcast mode."""
-        mode = mode or self.config.submission.mode
-        wait_for_tx = self.config.submission.wait_for_tx if wait_for_tx is None else wait_for_tx
-        timeout_seconds = (
-            self.config.submission.timeout_seconds if timeout_seconds is None else timeout_seconds
+        mode, wait_for_tx, wait_options = self._submission_settings(
+            mode, wait_for_tx, timeout_seconds, poll_interval_seconds
         )
-        poll_interval_seconds = (
-            self.config.submission.poll_interval_seconds
-            if poll_interval_seconds is None
-            else poll_interval_seconds
-        )
-        if mode not in {"async", "checktx", "commit"}:
-            raise ValueError("mode must be one of: 'async', 'checktx', 'commit'")
+
+        async def wait(tx_hash: str) -> TransactionReceipt:
+            return await self.wait_for_tx(tx_hash, **wait_options)
 
         if chain_id is None:
             await self.ensure_chain_id()
@@ -757,34 +759,28 @@ class XianAsync:
         estimated_stamps: int | None = None
         supplied_stamps = chi
         if supplied_stamps is None:
-            chi_estimate = await self.estimate_chi(
-                contract,
-                function,
-                kwargs,
-                chi_margin=chi_margin,
-                min_chi_headroom=min_chi_headroom,
+            estimated_stamps, supplied_stamps = await self._estimated_chi_supply(
+                contract, function, kwargs, chi_margin, min_chi_headroom
             )
-            estimated_stamps = chi_estimate["estimated"]
-            supplied_stamps = int(chi_estimate["suggested"])
 
-        reserved_nonce = await self._reserve_nonce(nonce, chain_id)
-        if _reservation is not None:
-            _reservation.nonce = reserved_nonce
-        payload = {
-            "chain_id": chain_id,
-            "contract": contract,
-            "function": function,
-            "kwargs": kwargs,
-            "nonce": reserved_nonce,
-            "sender": self.wallet.public_key,
-            "chi_supplied": supplied_stamps,
-        }
-
-        tx = tr.create_tx(payload, self.wallet, vm_profile=self.config.vm_profile)
+        reservation = _reservation or Reservation()
+        reservation.nonce = await self._reserve_nonce(nonce, chain_id)
+        tx = tr.create_tx(
+            {
+                "chain_id": chain_id,
+                "contract": contract,
+                "function": function,
+                "kwargs": kwargs,
+                "nonce": reservation.nonce,
+                "sender": self.wallet.public_key,
+                "chi_supplied": supplied_stamps,
+            },
+            self.wallet,
+            vm_profile=self.config.vm_profile,
+        )
         prepared_tx = tr.prepare_transaction(tx)
-        local_tx_hash = prepared_tx.tx_hash
-        if _reservation is not None:
-            _reservation.tx_hash = local_tx_hash
+        reservation.tx_hash = prepared_tx.tx_hash
+        reserved_nonce = reservation.nonce
 
         result: dict[str, Any] = {
             "submitted": False,
@@ -800,144 +796,150 @@ class XianAsync:
             "receipt": None,
         }
 
+        reservation.broadcast_started = True
         try:
-
-            async def _broadcast_once():
-                if mode == "async":
-                    return await tr.broadcast_tx_nowait_async(
-                        self.node_url,
-                        prepared_tx,
-                        session=self.session,
-                    )
-                if mode == "commit":
-                    return await tr.broadcast_tx_commit_async(
-                        self.node_url,
-                        prepared_tx,
-                        session=self.session,
-                    )
-                return await tr.broadcast_tx_wait_async(
-                    self.node_url,
-                    prepared_tx,
-                    session=self.session,
-                )
-
-            if _reservation is not None:
-                _reservation.broadcast_started = True
-            data = await self._retry_broadcast(_broadcast_once)
+            data = await self._retry_broadcast(lambda: self._broadcast_once(mode, prepared_tx))
         except TransportError as exc:
-            if wait_for_tx:
-                try:
-                    receipt = await self.wait_for_tx(
-                        local_tx_hash,
-                        timeout_seconds=timeout_seconds,
-                        poll_interval_seconds=poll_interval_seconds,
-                    )
-                except Exception as recovery_exc:
-                    raise exc from recovery_exc
-
-                result.update(
-                    {
-                        "submitted": True,
-                        "accepted": True,
-                        "finalized": True,
-                        "message": "broadcast response unavailable; transaction finalized by local hash",
-                        "tx_hash": local_tx_hash,
-                        "response": {
-                            "error": {
-                                "message": str(exc),
-                                "type": type(exc).__name__,
-                            }
-                        },
-                        "receipt": receipt,
-                    }
-                )
-                return TransactionSubmission.from_dict(result)
-
-            raise
+            if not wait_for_tx:
+                raise
+            await self._recover_by_local_hash(result, exc, prepared_tx.tx_hash, wait)
+            return TransactionSubmission.from_dict(result)
 
         result["response"] = data
-
-        if "error" in data:
-            duplicate_tx = self._is_duplicate_tx_log(
-                data["error"].get("data") or data["error"].get("message")
-            )
-            result["message"] = data["error"].get("data") or data["error"].get("message")
-            if duplicate_tx:
-                result["submitted"] = True
-                result["accepted"] = True
-                result["tx_hash"] = (
-                    data.get("result", {}).get("hash")
-                    if isinstance(data.get("result"), dict)
-                    else local_tx_hash
-                )
-                if wait_for_tx and result["tx_hash"] is not None:
-                    receipt = await self.wait_for_tx(
-                        result["tx_hash"],
-                        timeout_seconds=timeout_seconds,
-                        poll_interval_seconds=poll_interval_seconds,
-                    )
-                    result["receipt"] = receipt
-                    result["finalized"] = True
-                return TransactionSubmission.from_dict(result)
-            return TransactionSubmission.from_dict(result)
-
-        result["submitted"] = True
-
-        if mode == "commit":
-            commit_result = data.get("result", {})
-            check_tx = commit_result.get("check_tx", {})
-            deliver_tx = commit_result.get("deliver_tx") or commit_result.get("tx_result") or {}
-            commit_height = str(commit_result.get("height") or "0")
-            result["tx_hash"] = commit_result.get("hash") or local_tx_hash
-            result["accepted"] = check_tx.get("code", 1) == 0
-            duplicate_tx = self._is_duplicate_tx_log(check_tx.get("log"))
-            if duplicate_tx:
-                result["accepted"] = True
-            result["finalized"] = (
-                result["accepted"] and deliver_tx.get("code", 1) == 0 and commit_height != "0"
-            )
-            if not result["accepted"]:
-                result["message"] = check_tx.get("log") or "CheckTx failed"
-            elif duplicate_tx:
-                result["message"] = check_tx.get("log")
-            elif not result["finalized"]:
-                result["message"] = deliver_tx.get("log") or ("Transaction was not finalized")
-            return TransactionSubmission.from_dict(result)
-
-        checktx_result = data.get("result", {})
-        result["tx_hash"] = checktx_result.get("hash") or local_tx_hash
-        if mode == "async":
-            result["accepted"] = None
-            if wait_for_tx and result["tx_hash"] is not None:
-                receipt = await self.wait_for_tx(
-                    result["tx_hash"],
-                    timeout_seconds=timeout_seconds,
-                    poll_interval_seconds=poll_interval_seconds,
-                )
-                result["receipt"] = receipt
-                result["finalized"] = True
-            return TransactionSubmission.from_dict(result)
-
-        result["accepted"] = checktx_result.get("code", 1) == 0
-        duplicate_tx = self._is_duplicate_tx_log(checktx_result.get("log"))
-        if duplicate_tx:
-            result["accepted"] = True
-        if not result["accepted"]:
-            result["message"] = checktx_result.get("log") or "CheckTx failed"
-            return TransactionSubmission.from_dict(result)
-        if duplicate_tx:
-            result["message"] = checktx_result.get("log")
-
-        if wait_for_tx and result["tx_hash"] is not None:
-            receipt = await self.wait_for_tx(
-                result["tx_hash"],
-                timeout_seconds=timeout_seconds,
-                poll_interval_seconds=poll_interval_seconds,
-            )
-            result["receipt"] = receipt
+        self._apply_broadcast_outcome(result, data, mode, prepared_tx.tx_hash)
+        if wait_for_tx and self._awaits_receipt(result, data, mode):
+            result["receipt"] = await wait(result["tx_hash"])
             result["finalized"] = True
-
+            if self._duplicate_tx_log(data) is not None:
+                result["accepted"] = True
         return TransactionSubmission.from_dict(result)
+
+    def _submission_settings(
+        self,
+        mode: str | None,
+        wait_for_tx: bool | None,
+        timeout_seconds: float | None,
+        poll_interval_seconds: float | None,
+    ) -> tuple[str, bool, dict[str, float]]:
+        """Resolve per-call submission options against the client config."""
+        submission = self.config.submission
+        mode = mode or submission.mode
+        if mode not in {"async", "checktx", "commit"}:
+            raise ValueError("mode must be one of: 'async', 'checktx', 'commit'")
+        wait_options = {
+            "timeout_seconds": submission.timeout_seconds,
+            "poll_interval_seconds": submission.poll_interval_seconds,
+        }
+        if timeout_seconds is not None:
+            wait_options["timeout_seconds"] = timeout_seconds
+        if poll_interval_seconds is not None:
+            wait_options["poll_interval_seconds"] = poll_interval_seconds
+        if wait_for_tx is None:
+            wait_for_tx = submission.wait_for_tx
+        return mode, wait_for_tx, wait_options
+
+    async def _estimated_chi_supply(
+        self,
+        contract: str,
+        function: str,
+        kwargs: dict,
+        chi_margin: float | None,
+        min_chi_headroom: int | None,
+    ) -> tuple[int, int]:
+        estimate = await self.estimate_chi(
+            contract,
+            function,
+            kwargs,
+            chi_margin=chi_margin,
+            min_chi_headroom=min_chi_headroom,
+        )
+        return estimate["estimated"], int(estimate["suggested"])
+
+    @staticmethod
+    async def _recover_by_local_hash(
+        result: dict[str, Any],
+        exc: TransportError,
+        local_tx_hash: str,
+        wait: Callable[[str], Awaitable[TransactionReceipt]],
+    ) -> None:
+        """Settle a lost broadcast response from the receipt for the local hash."""
+        try:
+            receipt = await wait(local_tx_hash)
+        except Exception as recovery_exc:
+            raise exc from recovery_exc
+        result.update(
+            submitted=True,
+            accepted=True,
+            finalized=True,
+            message="broadcast response unavailable; transaction finalized by local hash",
+            tx_hash=local_tx_hash,
+            response={"error": {"message": str(exc), "type": type(exc).__name__}},
+            receipt=receipt,
+        )
+
+    async def _broadcast_once(
+        self, mode: str, prepared_tx: tr.PreparedTransaction
+    ) -> dict[str, Any]:
+        broadcaster = {
+            "async": tr.broadcast_tx_nowait_async,
+            "commit": tr.broadcast_tx_commit_async,
+        }.get(mode, tr.broadcast_tx_wait_async)
+        return await broadcaster(self.node_url, prepared_tx, session=self.session)
+
+    def _awaits_receipt(self, result: dict[str, Any], data: dict[str, Any], mode: str) -> bool:
+        """A receipt can settle duplicates and async/CheckTx admissions, not commits."""
+        if result["tx_hash"] is None:
+            return False
+        if self._duplicate_tx_log(data) is not None:
+            return True
+        return result["submitted"] and mode != "commit" and result["accepted"] is not False
+
+    def _apply_broadcast_outcome(
+        self,
+        result: dict[str, Any],
+        data: dict[str, Any],
+        mode: str,
+        local_tx_hash: str,
+    ) -> None:
+        duplicate_log = self._duplicate_tx_log(data)
+        if duplicate_log is not None:
+            # The node cache holds these exact bytes, which proves neither
+            # admission nor execution: report it unresolved unless a receipt
+            # for the local hash settles it.
+            result.update(submitted=True, accepted=None, message=duplicate_log)
+            result["tx_hash"] = data.get("result", {}).get("hash") or local_tx_hash
+            return
+        if "error" in data:
+            result["message"] = data["error"].get("data") or data["error"].get("message")
+            return
+
+        response = data.get("result", {})
+        result["submitted"] = True
+        result["tx_hash"] = response.get("hash") or local_tx_hash
+        if mode == "commit":
+            self._apply_commit_outcome(result, response)
+        elif mode == "async":
+            result["accepted"] = None
+        else:
+            result["accepted"] = response.get("code", 1) == 0
+            if not result["accepted"]:
+                result["message"] = response.get("log") or "CheckTx failed"
+
+    @staticmethod
+    def _apply_commit_outcome(result: dict[str, Any], response: dict[str, Any]) -> None:
+        check_tx = response.get("check_tx", {})
+        deliver_tx = response.get("deliver_tx") or response.get("tx_result") or {}
+        accepted = check_tx.get("code", 1) == 0
+        finalized = (
+            accepted
+            and deliver_tx.get("code", 1) == 0
+            and str(response.get("height") or "0") != "0"
+        )
+        result.update(accepted=accepted, finalized=finalized)
+        if not accepted:
+            result["message"] = check_tx.get("log") or "CheckTx failed"
+        elif not finalized:
+            result["message"] = deliver_tx.get("log") or "Transaction was not finalized"
 
     async def send(
         self,

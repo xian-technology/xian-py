@@ -72,10 +72,11 @@ def verify_msg(public_key: str, msg: str, signature: str) -> bool:
 
 class Wallet:
     def __init__(self, private_key: WalletPrivateKey = None):
-        if private_key:
-            self._account = Ed25519Account(private_key)
-        else:
+        """Use ``private_key``; only an omitted key (``None``) generates a new one."""
+        if private_key is None:
             self._account = Ed25519Account.generate()
+        else:
+            self._account = Ed25519Account(private_key)
 
     @classmethod
     def from_mnemonic(cls, mnemonic: str, account_index: int = 0) -> "Wallet":
@@ -105,15 +106,27 @@ class Wallet:
         return is_valid_ed25519_key(key)
 
 
+def _ethereum_private_key_bytes(private_key: str) -> bytes:
+    text = private_key[2:] if private_key.startswith("0x") else private_key
+    try:
+        key_bytes = bytes.fromhex(text) if len(text) == 64 else b""
+    except ValueError:
+        key_bytes = b""
+    if len(key_bytes) != 32:
+        raise ValueError("private_key must be a 32-byte hex string")
+    return key_bytes
+
+
 class EthereumWallet:
     def __init__(self, private_key: WalletPrivateKey = None):
+        """Use ``private_key``; only an omitted key (``None``) generates a new one."""
         _require_ethereum_support()
-        if private_key:
-            private_key = bytes.fromhex(private_key)
+        if private_key is None:
+            key_bytes = secrets.token_bytes(32)
         else:
-            private_key = secrets.token_bytes(32)
+            key_bytes = _ethereum_private_key_bytes(private_key)
 
-        self.account = Account.from_key(private_key)
+        self.account = Account.from_key(key_bytes)
 
     @property
     def private_key(self) -> str:

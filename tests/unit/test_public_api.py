@@ -26,6 +26,7 @@ from xian_py import (
     Xian,
     XianAsync,
     XianException,
+    XianX402PaymentExpectation,
     XianX402PaymentRequirement,
     merged_event_payload,
     run_sync,
@@ -72,6 +73,7 @@ def test_public_exports_are_available() -> None:
     assert TransactionReceipt is not None
     assert TransactionSubmission is not None
     assert XianException is not None
+    assert XianX402PaymentExpectation is not None
     assert XianX402PaymentRequirement is not None
     assert merged_event_payload is not None
     assert run_sync is not None

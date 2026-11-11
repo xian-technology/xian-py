@@ -170,3 +170,43 @@ def test_ethereum_wallet_requires_optional_dependency(monkeypatch) -> None:
 
     with pytest.raises(ImportError, match="xian-tech-py\\[eth\\]"):
         wallet_module.EthereumWallet()
+
+
+@pytest.mark.parametrize("private_key", ["", "   "])
+def test_wallet_rejects_empty_private_key_instead_of_generating(private_key) -> None:
+    with pytest.raises(ValueError, match="32-byte hex"):
+        Wallet(private_key)
+
+
+class _FakeEthereumAccount:
+    created: list[bytes] = []
+
+    @classmethod
+    def from_key(cls, key: bytes):
+        cls.created.append(key)
+        return cls()
+
+
+@pytest.mark.parametrize("private_key", ["", "ab", "zz" * 32])
+def test_ethereum_wallet_rejects_invalid_private_key_instead_of_generating(
+    monkeypatch, private_key
+) -> None:
+    monkeypatch.setattr(wallet_module, "ETHEREUM_SUPPORT", True)
+    monkeypatch.setattr(wallet_module, "Account", _FakeEthereumAccount, raising=False)
+    _FakeEthereumAccount.created = []
+
+    with pytest.raises(ValueError, match="32-byte hex"):
+        wallet_module.EthereumWallet(private_key)
+    assert _FakeEthereumAccount.created == []
+
+
+def test_ethereum_wallet_generates_only_when_key_is_omitted(monkeypatch) -> None:
+    monkeypatch.setattr(wallet_module, "ETHEREUM_SUPPORT", True)
+    monkeypatch.setattr(wallet_module, "Account", _FakeEthereumAccount, raising=False)
+    _FakeEthereumAccount.created = []
+
+    wallet_module.EthereumWallet()
+    wallet_module.EthereumWallet("11" * 32)
+
+    assert len(_FakeEthereumAccount.created[0]) == 32
+    assert _FakeEthereumAccount.created[1] == bytes.fromhex("11" * 32)

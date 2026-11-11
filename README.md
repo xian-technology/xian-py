@@ -122,7 +122,8 @@ from xian_py.wallet import HDWallet
 wallet = Wallet()
 print(wallet.public_key)
 
-# Restore an existing account from a hex private key.
+# Restore an existing account from a hex private key. Only an omitted key
+# (None) generates one; an empty or malformed key raises ValueError.
 wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
 
 # Generate a recovery phrase and its first account. Requires [hd].
@@ -195,7 +196,7 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
     submission = client.token().transfer(
         "bob",
         5,
-        chi=estimate["estimated"],
+        chi=estimate["suggested"],
         mode="checktx",
         wait_for_tx=True,
     )
@@ -203,6 +204,20 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
     if submission.receipt:
         print(submission.receipt.success, submission.receipt.chi_used)
 ```
+
+`estimate_chi` returns the exact simulated `estimated` value and the
+`suggested` supply: `estimate + max(ceil(estimate * chi_margin),
+min_chi_headroom)`, with `SubmissionConfig` defaults `chi_margin=0.05` and
+`min_chi_headroom=10`. Automatic sends use `suggested`; simulated cost can
+drift before execution and unused chi is refunded. Explicit `chi`, or
+per-call `chi_margin`/`min_chi_headroom`, always win. xian-js uses the same
+rule.
+
+A "tx already exists in cache/mempool" response is reported as
+`submitted=True, accepted=None` under the local transaction hash, and the
+automatic nonce stays reserved until the network nonce advances: the node
+holds those bytes, but that proves neither admission nor execution. With
+`wait_for_tx=True`, a receipt for the hash marks it accepted and finalized.
 
 Deploy a contract from source:
 
@@ -450,7 +465,9 @@ with ShieldedRelayerClient("http://127.0.0.1:38480") as relayer:
   matters more than replayable cursors
 - use thin helper clients for common patterns: contract, token, event, and
   state-key access
-- sign, verify, settle, and retry native-Xian x402 exact-payment requests
+- sign, verify, settle, and retry native-Xian x402 exact-payment requests;
+  `x402_request` only signs options within the caller's required chain,
+  token, settlement contract and maximum amount
 - build SQLite-backed read models with the shared projector primitives, using
   CometBFT websocket wakeups and BDS cursor reconciliation
 

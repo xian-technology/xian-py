@@ -22,8 +22,6 @@ PAYMENT_RESPONSE_HEADER = "PAYMENT-RESPONSE"
 PAYMENT_IDENTIFIER = "payment-identifier"
 DEFAULT_SETTLEMENT_CONTRACT = "con_x402_settlement"
 DEFAULT_PERMIT_AUTHORIZER_CONTRACT = "permit_authorizer"
-DEFAULT_SETTLEMENT_CHI_MARGIN = 0.0
-DEFAULT_SETTLEMENT_MIN_CHI_HEADROOM = 0
 XIAN_X402_EXACT_MESSAGE_TAG = "xian-x402-exact-v1"
 XIAN_PERMIT_MESSAGE_TAG = "xian-permit-v2"
 PAYMENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{16,128}$")
@@ -605,8 +603,8 @@ class XianX402Facilitator:
         client: Any,
         requirement: XianX402PaymentRequirement,
         permit_authorizer_contract: str = DEFAULT_PERMIT_AUTHORIZER_CONTRACT,
-        settlement_chi_margin: float = DEFAULT_SETTLEMENT_CHI_MARGIN,
-        settlement_min_chi_headroom: int = (DEFAULT_SETTLEMENT_MIN_CHI_HEADROOM),
+        settlement_chi_margin: float | None = None,
+        settlement_min_chi_headroom: int | None = None,
     ) -> None:
         self.client = client
         self.requirement = requirement
@@ -694,17 +692,81 @@ class XianX402Facilitator:
         )
 
 
+@dataclass(frozen=True)
+class XianX402PaymentExpectation:
+    """Payment terms the buyer accepts before any server-supplied option is signed."""
+
+    chain_id: str
+    asset: str
+    settlement_contract: str
+    max_amount: object
+    pay_to: str | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("chain_id", "asset", "settlement_contract"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"{name} is required.")
+        if self.pay_to is not None and (not isinstance(self.pay_to, str) or not self.pay_to):
+            raise ValueError("pay_to must be a non-empty string when provided.")
+        object.__setattr__(self, "max_amount", canonical_amount(self.max_amount))
+
+    def accepts(self, requirement: XianX402PaymentRequirement) -> bool:
+        return (
+            requirement.network == xian_network_id(self.chain_id)
+            and requirement.asset == self.asset
+            and requirement.settlement_contract == self.settlement_contract
+            and Decimal(requirement.amount) <= Decimal(self.max_amount)
+            and (self.pay_to is None or requirement.pay_to == self.pay_to)
+        )
+
+    def select(self, payment_required: dict[str, Any]) -> XianX402PaymentRequirement:
+        """Return the first offered requirement within these terms."""
+        accepts = payment_required.get("accepts") or payment_required.get("paymentDetails")
+        for index in range(len(accepts) if isinstance(accepts, list) else 0):
+            try:
+                requirement = XianX402PaymentRequirement.from_payment_required(
+                    payment_required, selected_index=index
+                )
+            except (TypeError, ValueError):
+                continue
+            if self.accepts(requirement):
+                return requirement
+        raise ValueError(
+            "No x402 payment option matches the expected chain_id, asset, "
+            "settlement_contract, max_amount and pay_to."
+        )
+
+
 async def x402_request(
     method: str,
     url: str,
     *,
     wallet: Wallet,
-    max_amount: object | None = None,
+    chain_id: str,
+    asset: str,
+    settlement_contract: str,
+    max_amount: object,
+    pay_to: str | None = None,
     permit_nonce: int = 0,
     session: aiohttp.ClientSession | None = None,
     headers: dict[str, str] | None = None,
     **request_kwargs: Any,
 ) -> XianX402HTTPResponse:
+    """Request ``url`` and pay a 402 challenge only within the caller's stated terms.
+
+    The server chooses the payment option, so the buyer must name the chain,
+    token, settlement contract (the permit spender) and maximum amount it
+    accepts; ``pay_to`` optionally pins the recipient. Options outside those
+    terms are never signed.
+    """
+    expectation = XianX402PaymentExpectation(
+        chain_id=chain_id,
+        asset=asset,
+        settlement_contract=settlement_contract,
+        max_amount=max_amount,
+        pay_to=pay_to,
+    )
     owned_session = session is None
     if session is None:
         session = aiohttp.ClientSession()
@@ -727,13 +789,7 @@ async def x402_request(
 
             payment_required = _payment_required_from_response(response.headers, body)
 
-        requirement = XianX402PaymentRequirement.from_payment_required(payment_required)
-        if max_amount is not None:
-            max_amount_text = canonical_amount(max_amount)
-            if Decimal(str(requirement.amount)) > Decimal(max_amount_text):
-                raise ValueError(
-                    f"Payment amount {requirement.amount} exceeds max_amount {max_amount_text}."
-                )
+        requirement = expectation.select(payment_required)
 
         payment_payload = sign_xian_x402_payment(
             requirement,

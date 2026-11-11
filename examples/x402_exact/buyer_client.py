@@ -3,9 +3,12 @@ from __future__ import annotations
 import asyncio
 
 from examples.x402_exact.common import (
+    chain_id,
+    contract_name,
     paid_resource_url,
     payment_amount,
     require_wallet,
+    token_contract,
 )
 from xian_py import x402_request
 
@@ -15,6 +18,10 @@ async def main() -> None:
         "GET",
         paid_resource_url(),
         wallet=require_wallet(),
+        # Only an option within these buyer-side terms is ever signed.
+        chain_id=chain_id(),
+        asset=token_contract(),
+        settlement_contract=contract_name(),
         max_amount=payment_amount(),
     )
     print(f"status={response.status}")
