@@ -87,6 +87,10 @@ The SDK derives the websocket endpoint from the RPC URL by default
 (`http://127.0.0.1:26657` → `ws://127.0.0.1:26657/websocket`). Override with
 `WatcherConfig(websocket_url="ws://rpc-host:26657/websocket")`.
 
+`XianAsync` closes sessions it creates and leaves caller-supplied sessions open.
+If a reused client creates its own session after `close()`, the next context
+exit or `close()` call closes that session as well.
+
 For visibility into transport retries, attach a callback to
 `RetryPolicy(on_retry=...)`. The callback receives a typed `RetryEvent` with
 the operation kind, attempt number, next backoff delay, and exception.

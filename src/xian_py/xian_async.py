@@ -111,16 +111,7 @@ class XianAsync:
         )
 
     async def __aenter__(self) -> "XianAsync":
-        if self._session is None:
-            transport = self.config.transport
-            connector = self._connector or aiohttp.TCPConnector(
-                limit=transport.connection_limit,
-                ttl_dns_cache=transport.dns_cache_ttl_seconds,
-            )
-            self._session = aiohttp.ClientSession(
-                timeout=self._timeout,
-                connector=connector,
-            )
+        self.session
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
@@ -141,7 +132,7 @@ class XianAsync:
         return self._session
 
     async def close(self) -> None:
-        if self._session and not self._external_session:
+        if self._session is not None and self._session is not self._external_session:
             await self._session.close()
         self._session = None
 
