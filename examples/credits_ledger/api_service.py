@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from decimal import Decimal
+
 from typing import Any
 
+from examples.contract_json import ContractJsonRoute
+from xian_runtime_types.decimal import canonical_fixed
 from fastapi import FastAPI, HTTPException
 
 from xian_py import XianAsync, XianClientConfig
@@ -32,7 +35,16 @@ except ImportError:
     )
     from projection import CreditsLedgerProjection  # type: ignore
 
+
+def request_amount(payload: dict[str, Any]) -> int | Decimal:
+    try:
+        return parse_amount(payload["amount"])
+    except (KeyError, ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid amount: {exc}") from exc
+
+
 app = FastAPI(title="Credits Ledger Service")
+app.router.route_class = ContractJsonRoute
 
 
 def _json_amount(value: Any) -> str | None:
@@ -40,13 +52,7 @@ def _json_amount(value: Any) -> str | None:
         return None
     if isinstance(value, int):
         return str(value)
-    if isinstance(value, Decimal):
-        normalized = format(value, "f")
-    else:
-        normalized = str(value)
-    if "." in normalized:
-        normalized = normalized.rstrip("0").rstrip(".")
-    return normalized or "0"
+    return canonical_fixed(value)
 
 
 @app.on_event("startup")
@@ -201,7 +207,7 @@ async def issue_credits(payload: dict[str, Any]) -> dict[str, Any]:
             detail="XIAN_WALLET_PRIVATE_KEY is required for write operations.",
         )
     to = str(payload["to"])
-    amount = parse_amount(payload["amount"])
+    amount = request_amount(payload)
     try:
         submission = ensure_submission_succeeded(
             await ledger().send(
@@ -218,7 +224,7 @@ async def issue_credits(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "tx_hash": submission.tx_hash,
         "to": to,
-        "amount": amount,
+        "amount": _json_amount(amount),
         "finalized": submission.finalized,
     }
 
@@ -230,7 +236,7 @@ async def burn_credits(payload: dict[str, Any]) -> dict[str, Any]:
             status_code=500,
             detail="XIAN_WALLET_PRIVATE_KEY is required for write operations.",
         )
-    amount = parse_amount(payload["amount"])
+    amount = request_amount(payload)
     try:
         submission = ensure_submission_succeeded(
             await ledger().send(
@@ -245,7 +251,7 @@ async def burn_credits(payload: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {
         "tx_hash": submission.tx_hash,
-        "amount": amount,
+        "amount": _json_amount(amount),
         "finalized": submission.finalized,
     }
 
@@ -259,7 +265,7 @@ async def transfer_credits(payload: dict[str, Any]) -> dict[str, Any]:
             detail="XIAN_WALLET_PRIVATE_KEY is required for write operations.",
         )
     to = str(payload["to"])
-    amount = parse_amount(payload["amount"])
+    amount = request_amount(payload)
     try:
         submission = ensure_submission_succeeded(
             await ledger().send(
@@ -277,6 +283,6 @@ async def transfer_credits(payload: dict[str, Any]) -> dict[str, Any]:
         "tx_hash": submission.tx_hash,
         "from": wallet.public_key,
         "to": to,
-        "amount": amount,
+        "amount": _json_amount(amount),
         "finalized": submission.finalized,
     }

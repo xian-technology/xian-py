@@ -14,7 +14,9 @@ MAX_BDS_HEIGHT_LAG = int(os.getenv("XIAN_MAX_BDS_HEIGHT_LAG", "0"))
 
 
 def main() -> int:
-    config = XianClientConfig(retry=RetryPolicy(max_attempts=3, initial_delay_seconds=0.25))
+    config = XianClientConfig(
+        vm_profile="xian_vm_v2", retry=RetryPolicy(max_attempts=3, initial_delay_seconds=0.25)
+    )
 
     with Xian(NODE_URL, chain_id=CHAIN_ID, config=config) as client:
         status = client.get_node_status()

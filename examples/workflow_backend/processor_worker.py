@@ -6,7 +6,7 @@ import asyncio
 import json
 import os
 
-from xian_py import XianAsync
+from xian_py import XianAsync, XianClientConfig
 
 try:
     from .common import (
@@ -150,6 +150,7 @@ async def main() -> None:
     async with XianAsync(
         node_url(),
         chain_id=chain_id(),
+        config=XianClientConfig(vm_profile="xian_vm_v2"),
         wallet=require_wallet(),
     ) as client:
         await asyncio.gather(

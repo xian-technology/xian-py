@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import os
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
-from xian_py import Xian
+from xian_runtime_types.decimal import canonical_fixed
+
+from xian_py import Xian, XianClientConfig
 
 try:
     from .common import (
@@ -36,21 +38,19 @@ def _split_workers(raw: str | None) -> list[str]:
 def _as_decimal(value: object) -> Decimal:
     if value is None:
         return Decimal("0")
-    return Decimal(str(value))
-
-
-def _decimal_to_string(value: Decimal) -> str:
-    normalized = value.normalize()
-    if normalized == normalized.to_integral():
-        return format(normalized.quantize(Decimal("1")), "f")
-    return format(normalized, "f").rstrip("0").rstrip(".")
+    return Decimal(canonical_fixed(value))
 
 
 def main() -> None:
     wallet = require_wallet()
     contract_name = workflow_contract_name()
 
-    with Xian(node_url(), chain_id=chain_id(), wallet=wallet) as client:
+    with Xian(
+        node_url(),
+        chain_id=chain_id(),
+        wallet=wallet,
+        config=XianClientConfig(vm_profile="xian_vm_v2"),
+    ) as client:
         status = client.get_node_status()
         print(f"Connected to {status.network} at height {status.latest_block_height}")
 
@@ -99,11 +99,12 @@ def main() -> None:
                 current_balance = _as_decimal(native_token.balance_of(worker))
                 if current_balance >= worker_fund_target:
                     continue
-                amount_to_send = worker_fund_target - current_balance
+                with localcontext(prec=91):
+                    amount_to_send = worker_fund_target - current_balance
                 result = ensure_submission_succeeded(
                     native_token.transfer(
                         worker,
-                        _decimal_to_string(amount_to_send),
+                        canonical_fixed(amount_to_send),
                         mode="checktx",
                         wait_for_tx=True,
                     ),
@@ -111,7 +112,7 @@ def main() -> None:
                 )
                 print(
                     "Funded worker "
-                    f"{worker} to {_decimal_to_string(worker_fund_target)}: "
+                    f"{worker} to {canonical_fixed(worker_fund_target)}: "
                     f"{result.tx_hash}"
                 )
 

@@ -6,8 +6,11 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+from xian_runtime_types.decimal import canonical_fixed
+from xian_runtime_types.encoding import normalize_wire_numbers
 
+from examples.contract_json import ContractJsonRoute
 from xian_py import (
     RetryPolicy,
     SubmissionConfig,
@@ -29,9 +32,15 @@ class TransferRequest(BaseModel):
     to_address: str
     amount: Decimal
 
+    @field_validator("amount")
+    @classmethod
+    def in_vm_range(cls, value: Decimal) -> Decimal:
+        return Decimal(canonical_fixed(value))
+
 
 def _build_config() -> XianClientConfig:
     return XianClientConfig(
+        vm_profile="xian_vm_v2",
         transport=TransportConfig(total_timeout_seconds=20.0),
         retry=RetryPolicy(max_attempts=3, initial_delay_seconds=0.25),
         submission=SubmissionConfig(wait_for_tx=True),
@@ -64,6 +73,7 @@ app = FastAPI(
     description="Thin API service example built on top of xian-py.",
     lifespan=lifespan,
 )
+app.router.route_class = ContractJsonRoute
 
 
 def _serialize_event(event: Any) -> dict[str, Any]:
@@ -157,5 +167,5 @@ async def submit_transfer(request: TransferRequest) -> dict[str, Any]:
         "accepted": result.accepted,
         "finalized": result.finalized,
         "tx_hash": result.tx_hash,
-        "receipt": None if result.receipt is None else result.receipt.raw,
+        "receipt": normalize_wire_numbers(result.receipt.raw) if result.receipt else None,
     }

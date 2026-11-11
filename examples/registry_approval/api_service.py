@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 
-from xian_py import XianAsync
+from xian_py import XianAsync, XianClientConfig
 
 try:
     from .common import (
@@ -39,6 +39,7 @@ async def startup() -> None:
     app.state.client = XianAsync(
         node_url(),
         chain_id=chain_id(),
+        config=XianClientConfig(vm_profile="xian_vm_v2"),
         wallet=optional_wallet(),
     )
     await app.state.client.__aenter__()

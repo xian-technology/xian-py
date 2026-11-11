@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import MAX_PREC, Decimal, InvalidOperation, localcontext
 from pathlib import Path
 from typing import Any
 
@@ -18,8 +18,8 @@ def _to_decimal(value: Any) -> Decimal:
         return ZERO
     if isinstance(value, Decimal):
         return value
-    if isinstance(value, dict) and "__fixed__" in value:
-        value = value["__fixed__"]
+    if isinstance(value, dict):
+        value = value.get("__fixed__", value.get("__big_int__", value))
     try:
         return Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError) as exc:
@@ -192,7 +192,8 @@ class CreditsLedgerProjection:
         actor = data.get("actor") or data.get("issuer")
         event_name = event.event or ""
 
-        with self.connection:
+        # Issued and transferred lifetime totals may exceed one contract amount.
+        with self.connection, localcontext(prec=MAX_PREC):
             self.connection.execute(
                 """
                 INSERT INTO ledger_events (
