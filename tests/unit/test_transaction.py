@@ -618,3 +618,42 @@ def test_wait_for_tx_async_falls_back_to_recent_block_scan() -> None:
         ("get", "http://node/block?height=1"),
         ("get", "http://node/block_results?height=1"),
     ]
+
+
+@pytest.mark.parametrize(
+    "state_key",
+    ["a b", "a+b", "a&b=c", "a#b", "a%41b", "a;b", "a?b", "ü"],
+)
+def test_abci_query_async_sends_the_exact_path_over_http(state_key: str) -> None:
+    """CometBFT decodes the query string like Go's url.ParseQuery."""
+    from urllib.parse import parse_qs, urlsplit
+
+    from aiohttp import web
+
+    from xian_py.transaction import abci_query_async
+
+    path = f"/get/con_token.balances:{state_key}"
+    raw_paths: list[str] = []
+
+    async def handler(request: web.Request) -> web.Response:
+        raw_paths.append(request.raw_path)
+        return web.json_response({"result": {"response": {"code": 0, "value": None}}})
+
+    async def scenario() -> None:
+        app = web.Application()
+        app.router.add_route("*", "/{tail:.*}", handler)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        await site.start()
+        port = runner.addresses[0][1]
+        try:
+            await abci_query_async(f"http://127.0.0.1:{port}", path)
+        finally:
+            await runner.cleanup()
+
+    asyncio.run(scenario())
+
+    query = urlsplit(raw_paths[0]).query
+    assert ";" not in query  # Go's url.ParseQuery rejects raw semicolons.
+    assert parse_qs(query, keep_blank_values=True) == {"path": [f'"{path}"']}

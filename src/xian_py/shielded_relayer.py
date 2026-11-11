@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Callable, Mapping
+from urllib.parse import quote
 
 import aiohttp
 
@@ -215,7 +216,9 @@ class ShieldedRelayerAsyncClient:
         )
 
     async def get_job(self, job_id: str) -> ShieldedRelayerJob:
-        return ShieldedRelayerJob.from_dict(await self._request_json("GET", f"/v1/jobs/{job_id}"))
+        return ShieldedRelayerJob.from_dict(
+            await self._request_json("GET", f"/v1/jobs/{quote(job_id, safe='')}")
+        )
 
 
 class ShieldedRelayerAsyncPoolClient:

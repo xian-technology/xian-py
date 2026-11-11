@@ -610,3 +610,15 @@ def test_async_relayer_pool_client_rejects_duplicate_relayer_ids() -> None:
         assert str(exc) == "duplicate shielded relayer id: relayer-a"
     else:
         raise AssertionError("expected duplicate relayer id rejection")
+
+
+def test_async_relayer_client_escapes_job_id_as_one_path_segment() -> None:
+    async def run() -> None:
+        session = _FakeSession([_FakeResponse({"job_id": "a/b?c#d%"})])
+        client = ShieldedRelayerAsyncClient("http://127.0.0.1:38888", session=session)
+
+        await client.get_job("a/b?c#d%")
+
+        assert session.requests[0][1] == "http://127.0.0.1:38888/v1/jobs/a%2Fb%3Fc%23d%25"
+
+    asyncio.run(run())

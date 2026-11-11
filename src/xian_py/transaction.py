@@ -12,6 +12,7 @@ from base64 import b64decode
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import quote
 
 import aiohttp
 from xian_runtime_types.encoding import decode, encode_wire, loads_wire_json
@@ -135,9 +136,11 @@ async def abci_query_async(
     *,
     session: aiohttp.ClientSession | None = None,
 ) -> dict[str, Any]:
+    # Percent-encode delimiters such as + & # % ; so the node receives this exact path.
+    quoted_path = quote(f'"{path}"', safe='/:=,"')
     data = await request_json_async(
         "POST",
-        f'{node_url}/abci_query?path="{path}"',
+        f"{node_url}/abci_query?path={quoted_path}",
         session=session,
         raise_for_status=True,
     )
