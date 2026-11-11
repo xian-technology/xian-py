@@ -73,7 +73,7 @@ jobs:
 
       - name: Sync dependencies
         working-directory: xian-py
-        run: uv sync --frozen --group dev --extra compile
+        run: uv sync --frozen --group dev --extra compile --extra app
 
       - name: Ruff lint
         working-directory: xian-py
@@ -85,7 +85,7 @@ jobs:
 
       - name: Run tests with coverage
         working-directory: xian-py
-        run: uv run pytest --cov=xian_py --cov-report=term-missing --cov-report=xml
+        run: uv run --frozen --extra app --extra compile pytest --cov=xian_py --cov-report=term-missing --cov-report=xml
 
       - name: Upload coverage report
         if: always()
