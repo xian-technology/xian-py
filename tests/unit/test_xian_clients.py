@@ -4023,6 +4023,12 @@ def test_xian_async_duplicate_tx_quarantines_the_automatic_nonce(
             False,
             "Transaction was not finalized",
         ),
+        (
+            {"check_tx": {"code": 0}, "tx_result": {"log": "no result code"}, "height": "5"},
+            True,
+            False,
+            "no result code",
+        ),
         ({"check_tx": {"code": 7, "log": "bad nonce"}}, False, False, "bad nonce"),
         ({}, False, False, "CheckTx failed"),
     ],
@@ -4070,3 +4076,89 @@ def test_suggest_chi_supplied_requires_a_non_negative_integer_estimate(estimated
 
     with pytest.raises(ValueError):
         suggest_chi_supplied(estimated, chi_margin=0.05, min_chi_headroom=10)
+
+
+def _send_checktx(client: XianAsync, broadcast: AsyncMock, **kwargs) -> TransactionSubmission:
+    async def run() -> TransactionSubmission:
+        try:
+            return await client.send_tx(
+                "currency", "transfer", {"amount": 1, "to": "bob"}, chi=100, **kwargs
+            )
+        finally:
+            await client.close()
+
+    with patch.object(tr, "get_nonce_async", AsyncMock(return_value=11)):
+        with patch.object(tr, "broadcast_tx_wait_async", broadcast):
+            return asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("response", "accepted", "message"),
+    [
+        ({"hash": "abc123", "code": 0}, True, None),
+        ({"hash": "abc123", "code": 5, "log": "insufficient chi"}, False, "insufficient chi"),
+        ({"hash": "abc123", "code": 5}, False, "CheckTx failed"),
+        ({"hash": "abc123"}, False, "CheckTx failed"),
+    ],
+)
+def test_xian_async_send_tx_checktx_mode_reports_admission_and_rejection_log(
+    response, accepted, message
+) -> None:
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
+
+    result = _send_checktx(
+        client, AsyncMock(return_value={"result": response}), mode="checktx", wait_for_tx=False
+    )
+
+    assert (result.submitted, result.accepted, result.finalized) == (True, accepted, False)
+    assert result.tx_hash == "abc123"
+    assert result.message == message
+
+
+@pytest.mark.parametrize(
+    ("error", "message"),
+    [
+        ({"code": -32603, "message": "Internal error", "data": "tx too large"}, "tx too large"),
+        ({"code": -32603, "message": "Internal error"}, "Internal error"),
+    ],
+)
+def test_xian_async_send_tx_reports_rpc_error_without_waiting_for_a_receipt(error, message) -> None:
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
+
+    with patch.object(client, "wait_for_tx", AsyncMock()) as wait_for_tx:
+        result = _send_checktx(
+            client, AsyncMock(return_value={"error": error}), mode="checktx", wait_for_tx=True
+        )
+
+    wait_for_tx.assert_not_awaited()
+    assert (result.submitted, result.accepted, result.finalized) == (False, False, False)
+    assert result.tx_hash is None
+    assert result.message == message
+
+
+def test_xian_async_send_tx_raises_broadcast_error_when_local_hash_recovery_fails() -> None:
+    client = XianAsync(
+        "http://node",
+        chain_id="xian-local-1",
+        wallet=Wallet(),
+        config=XianClientConfig(retry=RetryPolicy(max_attempts=1)),
+    )
+    lost = TransportError("Timeout on reading data from socket")
+    not_found = TxTimeoutError("transaction not found")
+
+    with patch.object(client, "wait_for_tx", AsyncMock(side_effect=not_found)):
+        with pytest.raises(TransportError) as raised:
+            _send_checktx(client, AsyncMock(side_effect=lost), wait_for_tx=True)
+
+    assert raised.value is lost
+    assert raised.value.__cause__ is not_found
+
+
+def test_xian_async_send_tx_rejects_unknown_broadcast_mode() -> None:
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
+    broadcast = AsyncMock()
+
+    with pytest.raises(ValueError, match="mode must be one of"):
+        _send_checktx(client, broadcast, mode="sync")
+
+    broadcast.assert_not_awaited()

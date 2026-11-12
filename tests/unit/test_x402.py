@@ -379,8 +379,10 @@ def test_facilitator_rejects_mismatched_payment_before_submission() -> None:
     assert client.fake_contract.calls == []
 
 
-def _serve_payment_required(accepts: list[dict]) -> tuple[list[XianX402PaymentPayload], object]:
-    """Run x402_request against a loopback server offering ``accepts``."""
+def _serve_payment_required(
+    accepts: list[dict] | None,
+) -> tuple[list[XianX402PaymentPayload], object]:
+    """Run x402_request against a loopback server offering ``accepts`` (``None``: free)."""
     from aiohttp import web
 
     from xian_py import PAYMENT_SIGNATURE_HEADER
@@ -393,6 +395,8 @@ def _serve_payment_required(accepts: list[dict]) -> tuple[list[XianX402PaymentPa
         if header:
             signed.append(XianX402PaymentPayload.from_header(header))
             return web.Response(text="paid")
+        if accepts is None:
+            return web.Response(text="free", headers={"X-Resource": "open"})
         return web.Response(
             status=402,
             headers={"PAYMENT-REQUIRED": encode_json_header(payment_required)},
@@ -454,6 +458,17 @@ def test_x402_request_refuses_to_sign_unexpected_terms(override: dict) -> None:
     with pytest.raises(ValueError, match="No x402 payment option matches"):
         asyncio.run(call(wallet=Wallet(), pay_to="seller", **_EXPECTED))
 
+    assert signed == []
+
+
+def test_x402_request_returns_a_free_resource_without_paying() -> None:
+    signed, call = _serve_payment_required(None)
+
+    response = asyncio.run(call(wallet=Wallet(), **_EXPECTED))
+
+    assert (response.status, response.body) == (200, b"free")
+    assert response.headers["X-Resource"] == "open"
+    assert (response.payment_payload, response.payment_response) == (None, None)
     assert signed == []
 
 
