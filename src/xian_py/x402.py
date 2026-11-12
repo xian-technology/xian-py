@@ -127,6 +127,12 @@ def _sha3_text(value: str) -> str:
     return hashlib.sha3_256(("s:" + value).encode("utf-8")).hexdigest()
 
 
+def _offered_requirements(payment_required: dict[str, Any]) -> list[Any]:
+    """The payment options a 402 challenge offers; anything but a list offers none."""
+    accepts = payment_required.get("accepts") or payment_required.get("paymentDetails")
+    return accepts if isinstance(accepts, list) else []
+
+
 def construct_payment_message(
     *,
     x402_version: int,
@@ -253,8 +259,8 @@ class XianX402PaymentRequirement:
         *,
         selected_index: int = 0,
     ) -> "XianX402PaymentRequirement":
-        accepts = payload.get("accepts") or payload.get("paymentDetails")
-        if not isinstance(accepts, list) or not accepts:
+        accepts = _offered_requirements(payload)
+        if not accepts:
             raise ValueError("Payment required payload has no accepts list.")
         try:
             item = accepts[selected_index]
@@ -722,8 +728,7 @@ class XianX402PaymentExpectation:
 
     def select(self, payment_required: dict[str, Any]) -> XianX402PaymentRequirement:
         """Return the first offered requirement within these terms."""
-        accepts = payment_required.get("accepts") or payment_required.get("paymentDetails")
-        for index in range(len(accepts) if isinstance(accepts, list) else 0):
+        for index in range(len(_offered_requirements(payment_required))):
             try:
                 requirement = XianX402PaymentRequirement.from_payment_required(
                     payment_required, selected_index=index
