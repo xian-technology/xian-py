@@ -67,6 +67,11 @@ _SIMULATION_DATETIME_RE = re.compile(
 )
 
 
+def _executed_in_block(response: dict[str, Any], deliver_tx: dict[str, Any]) -> bool:
+    """A commit response proves execution only with a zero code at a real height."""
+    return deliver_tx.get("code", 1) == 0 and str(response.get("height") or "0") != "0"
+
+
 class XianAsync:
     """Async version of the Xian class for non-blocking operations."""
 
@@ -744,17 +749,13 @@ class XianAsync:
         min_chi_headroom: int | None = None,
         _reservation: Reservation | None = None,
     ) -> TransactionSubmission:
-        """Send a transaction using an explicit broadcast mode."""
+        """Send a transaction using an explicit broadcast mode on a resolved chain."""
         mode, wait_for_tx, wait_options = self._submission_settings(
             mode, wait_for_tx, timeout_seconds, poll_interval_seconds
         )
 
         async def wait(tx_hash: str) -> TransactionReceipt:
             return await self.wait_for_tx(tx_hash, **wait_options)
-
-        if chain_id is None:
-            await self.ensure_chain_id()
-            chain_id = self.chain_id
 
         estimated_stamps: int | None = None
         supplied_stamps = chi
@@ -916,8 +917,15 @@ class XianAsync:
         response = data.get("result", {})
         result["submitted"] = True
         result["tx_hash"] = response.get("hash") or local_tx_hash
+        self._apply_admission_outcome(result, response, mode)
+
+    @classmethod
+    def _apply_admission_outcome(
+        cls, result: dict[str, Any], response: dict[str, Any], mode: str
+    ) -> None:
+        """Record what the node's answer for ``mode`` proves about the transaction."""
         if mode == "commit":
-            self._apply_commit_outcome(result, response)
+            cls._apply_commit_outcome(result, response)
         elif mode == "async":
             result["accepted"] = None
         else:
@@ -930,11 +938,7 @@ class XianAsync:
         check_tx = response.get("check_tx", {})
         deliver_tx = response.get("deliver_tx") or response.get("tx_result") or {}
         accepted = check_tx.get("code", 1) == 0
-        finalized = (
-            accepted
-            and deliver_tx.get("code", 1) == 0
-            and str(response.get("height") or "0") != "0"
-        )
+        finalized = accepted and _executed_in_block(response, deliver_tx)
         result.update(accepted=accepted, finalized=finalized)
         if not accepted:
             result["message"] = check_tx.get("log") or "CheckTx failed"
