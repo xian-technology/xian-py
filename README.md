@@ -196,7 +196,7 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
     submission = client.token().transfer(
         "bob",
         5,
-        chi=estimate["suggested"],
+        chi=estimate["estimated"],
         mode="checktx",
         wait_for_tx=True,
     )
@@ -205,13 +205,13 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
         print(submission.receipt.success, submission.receipt.chi_used)
 ```
 
-`estimate_chi` returns the exact simulated `estimated` value and the
-`suggested` supply: `estimate + max(ceil(estimate * chi_margin),
-min_chi_headroom)`, with `SubmissionConfig` defaults `chi_margin=0.05` and
-`min_chi_headroom=10`. Automatic sends use `suggested`; simulated cost can
-drift before execution and unused chi is refunded. Explicit `chi`, or
-per-call `chi_margin`/`min_chi_headroom`, always win. xian-js uses the same
-rule.
+`estimate_chi` returns the simulated `estimated` value, which is the chi to
+supply, with the full `simulation`. Automatic sends supply exactly that, with
+no headroom: for the same chain state, execution charges what the simulation
+reports. An explicit `chi` always wins. If the state changes between the
+estimate and execution (for example a pool moved or a recipient was
+created), the transaction can run out of chi and fails with `Out of chi.`;
+estimate again and resubmit. xian-js uses the same rule.
 
 A "tx already exists in cache/mempool" response is reported as
 `submitted=True, accepted=None` under the local transaction hash, and the

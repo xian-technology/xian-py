@@ -229,8 +229,6 @@ class AsyncContractClient:
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
         **contract_kwargs: Any,
     ) -> TransactionSubmission:
         return await self.client.send_tx(
@@ -244,8 +242,6 @@ class AsyncContractClient:
             wait_for_tx=wait_for_tx,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
-            chi_margin=chi_margin,
-            min_chi_headroom=min_chi_headroom,
         )
 
     async def get_source(self) -> str | None:
@@ -307,8 +303,6 @@ class ContractClient:
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
         **contract_kwargs: Any,
     ) -> TransactionSubmission:
         return self.client.send_tx(
@@ -322,8 +316,6 @@ class ContractClient:
             wait_for_tx=wait_for_tx,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
-            chi_margin=chi_margin,
-            min_chi_headroom=min_chi_headroom,
         )
 
     def get_source(self) -> str | None:
@@ -354,8 +346,6 @@ class AsyncTokenClient(AsyncContractClient):
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         return await self.client.send(
             amount=amount,
@@ -366,8 +356,6 @@ class AsyncTokenClient(AsyncContractClient):
             wait_for_tx=wait_for_tx,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
-            chi_margin=chi_margin,
-            min_chi_headroom=min_chi_headroom,
         )
 
     async def approve(
@@ -380,8 +368,6 @@ class AsyncTokenClient(AsyncContractClient):
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         return await self.client.approve(
             contract=spender,
@@ -392,8 +378,6 @@ class AsyncTokenClient(AsyncContractClient):
             wait_for_tx=wait_for_tx,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
-            chi_margin=chi_margin,
-            min_chi_headroom=min_chi_headroom,
         )
 
     async def allowance(
@@ -433,8 +417,6 @@ class TokenClient(ContractClient):
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         return self.client.send(
             amount=amount,
@@ -445,8 +427,6 @@ class TokenClient(ContractClient):
             wait_for_tx=wait_for_tx,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
-            chi_margin=chi_margin,
-            min_chi_headroom=min_chi_headroom,
         )
 
     def approve(
@@ -459,8 +439,6 @@ class TokenClient(ContractClient):
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         return self.client.approve(
             contract=spender,
@@ -471,8 +449,6 @@ class TokenClient(ContractClient):
             wait_for_tx=wait_for_tx,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
-            chi_margin=chi_margin,
-            min_chi_headroom=min_chi_headroom,
         )
 
     def allowance(

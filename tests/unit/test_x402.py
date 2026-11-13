@@ -301,8 +301,9 @@ def test_payment_required_selection_and_price_guards() -> None:
 
 
 class _FakeContract:
-    def __init__(self) -> None:
+    def __init__(self, receipt: object | None = None) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
+        self.receipt = receipt or SimpleNamespace(success=True, message=None)
 
     async def send(self, function: str, **kwargs: object) -> object:
         self.calls.append((function, kwargs))
@@ -310,22 +311,39 @@ class _FakeContract:
             submitted=True,
             accepted=True,
             finalized=True,
-            receipt=SimpleNamespace(success=True, message=None),
+            receipt=self.receipt,
             message=None,
             tx_hash="tx-x402",
         )
 
 
 class _FakeClient:
-    def __init__(self) -> None:
-        self.fake_contract = _FakeContract()
+    def __init__(self, receipt: object | None = None) -> None:
+        self.fake_contract = _FakeContract(receipt)
 
     def contract(self, name: str) -> _FakeContract:
         assert name == "con_x402_settlement"
         return self.fake_contract
 
 
-def test_facilitator_settlement_forwards_chi_defaults() -> None:
+def test_facilitator_settlement_reports_the_failed_receipt_message() -> None:
+    wallet = Wallet()
+    requirement = _requirement()
+    payload = sign_xian_x402_payment(
+        requirement,
+        wallet,
+        payment_id="pay_1234567890abcdef",
+        deadline="2099-01-01 00:00:00",
+    )
+    client = _FakeClient(receipt=SimpleNamespace(success=False, message="Out of chi."))
+    facilitator = XianX402Facilitator(client=client, requirement=requirement)
+
+    result = asyncio.run(facilitator.settle(payload))
+
+    assert (result.success, result.transaction, result.error) == (False, "tx-x402", "Out of chi.")
+
+
+def test_facilitator_settlement_forwards_the_settlement_call() -> None:
     wallet = Wallet()
     requirement = _requirement()
     payload = sign_xian_x402_payment(
@@ -343,9 +361,6 @@ def test_facilitator_settlement_forwards_chi_defaults() -> None:
     assert result.transaction == "tx-x402"
     function, kwargs = client.fake_contract.calls[0]
     assert function == "settle"
-    # None defers to the client's SubmissionConfig headroom.
-    assert kwargs["chi_margin"] is None
-    assert kwargs["min_chi_headroom"] is None
     assert kwargs["settlement_contract"] == "con_x402_settlement"
     assert kwargs["permit_nonce"] == payload.permit_nonce
 

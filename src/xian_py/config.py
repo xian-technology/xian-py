@@ -1,31 +1,9 @@
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Literal
 
 DEFAULT_VM_PROFILE: Literal["xian_vm_v2"] = "xian_vm_v2"
-# Shared with xian-js: supply estimate + max(ceil(estimate * 5%), 10) chi.
-# Simulated cost can drift before execution; unused chi is refunded.
-DEFAULT_CHI_MARGIN = 0.05
-DEFAULT_MIN_CHI_HEADROOM = 10
-
-
-def _validate_chi_headroom(chi_margin: float, min_chi_headroom: int) -> None:
-    if not isinstance(chi_margin, (int, float)) or isinstance(chi_margin, bool):
-        raise ValueError("chi_margin must be a finite non-negative number")
-    if not math.isfinite(chi_margin) or chi_margin < 0:
-        raise ValueError("chi_margin must be a finite non-negative number")
-    if type(min_chi_headroom) is not int or min_chi_headroom < 0:
-        raise ValueError("min_chi_headroom must be a non-negative integer")
-
-
-def suggest_chi_supplied(estimated: int, *, chi_margin: float, min_chi_headroom: int) -> int:
-    """Return the chi to supply for a simulated ``estimated`` cost."""
-    _validate_chi_headroom(chi_margin, min_chi_headroom)
-    if type(estimated) is not int or estimated < 0:
-        raise ValueError("estimated chi must be a non-negative integer")
-    return estimated + max(math.ceil(estimated * chi_margin), min_chi_headroom)
 
 
 @dataclass(frozen=True)
@@ -66,11 +44,6 @@ class SubmissionConfig:
     wait_for_tx: bool = False
     timeout_seconds: float = 30.0
     poll_interval_seconds: float = 0.25
-    chi_margin: float = DEFAULT_CHI_MARGIN
-    min_chi_headroom: int = DEFAULT_MIN_CHI_HEADROOM
-
-    def __post_init__(self):
-        _validate_chi_headroom(self.chi_margin, self.min_chi_headroom)
 
 
 @dataclass(frozen=True)

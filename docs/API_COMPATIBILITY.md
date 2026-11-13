@@ -32,6 +32,18 @@ integer account index, not a path list. This pre-launch change intentionally
 changes accounts previously derived through the path API. It does not change
 Ethereum derivation or existing private-key imports.
 
+Automatic chi supplies exactly the simulated `chi_used`. The chi headroom
+rule is removed: `suggest_chi_supplied`, `DEFAULT_CHI_MARGIN`,
+`DEFAULT_MIN_CHI_HEADROOM`, `SubmissionConfig.chi_margin` and
+`SubmissionConfig.min_chi_headroom`, the `XianAsync.DEFAULT_CHI_MARGIN` and
+`XianAsync.DEFAULT_MIN_CHI_HEADROOM` attributes, the `chi_margin` and
+`min_chi_headroom` arguments of every send helper and of `estimate_chi`, the
+`settlement_chi_margin`/`settlement_min_chi_headroom` options of
+`XianX402Facilitator`, and the `suggested` key of `estimate_chi`. Callers
+supply `estimated` (or let the send helpers estimate). On contract clients a
+leftover `chi_margin=` keyword is now passed to the contract as a call
+argument, so remove it.
+
 ## Additive Surface
 
 - `Wallet.from_mnemonic(mnemonic, account_index=0)` derives accounts with the
@@ -45,6 +57,7 @@ Release checklist:
   submission path in release notes
 - call out removed low-level transaction sync wrappers and the removed
   `EthereumWallet.public_key` address alias
+- call out the removed chi headroom API (exact simulated chi supply)
 - done: downstream examples use `deploy_contract(...)` / source submission
 - keep `/contract_source/<name>` and `/contract_ir/<name>` as the explicit SDK
   retrieval paths for deployed source and canonical IR

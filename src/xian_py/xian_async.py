@@ -29,9 +29,7 @@ from xian_py.application_clients import (
 )
 from xian_py.config import (
     RetryEvent,
-    SubmissionConfig,
     XianClientConfig,
-    suggest_chi_supplied,
 )
 from xian_py.exception import (
     AbciError,
@@ -72,11 +70,23 @@ def _executed_in_block(response: dict[str, Any], deliver_tx: dict[str, Any]) -> 
     return deliver_tx.get("code", 1) == 0 and str(response.get("height") or "0") != "0"
 
 
+def _settle_nonce_reservation(
+    state: NonceState, reservation: Reservation, result: TransactionSubmission
+) -> None:
+    """Release a rejected nonce; keep an uncertain broadcast's nonce reserved."""
+    if result.accepted is False:
+        response = result.response.get("result", {})
+        code = response.get("check_tx", response).get("code")
+        if code is not None and code != 0:
+            state.reject()
+        else:
+            state.quarantine(reservation)
+    elif result.accepted is None and not result.finalized:
+        state.quarantine(reservation)
+
+
 class XianAsync:
     """Async version of the Xian class for non-blocking operations."""
-
-    DEFAULT_CHI_MARGIN = SubmissionConfig().chi_margin
-    DEFAULT_MIN_CHI_HEADROOM = SubmissionConfig().min_chi_headroom
 
     def __init__(
         self,
@@ -617,18 +627,8 @@ class XianAsync:
         contract: str,
         function: str,
         kwargs: dict,
-        *,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
     ) -> dict[str, Any]:
-        resolved_chi_margin = (
-            self.config.submission.chi_margin if chi_margin is None else chi_margin
-        )
-        resolved_min_chi_headroom = (
-            self.config.submission.min_chi_headroom
-            if min_chi_headroom is None
-            else min_chi_headroom
-        )
+        """Simulate the call; ``estimated`` is the chi to supply for it."""
         payload = {
             "contract": contract,
             "function": function,
@@ -643,17 +643,7 @@ class XianAsync:
                 session=self.session,
             )
         )
-        estimated = int(simulation["chi_used"])
-        suggested = suggest_chi_supplied(
-            estimated,
-            chi_margin=resolved_chi_margin,
-            min_chi_headroom=resolved_min_chi_headroom,
-        )
-        return {
-            "estimated": estimated,
-            "suggested": suggested,
-            "simulation": simulation,
-        }
+        return {"estimated": int(simulation["chi_used"]), "simulation": simulation}
 
     async def _reserve_nonce(self, explicit_nonce: int | None, chain_id=None) -> int:
         if explicit_nonce is not None:
@@ -672,8 +662,6 @@ class XianAsync:
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         """Submit in nonce order; uncertain broadcasts retain their reservation."""
         if chain_id is None:
@@ -691,8 +679,6 @@ class XianAsync:
                 wait_for_tx=wait_for_tx,
                 timeout_seconds=timeout_seconds,
                 poll_interval_seconds=poll_interval_seconds,
-                chi_margin=chi_margin,
-                min_chi_headroom=min_chi_headroom,
             )
         state = self._nonce_state(chain_id)
         async with state.send_lock:
@@ -709,8 +695,6 @@ class XianAsync:
                     wait_for_tx=wait_for_tx,
                     timeout_seconds=timeout_seconds,
                     poll_interval_seconds=poll_interval_seconds,
-                    chi_margin=chi_margin,
-                    min_chi_headroom=min_chi_headroom,
                     _reservation=reservation,
                 )
             except BaseException as exc:
@@ -722,15 +706,7 @@ class XianAsync:
                     else:
                         state.release(reservation)
                 raise
-            if result.accepted is False:
-                response = result.response.get("result", {})
-                code = response.get("check_tx", response).get("code")
-                if code is not None and code != 0:
-                    state.reject()
-                else:
-                    state.quarantine(reservation)
-            elif result.accepted is None and not result.finalized:
-                state.quarantine(reservation)
+            _settle_nonce_reservation(state, reservation, result)
             return result
 
     async def _send_tx(
@@ -745,8 +721,6 @@ class XianAsync:
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
         _reservation: Reservation | None = None,
     ) -> TransactionSubmission:
         """Send a transaction using an explicit broadcast mode on a resolved chain."""
@@ -760,9 +734,8 @@ class XianAsync:
         estimated_stamps: int | None = None
         supplied_stamps = chi
         if supplied_stamps is None:
-            estimated_stamps, supplied_stamps = await self._estimated_chi_supply(
-                contract, function, kwargs, chi_margin, min_chi_headroom
-            )
+            estimate = await self.estimate_chi(contract, function, kwargs)
+            estimated_stamps = supplied_stamps = estimate["estimated"]
 
         reservation = _reservation or Reservation()
         reservation.nonce = await self._reserve_nonce(nonce, chain_id)
@@ -838,23 +811,6 @@ class XianAsync:
         if wait_for_tx is None:
             wait_for_tx = submission.wait_for_tx
         return mode, wait_for_tx, wait_options
-
-    async def _estimated_chi_supply(
-        self,
-        contract: str,
-        function: str,
-        kwargs: dict,
-        chi_margin: float | None,
-        min_chi_headroom: int | None,
-    ) -> tuple[int, int]:
-        estimate = await self.estimate_chi(
-            contract,
-            function,
-            kwargs,
-            chi_margin=chi_margin,
-            min_chi_headroom=min_chi_headroom,
-        )
-        return estimate["estimated"], int(estimate["suggested"])
 
     @staticmethod
     async def _recover_by_local_hash(
@@ -955,8 +911,6 @@ class XianAsync:
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         """Send a token to a given address."""
         return await self.send_tx(
@@ -968,8 +922,6 @@ class XianAsync:
             wait_for_tx=wait_for_tx,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
-            chi_margin=chi_margin,
-            min_chi_headroom=min_chi_headroom,
         )
 
     async def simulate(self, contract: str, function: str, kwargs: dict) -> dict:
@@ -1073,8 +1025,6 @@ class XianAsync:
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
     ) -> TransactionSubmission:
         """Approve a contract to spend a token amount."""
         return await self.send_tx(
@@ -1086,8 +1036,6 @@ class XianAsync:
             wait_for_tx=wait_for_tx,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
-            chi_margin=chi_margin,
-            min_chi_headroom=min_chi_headroom,
         )
 
     async def submit_contract(
@@ -1100,8 +1048,6 @@ class XianAsync:
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
         nonce: int = None,
     ) -> TransactionSubmission:
         """Submit a contract to the network."""
@@ -1122,8 +1068,6 @@ class XianAsync:
             wait_for_tx=wait_for_tx,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
-            chi_margin=chi_margin,
-            min_chi_headroom=min_chi_headroom,
         )
 
     async def deploy_contract(
@@ -1136,8 +1080,6 @@ class XianAsync:
         wait_for_tx: bool | None = None,
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
         nonce: int = None,
         *,
         lint: bool = True,
@@ -1153,8 +1095,6 @@ class XianAsync:
             wait_for_tx=wait_for_tx,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
-            chi_margin=chi_margin,
-            min_chi_headroom=min_chi_headroom,
         )
 
     async def get_nodes(self) -> list[str]:

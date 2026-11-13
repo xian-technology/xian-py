@@ -602,6 +602,21 @@ def verify_xian_x402_payment(
     )
 
 
+def _settlement_outcome(submission: Any, *, wait_for_tx: bool | None) -> tuple[bool, str | None]:
+    """Whether a settlement submission paid, and the error when it did not."""
+    receipt = submission.receipt
+    receipt_failed = receipt is not None and not receipt.success
+    success = (
+        submission.submitted
+        and submission.accepted is not False
+        and not receipt_failed
+        and (not wait_for_tx or submission.finalized)
+    )
+    if success:
+        return True, None
+    return False, receipt.message if receipt_failed else submission.message
+
+
 class XianX402Facilitator:
     def __init__(
         self,
@@ -609,14 +624,10 @@ class XianX402Facilitator:
         client: Any,
         requirement: XianX402PaymentRequirement,
         permit_authorizer_contract: str = DEFAULT_PERMIT_AUTHORIZER_CONTRACT,
-        settlement_chi_margin: float | None = None,
-        settlement_min_chi_headroom: int | None = None,
     ) -> None:
         self.client = client
         self.requirement = requirement
         self.permit_authorizer_contract = permit_authorizer_contract
-        self.settlement_chi_margin = settlement_chi_margin
-        self.settlement_min_chi_headroom = settlement_min_chi_headroom
 
     def verify(self, payload: XianX402PaymentPayload) -> XianX402VerificationResult:
         return verify_xian_x402_payment(
@@ -632,8 +643,6 @@ class XianX402Facilitator:
         mode: str | None = "checktx",
         wait_for_tx: bool | None = True,
         chi: int | None = None,
-        chi_margin: float | None = None,
-        min_chi_headroom: int | None = None,
     ) -> XianX402SettlementResult:
         verification = self.verify(payload)
         if not verification.valid:
@@ -669,21 +678,8 @@ class XianX402Facilitator:
             mode=mode,
             wait_for_tx=wait_for_tx,
             chi=chi,
-            chi_margin=(self.settlement_chi_margin if chi_margin is None else chi_margin),
-            min_chi_headroom=(
-                self.settlement_min_chi_headroom if min_chi_headroom is None else min_chi_headroom
-            ),
         )
-        receipt_failed = submission.receipt is not None and not submission.receipt.success
-        success = (
-            submission.submitted
-            and submission.accepted is not False
-            and not receipt_failed
-            and (not wait_for_tx or submission.finalized)
-        )
-        error = submission.message
-        if receipt_failed and submission.receipt is not None:
-            error = submission.receipt.message
+        success, error = _settlement_outcome(submission, wait_for_tx=wait_for_tx)
         return XianX402SettlementResult(
             success=success,
             network=payload.network,
@@ -693,7 +689,7 @@ class XianX402Facilitator:
             asset=payload.asset,
             amount=str(payload.amount),
             transaction=submission.tx_hash,
-            error=None if success else error,
+            error=error,
             submission=submission,
         )
 

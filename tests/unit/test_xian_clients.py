@@ -340,8 +340,7 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
     create_payload = create_tx.call_args.args[0]
     assert create_payload["chain_id"] == "xian-mainnet-1"
     assert create_payload["nonce"] == 11
-    # Default headroom: estimate + max(ceil(5%), 10 chi); unused chi is refunded.
-    assert create_payload["chi_supplied"] == 87
+    assert create_payload["chi_supplied"] == 77
     broadcast_tx_wait_async.assert_awaited_once()
     broadcast_args = broadcast_tx_wait_async.await_args
     assert broadcast_args.args[0] == "http://node"
@@ -353,18 +352,12 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
     assert result.finalized is False
     assert result.tx_hash == "abc123"
     assert result.chi_estimated == 77
-    assert result.chi_supplied == 87
+    assert result.chi_supplied == 77
 
 
-def test_xian_async_estimate_chi_reports_exact_estimate_and_suggested_headroom() -> None:
+def test_xian_async_estimate_chi_reports_the_simulated_chi_to_supply() -> None:
     wallet = Wallet()
-    config = XianClientConfig(
-        submission=SubmissionConfig(
-            chi_margin=0.50,
-            min_chi_headroom=100,
-        )
-    )
-    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet, config=config)
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
 
     async def run_estimate() -> dict[str, object]:
         try:
@@ -384,8 +377,7 @@ def test_xian_async_estimate_chi_reports_exact_estimate_and_suggested_headroom()
         estimate = asyncio.run(run_estimate())
 
     simulate_tx_async.assert_awaited_once()
-    assert estimate["estimated"] == 77
-    assert estimate["suggested"] == 177
+    assert estimate == {"estimated": 77, "simulation": {"chi_used": 77, "status": 0}}
 
 
 def test_xian_async_submit_contract_forwards_source_code() -> None:
@@ -489,9 +481,9 @@ def test_xian_async_submit_contract_estimates_chi_from_source_payload() -> None:
     assert "deployment_artifacts" not in simulated_payload["kwargs"]
 
     signed_payload = create_tx.call_args.args[0]
-    assert signed_payload["chi_supplied"] == 100
+    assert signed_payload["chi_supplied"] == 90
     assert result.chi_estimated == 90
-    assert result.chi_supplied == 100
+    assert result.chi_supplied == 90
 
 
 def test_xian_submit_contract_forwards_source_code() -> None:
@@ -555,8 +547,6 @@ def test_xian_async_deploy_contract_submits_source_code() -> None:
         wait_for_tx=None,
         timeout_seconds=None,
         poll_interval_seconds=None,
-        chi_margin=None,
-        min_chi_headroom=None,
     )
 
 
@@ -3516,8 +3506,6 @@ def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:
             wait_for_tx=True,
             timeout_seconds=1.0,
             poll_interval_seconds=0.0,
-            chi_margin=0.25,
-            min_chi_headroom=5,
         )
     )
     client = XianAsync(
@@ -3571,50 +3559,10 @@ def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:
                         result = asyncio.run(run_send())
 
     create_payload = create_tx.call_args.args[0]
-    assert create_payload["chi_supplied"] == 100
+    assert create_payload["chi_supplied"] == 80
     assert result.submitted is True
     assert result.finalized is True
     assert result.receipt is not None
-
-
-def test_xian_async_send_tx_uses_per_call_chi_headroom() -> None:
-    wallet = Wallet()
-    client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)
-
-    async def run_send() -> TransactionSubmission:
-        try:
-            return await client.send_tx(
-                "currency",
-                "transfer",
-                {"amount": 1, "to": wallet.public_key},
-                chi_margin=1.0,
-                min_chi_headroom=5000,
-            )
-        finally:
-            await client.close()
-
-    with patch.object(tr, "get_nonce_async", AsyncMock(return_value=11)):
-        with patch.object(
-            tr,
-            "simulate_tx_async",
-            AsyncMock(return_value={"chi_used": 1167}),
-        ):
-            with patch.object(
-                tr,
-                "create_tx",
-                return_value={"signed": True},
-            ) as create_tx:
-                with patch.object(
-                    tr,
-                    "broadcast_tx_wait_async",
-                    AsyncMock(return_value={"result": {"hash": "abc123", "code": 0}}),
-                ):
-                    result = asyncio.run(run_send())
-
-    create_payload = create_tx.call_args.args[0]
-    assert create_payload["chi_supplied"] == 6167
-    assert result.chi_estimated == 1167
-    assert result.chi_supplied == 6167
 
 
 def test_xian_async_watch_events_uses_watcher_defaults_from_config() -> None:
@@ -3713,8 +3661,6 @@ def test_async_contract_client_send_merges_kwargs() -> None:
         wait_for_tx=None,
         timeout_seconds=None,
         poll_interval_seconds=None,
-        chi_margin=None,
-        min_chi_headroom=None,
     )
 
 
@@ -3762,8 +3708,6 @@ def test_async_token_client_uses_token_helpers() -> None:
         wait_for_tx=None,
         timeout_seconds=None,
         poll_interval_seconds=None,
-        chi_margin=None,
-        min_chi_headroom=None,
     )
 
 
@@ -3904,55 +3848,6 @@ def test_v1_get_state_preserves_versioned_set_member_types(nested):
 
 
 @pytest.mark.parametrize(
-    ("estimated", "margin", "headroom", "suggested"),
-    [
-        (0, 0.05, 10, 10),
-        (77, 0.05, 10, 87),
-        (1000, 0.05, 10, 1050),
-        (1001, 0.05, 10, 1052),
-        (77, 0.0, 0, 77),
-        (77, 0.5, 100, 177),
-    ],
-)
-def test_suggest_chi_supplied_applies_the_shared_headroom_rule(
-    estimated, margin, headroom, suggested
-) -> None:
-    from xian_py.config import suggest_chi_supplied
-
-    assert suggest_chi_supplied(estimated, chi_margin=margin, min_chi_headroom=headroom) == (
-        suggested
-    )
-
-
-def test_submission_config_defaults_to_shared_chi_headroom() -> None:
-    from xian_py.config import DEFAULT_CHI_MARGIN, DEFAULT_MIN_CHI_HEADROOM
-
-    assert (DEFAULT_CHI_MARGIN, DEFAULT_MIN_CHI_HEADROOM) == (0.05, 10)
-    config = SubmissionConfig()
-    assert (config.chi_margin, config.min_chi_headroom) == (0.05, 10)
-
-
-@pytest.mark.parametrize(
-    "kwargs",
-    [
-        {"chi_margin": -0.01},
-        {"chi_margin": float("nan")},
-        {"chi_margin": float("inf")},
-        {"min_chi_headroom": -1},
-        {"min_chi_headroom": 1.5},
-        {"min_chi_headroom": True},
-    ],
-)
-def test_chi_headroom_rejects_invalid_settings(kwargs) -> None:
-    from xian_py.config import suggest_chi_supplied
-
-    with pytest.raises(ValueError):
-        SubmissionConfig(**kwargs)
-    with pytest.raises(ValueError):
-        suggest_chi_supplied(10, **{"chi_margin": 0.05, "min_chi_headroom": 10, **kwargs})
-
-
-@pytest.mark.parametrize(
     ("mode", "broadcaster", "response"),
     [
         (
@@ -4060,22 +3955,6 @@ def test_xian_async_commit_outcomes(response, accepted, finalized, message) -> N
     wait_for_tx.assert_not_awaited()
     assert (result.submitted, result.accepted, result.finalized) == (True, accepted, finalized)
     assert result.message == message
-
-
-@pytest.mark.parametrize("chi_margin", [True, "0.1", None])
-def test_chi_margin_must_be_a_real_number(chi_margin) -> None:
-    from xian_py.config import suggest_chi_supplied
-
-    with pytest.raises(ValueError):
-        suggest_chi_supplied(10, chi_margin=chi_margin, min_chi_headroom=10)
-
-
-@pytest.mark.parametrize("estimated", [-1, 1.5, True, "10"])
-def test_suggest_chi_supplied_requires_a_non_negative_integer_estimate(estimated) -> None:
-    from xian_py.config import suggest_chi_supplied
-
-    with pytest.raises(ValueError):
-        suggest_chi_supplied(estimated, chi_margin=0.05, min_chi_headroom=10)
 
 
 def _send_checktx(client: XianAsync, broadcast: AsyncMock, **kwargs) -> TransactionSubmission:
