@@ -1081,8 +1081,6 @@ class XianAsync:
         timeout_seconds: float | None = None,
         poll_interval_seconds: float | None = None,
         nonce: int = None,
-        *,
-        lint: bool = True,
     ) -> TransactionSubmission:
         """Submit contract source for node-side compilation and deployment."""
         return await self.submit_contract(

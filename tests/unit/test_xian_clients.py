@@ -524,7 +524,6 @@ def test_xian_async_deploy_contract_submits_source_code() -> None:
                 "con_probe",
                 "value = Variable()\n",
                 args={"value": 7},
-                lint=False,
             )
         finally:
             await client.close()
@@ -561,7 +560,6 @@ def test_xian_async_deploy_contract_does_not_require_local_compiler() -> None:
                 "con_complex_ledger",
                 COMPLEX_LEDGER_SOURCE,
                 args={"initial_owner": "alice", "supply": 100},
-                lint=True,
             )
         finally:
             await client.close()
@@ -599,7 +597,6 @@ def test_xian_deploy_contract_forwards_to_async_client() -> None:
                 "con_probe",
                 "value = Variable()\n",
                 args={"value": 7},
-                lint=False,
             )
     finally:
         client.close()
@@ -609,8 +606,20 @@ def test_xian_deploy_contract_forwards_to_async_client() -> None:
         "con_probe",
         "value = Variable()\n",
         args={"value": 7},
-        lint=False,
     )
+
+
+def test_xian_async_deploy_contract_has_no_lint_option() -> None:
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
+
+    async def run_deploy():
+        try:
+            return await client.deploy_contract("con_probe", "value = Variable()\n", lint=True)
+        finally:
+            await client.close()
+
+    with pytest.raises(TypeError, match="lint"):
+        asyncio.run(run_deploy())
 
 
 def test_xian_async_rejects_non_ed25519_wallets() -> None:
