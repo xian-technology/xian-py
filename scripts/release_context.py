@@ -29,9 +29,7 @@ POLICIES = {
         "component_packages": {
             "xian-tech-accounts": "packages/xian-accounts/pyproject.toml",
             "xian-tech-compiler-core": "packages/xian-compiler-core/pyproject.toml",
-            "xian-tech-contracting": "pyproject.toml",
             "xian-tech-runtime-types": "packages/xian-runtime-types/pyproject.toml",
-            "xian-tech-vm-core": "packages/xian-vm-core/pyproject.toml",
         },
     },
     "xian-tech-linter": {
@@ -39,7 +37,6 @@ POLICIES = {
         "repository": "xian-technology/xian-contracting",
         "component_packages": {
             "xian-tech-compiler-core": "packages/xian-compiler-core/pyproject.toml",
-            "xian-tech-contracting": "pyproject.toml",
             "xian-tech-runtime-types": "packages/xian-runtime-types/pyproject.toml",
             "xian-tech-vm-core": "packages/xian-vm-core/pyproject.toml",
         },

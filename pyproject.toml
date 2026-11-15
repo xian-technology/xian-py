@@ -20,7 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 compile = [
-    "xian-tech-contracting>=1.1.4,<2",
+    "xian-tech-compiler-core>=0.2.1,<0.3",
 ]
 hd = [
     "mnemonic>=0.21,<0.22",
@@ -63,5 +63,5 @@ ignore = ["E501"]
 
 [tool.uv.sources]
 xian-tech-accounts = { path = "../xian-contracting/packages/xian-accounts", editable = true }
-xian-tech-contracting = { path = "../xian-contracting", editable = true }
+xian-tech-compiler-core = { path = "../xian-contracting/packages/xian-compiler-core" }
 xian-tech-runtime-types = { path = "../xian-contracting/packages/xian-runtime-types", editable = true }

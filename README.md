@@ -258,17 +258,18 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
 `deploy_contract` and `submit_contract` submit cleartext source. Nodes compile
 submitted source and persist canonical IR, so normal deployment does not require
 the `compile` extra. To inspect the same V2 profile offline, install
-`xian-tech-py[compile]` and use the compiler's artifact API.
+`xian-tech-py[compile]`, which adds the Rust compiler core
+(`xian-tech-compiler-core`), and use its artifact API.
 
 ```python
-from contracting.artifacts import build_contract_artifacts
+import xian_compiler_core
 
-artifact = build_contract_artifacts(module_name="con_counter", source=source)
+artifact = xian_compiler_core.compile_contract_artifact("con_counter", source)
 assert artifact["vm_profile"] == "xian_vm_v2"
 ```
 
 To reproduce an archived V1 artifact, pass `vm_profile="xian_vm_v1"` to
-`build_contract_artifacts`.
+`compile_contract_artifact`.
 
 Query BDS-backed history:
 
