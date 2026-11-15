@@ -355,6 +355,69 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
     assert result.chi_supplied == 79
 
 
+def _send_with_node(client, simulation, *, nonce=None, network_nonce=10):
+    """Run an automatic-chi transfer against a mocked node; return the mocks."""
+
+    async def run() -> TransactionSubmission:
+        try:
+            return await client.send_tx(
+                "currency", "transfer", {"amount": 1, "to": "bob"}, nonce=nonce
+            )
+        finally:
+            await client.close()
+
+    simulate = AsyncMock(return_value=simulation)
+    broadcast = AsyncMock(return_value={"result": {"code": 0, "hash": "abc123"}})
+    with (
+        patch.object(tr, "get_nonce_async", AsyncMock(return_value=network_nonce)),
+        patch.object(tr, "simulate_tx_async", simulate),
+        patch.object(tr, "broadcast_tx_wait_async", broadcast),
+    ):
+        outcome = asyncio.run(run())
+    return outcome, simulate, broadcast
+
+
+@pytest.mark.parametrize("explicit_nonce", [None, 100])
+def test_automatic_chi_is_simulated_with_the_nonce_the_transaction_is_signed_with(
+    explicit_nonce,
+) -> None:
+    # The node sizes the estimated envelope with the payload's nonce, else its
+    # committed next nonce, which ignores this sender's pending transactions:
+    # 9 committed and 10 pending makes the signed envelope a byte longer.
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
+    simulation = {"status": 0, "chi_used": 77, "result": None}
+
+    outcome, simulate, _ = _send_with_node(client, simulation, nonce=explicit_nonce)
+
+    signed_nonce = 10 if explicit_nonce is None else explicit_nonce
+    assert outcome.nonce == signed_nonce
+    assert simulate.await_args.args[1]["nonce"] == signed_nonce
+
+
+@pytest.mark.parametrize(
+    ("chi_used", "result"),
+    [
+        (23, "AssertionError: Not enough coins to send!"),
+        (200_000, "Out of chi."),
+        (0, "Simulation capacity exceeded on this node; retry later"),
+    ],
+)
+def test_automatic_chi_refuses_a_call_whose_simulation_failed(chi_used, result) -> None:
+    # A failed dry run describes a transaction that fails on chain and pays
+    # its fee (or one CheckTx rejects for supplying 0 chi).
+    client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
+    simulation = {"status": 1, "chi_used": chi_used, "result": result, "state": []}
+
+    with pytest.raises(SimulationError, match=result.split(" ")[0]):
+        _send_with_node(client, simulation)
+
+    nonce_after, _, broadcast = _send_with_node(
+        client, {"status": 0, "chi_used": 77, "result": None}
+    )
+    assert nonce_after.nonce == 10
+    broadcast.assert_awaited_once()
+
+
 def test_xian_async_estimate_chi_reports_the_simulated_chi_to_supply() -> None:
     wallet = Wallet()
     client = XianAsync("http://node", chain_id="xian-local-1", wallet=wallet)

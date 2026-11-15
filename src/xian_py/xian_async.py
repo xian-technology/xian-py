@@ -71,6 +71,16 @@ def _executed_in_block(response: dict[str, Any], deliver_tx: dict[str, Any]) -> 
     return deliver_tx.get("code", 1) == 0 and str(response.get("height") or "0") != "0"
 
 
+def _require_executed(simulation: dict[str, Any]) -> dict[str, Any]:
+    """A simulation whose call failed describes a transaction that fails."""
+    if simulation.get("status") not in (None, 0):
+        raise SimulationError(
+            str(simulation.get("result") or "Simulation failed"),
+            details=simulation,
+        )
+    return simulation
+
+
 def _settle_nonce_reservation(
     state: NonceState, reservation: Reservation, result: TransactionSubmission
 ) -> None:
@@ -628,14 +638,24 @@ class XianAsync:
         contract: str,
         function: str,
         kwargs: dict,
+        *,
+        nonce: int | None = None,
     ) -> dict[str, Any]:
-        """Simulate the call; ``estimated`` is the chi it used (see ``chi_to_supply``)."""
+        """Simulate the call; ``estimated`` is the chi it used (see ``chi_to_supply``).
+
+        ``nonce`` is the nonce the transaction will be signed with: its
+        digits are bytes the transaction pays for. Without it the node sizes
+        the envelope with the sender's committed next nonce, which ignores
+        transactions still in the mempool.
+        """
         payload = {
             "contract": contract,
             "function": function,
             "kwargs": kwargs,
             "sender": self.wallet.public_key,
         }
+        if nonce is not None:
+            payload["nonce"] = nonce
         simulation = await self._retry_read(
             lambda: tr.simulate_tx_async(
                 self.node_url,
@@ -732,15 +752,15 @@ class XianAsync:
         async def wait(tx_hash: str) -> TransactionReceipt:
             return await self.wait_for_tx(tx_hash, **wait_options)
 
+        reservation = _reservation or Reservation()
+        reservation.nonce = await self._reserve_nonce(nonce, chain_id)
+
         estimated_stamps: int | None = None
         supplied_stamps = chi
         if supplied_stamps is None:
-            estimate = await self.estimate_chi(contract, function, kwargs)
-            estimated_stamps = estimate["estimated"]
-            supplied_stamps = chi_to_supply(estimated_stamps)
-
-        reservation = _reservation or Reservation()
-        reservation.nonce = await self._reserve_nonce(nonce, chain_id)
+            estimated_stamps, supplied_stamps = await self._automatic_chi(
+                contract, function, kwargs, reservation.nonce
+            )
         tx = tr.create_tx(
             {
                 "chain_id": chain_id,
@@ -789,6 +809,15 @@ class XianAsync:
             if self._duplicate_tx_log(data) is not None:
                 result["accepted"] = True
         return TransactionSubmission.from_dict(result)
+
+    async def _automatic_chi(
+        self, contract: str, function: str, kwargs: dict, nonce: int
+    ) -> tuple[int, int]:
+        """The simulated chi of the signed envelope and the chi to supply
+        (``chi_to_supply``), for a call whose simulation succeeds."""
+        estimate = await self.estimate_chi(contract, function, kwargs, nonce=nonce)
+        _require_executed(estimate["simulation"])
+        return estimate["estimated"], chi_to_supply(estimate["estimated"])
 
     def _submission_settings(
         self,
@@ -943,12 +972,7 @@ class XianAsync:
         )
 
     async def call(self, contract: str, function: str, kwargs: dict) -> Any:
-        simulation = await self.simulate(contract, function, kwargs)
-        if simulation.get("status") not in (None, 0):
-            raise SimulationError(
-                str(simulation.get("result") or "Simulation failed"),
-                details=simulation,
-            )
+        simulation = _require_executed(await self.simulate(contract, function, kwargs))
         result = simulation.get("result")
         if self.config.vm_profile == "xian_vm_v2" or not isinstance(result, str):
             return result

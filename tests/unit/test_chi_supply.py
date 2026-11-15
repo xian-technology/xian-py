@@ -73,7 +73,7 @@ def test_send_tx_keeps_an_explicit_chi_untouched() -> None:
     assert result.chi_supplied == 255
 
 
-def test_send_tx_refuses_an_estimate_above_the_cap_before_reserving_a_nonce() -> None:
+def test_send_tx_refuses_an_estimate_above_the_cap_without_using_a_nonce() -> None:
     client = XianAsync("http://node", chain_id="xian-local-1", wallet=Wallet())
     get_nonce = AsyncMock(return_value=3)
 
@@ -83,10 +83,13 @@ def test_send_tx_refuses_an_estimate_above_the_cap_before_reserving_a_nonce() ->
         finally:
             await client.close()
 
+    # The estimate is simulated with the nonce it will be signed with, so the
+    # nonce is reserved first and released again when the send is refused.
     simulation = {"chi_used": MAX_TX_CHI + 1, "status": 0}
     with patch.object(tr, "get_nonce_async", get_nonce):
         with patch.object(tr, "simulate_tx_async", AsyncMock(return_value=simulation)):
             with pytest.raises(TransactionError, match="exceeds"):
                 asyncio.run(run())
 
-    get_nonce.assert_not_awaited()
+    retried, *_ = _send(client, {"chi_used": 255, "status": 0})
+    assert retried.nonce == 3

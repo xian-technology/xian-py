@@ -215,7 +215,11 @@ the estimate and execution and grows a stored value by a byte, which costs one
 chi more; execution charges only the chi used, so the margin costs nothing.
 If the state changes more than that (for example a pool moved or a recipient
 was created), the transaction can still run out of chi and fails with
-`Out of chi.`; estimate again and resubmit. xian-js uses the same rule.
+`Out of chi.`; estimate again and resubmit. Automatic sends simulate with
+the nonce they sign with (`estimate_chi(..., nonce=n)`; its digits are bytes
+the transaction pays for) and raise `SimulationError`, carrying the
+simulation's error text, instead of submitting a call whose simulation
+failed, which would fail on chain and pay its fee. xian-js uses the same rule.
 
 A "tx already exists in cache/mempool" response is reported as
 `submitted=True, accepted=None` under the local transaction hash, and the
