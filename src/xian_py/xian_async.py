@@ -37,6 +37,7 @@ from xian_py.exception import (
     RpcError,
     SimulationError,
     TransportError,
+    TxNotFoundError,
     XianException,
 )
 from xian_py.models import (
@@ -101,6 +102,25 @@ def _settle_nonce_reservation(
         state.reject()
     elif result.accepted is False or (result.accepted is None and not result.finalized):
         state.quarantine(reservation)
+
+
+def _failure_message(execution: Any, tx_result: dict[str, Any]) -> Any:
+    """What a failed receipt reports: the execution's result or error, the
+    raw execution data, or the node's log."""
+    if isinstance(execution, dict):
+        return execution.get("result") or execution.get("error") or execution
+    if execution is not None:
+        return execution
+    return tx_result.get("log") or "Transaction failed"
+
+
+def _tx_lookup_error(tx_hash: str, error: dict[str, Any]) -> Exception:
+    """The exception for a ``/tx`` error answer: CometBFT reports a hash in
+    no committed block as ``tx (<HASH>) not found`` (rpc/core/tx.go)."""
+    message = error.get("data") or error.get("message") or "RPC error"
+    if re.fullmatch(r"tx \([0-9A-Fa-f]+\) not found", str(message)):
+        return TxNotFoundError(message, details={"tx_hash": tx_hash, **error})
+    return RpcError(message, details=error)
 
 
 class XianAsync:
@@ -517,7 +537,12 @@ class XianAsync:
             return await state.reserve(self._read_network_nonce, refresh=True)
 
     async def get_tx(self, tx_hash: str) -> TransactionReceipt:
-        """Return a decoded transaction receipt."""
+        """Return the decoded receipt of a committed transaction.
+
+        Raises ``TxNotFoundError`` when no committed block holds the hash (the
+        transaction is pending or unknown, which is not a failure: resending
+        it could execute it twice) and ``RpcError`` for any other lookup error.
+        """
         data = await self._retry_read(
             lambda: tr.get_tx_async(
                 self.node_url,
@@ -526,6 +551,8 @@ class XianAsync:
                 session=self.session,
             )
         )
+        if "error" in data:
+            raise _tx_lookup_error(tx_hash, data["error"])
         return self._normalize_tx_lookup(data)
 
     async def get_balance(
@@ -592,23 +619,9 @@ class XianAsync:
                 execution = decode_wire_numbers(execution)
             normalized["execution"] = execution
 
-        if "error" in normalized:
-            normalized["success"] = False
-            normalized["message"] = normalized["error"].get("data") or normalized["error"].get(
-                "message"
-            )
-        elif tx_result.get("code") == 0:
-            normalized["success"] = True
-        else:
-            normalized["success"] = False
-            if isinstance(execution, dict):
-                normalized["message"] = (
-                    execution.get("result") or execution.get("error") or execution
-                )
-            elif execution is not None:
-                normalized["message"] = execution
-            else:
-                normalized["message"] = tx_result.get("log") or "Transaction failed"
+        normalized["success"] = tx_result.get("code") == 0
+        if not normalized["success"]:
+            normalized["message"] = _failure_message(execution, tx_result)
 
         return TransactionReceipt.from_lookup(normalized)
 

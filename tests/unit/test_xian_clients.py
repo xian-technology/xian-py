@@ -1422,6 +1422,34 @@ def test_xian_async_get_tx_surfaces_error_payloads() -> None:
     assert data.message == "boom"
 
 
+@pytest.mark.parametrize(
+    "tx_result, message",
+    [
+        ({"code": 1, "data": {"result": "AssertionError('no')"}}, "AssertionError('no')"),
+        ({"code": 1, "data": "raw failure"}, "raw failure"),
+        ({"code": 1, "data": None, "log": "node log"}, "node log"),
+        ({"code": 1, "data": None}, "Transaction failed"),
+    ],
+)
+def test_xian_async_get_tx_reports_the_failure_message(tx_result, message) -> None:
+    client = XianAsync("http://node", chain_id="xian-local-1")
+
+    with patch.object(
+        tr, "get_tx_async", AsyncMock(return_value={"result": {"tx_result": tx_result}})
+    ):
+
+        async def run_get_tx() -> TransactionReceipt:
+            try:
+                return await client.get_tx("abc123")
+            finally:
+                await client.close()
+
+        data = asyncio.run(run_get_tx())
+
+    assert data.success is False
+    assert data.message == message
+
+
 def test_xian_async_get_tx_exposes_transaction_and_execution() -> None:
     client = XianAsync("http://node", chain_id="xian-local-1")
     tx = {"payload": {"contract": "currency", "function": "transfer"}}

@@ -26,6 +26,7 @@ from xian_py.exception import (
     SimulationError,
     TransactionError,
     TransportError,
+    TxNotFoundError,
     TxTimeoutError,
     XianException,
 )
@@ -159,6 +160,7 @@ __all__ = [
     "TransactionSubmission",
     "TransportConfig",
     "TransportError",
+    "TxNotFoundError",
     "TxTimeoutError",
     "WatcherConfig",
     "Xian",

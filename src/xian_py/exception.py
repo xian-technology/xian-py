@@ -57,3 +57,7 @@ class TxTimeoutError(TransactionError):
 
 class NonceReservationError(TransactionError):
     pass
+
+
+class TxNotFoundError(TransactionError):
+    """No committed block holds the transaction: it is pending or unknown, not failed."""
