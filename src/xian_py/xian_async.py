@@ -1153,9 +1153,15 @@ class XianAsync:
         )
 
     async def get_chain_id(self) -> str:
-        """Retrieve chain_id from the network."""
-        genesis = await self.get_genesis()
-        return genesis["result"]["genesis"]["chain_id"]
+        """Retrieve the chain id the node runs (``/status`` ``node_info.network``).
+
+        ``/genesis`` would also carry it, but CometBFT refuses that document
+        above 16 MiB, which a genesis with migrated balances can reach.
+        """
+        status = await self.get_node_status()
+        if not status.network:
+            raise RpcError("node status did not include node_info.network", details=status.raw)
+        return status.network
 
     async def get_node_status(self) -> NodeStatus:
         payload = await self._retry_read(
