@@ -38,7 +38,7 @@ Read state and submit a transaction with the synchronous client:
 ```python
 import os
 
-from xian_py import Wallet, Xian
+from xian_py import Wallet, Xian, chi_to_supply
 
 wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
 
@@ -196,7 +196,7 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
     submission = client.token().transfer(
         "bob",
         5,
-        chi=estimate["estimated"],
+        chi=chi_to_supply(estimate["estimated"]),
         mode="checktx",
         wait_for_tx=True,
     )
@@ -205,13 +205,17 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
         print(submission.receipt.success, submission.receipt.chi_used)
 ```
 
-`estimate_chi` returns the simulated `estimated` value, which is the chi to
-supply, with the full `simulation`. Automatic sends supply exactly that, with
-no headroom: for the same chain state, execution charges what the simulation
-reports. An explicit `chi` always wins. If the state changes between the
-estimate and execution (for example a pool moved or a recipient was
-created), the transaction can run out of chi and fails with `Out of chi.`;
-estimate again and resubmit. xian-js uses the same rule.
+`estimate_chi` returns the simulated `estimated` chi with the full
+`simulation`. `chi_to_supply(estimated)` turns it into the chi to supply: the
+estimate plus `CHI_ESTIMATE_MARGIN` (2 chi), never more than the chain's
+per-transaction cap `MAX_TX_CHI` (200,000); an estimate above the cap raises
+`TransactionError`. Automatic sends use the same rule, and an explicit `chi`
+always wins unchanged. The margin covers a transaction that lands between
+the estimate and execution and grows a stored value by a byte, which costs one
+chi more; execution charges only the chi used, so the margin costs nothing.
+If the state changes more than that (for example a pool moved or a recipient
+was created), the transaction can still run out of chi and fails with
+`Out of chi.`; estimate again and resubmit. xian-js uses the same rule.
 
 A "tx already exists in cache/mempool" response is reported as
 `submitted=True, accepted=None` under the local transaction hash, and the

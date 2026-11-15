@@ -32,7 +32,9 @@ integer account index, not a path list. This pre-launch change intentionally
 changes accounts previously derived through the path API. It does not change
 Ethereum derivation or existing private-key imports.
 
-Automatic chi supplies exactly the simulated `chi_used`. The chi headroom
+Automatic chi supplies the simulated `chi_used` plus a fixed
+`CHI_ESTIMATE_MARGIN` of 2 chi, capped at `MAX_TX_CHI` (200,000), through the
+new `chi_to_supply(estimated)` helper. The old configurable chi headroom
 rule is removed: `suggest_chi_supplied`, `DEFAULT_CHI_MARGIN`,
 `DEFAULT_MIN_CHI_HEADROOM`, `SubmissionConfig.chi_margin` and
 `SubmissionConfig.min_chi_headroom`, the `XianAsync.DEFAULT_CHI_MARGIN` and
@@ -40,7 +42,7 @@ rule is removed: `suggest_chi_supplied`, `DEFAULT_CHI_MARGIN`,
 `min_chi_headroom` arguments of every send helper and of `estimate_chi`, the
 `settlement_chi_margin`/`settlement_min_chi_headroom` options of
 `XianX402Facilitator`, and the `suggested` key of `estimate_chi`. Callers
-supply `estimated` (or let the send helpers estimate). On contract clients a
+supply `chi_to_supply(estimated)` (or let the send helpers estimate). On contract clients a
 leftover `chi_margin=` keyword is now passed to the contract as a call
 argument, so remove it.
 
@@ -57,7 +59,8 @@ Release checklist:
   submission path in release notes
 - call out removed low-level transaction sync wrappers and the removed
   `EthereumWallet.public_key` address alias
-- call out the removed chi headroom API (exact simulated chi supply)
+- call out the removed chi headroom API and the fixed 2-chi estimate margin
+  (`chi_to_supply`, `CHI_ESTIMATE_MARGIN`, `MAX_TX_CHI`)
 - done: downstream examples use `deploy_contract(...)` / source submission
 - keep `/contract_source/<name>` and `/contract_ir/<name>` as the explicit SDK
   retrieval paths for deployed source and canonical IR

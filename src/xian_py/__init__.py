@@ -10,6 +10,7 @@ from xian_py.application_clients import (
     StateKeyClient,
     TokenClient,
 )
+from xian_py.chi import CHI_ESTIMATE_MARGIN, MAX_TX_CHI, chi_to_supply
 from xian_py.config import (
     RetryEvent,
     RetryPolicy,
@@ -104,6 +105,8 @@ from xian_py.xian_async import XianAsync
 
 __all__ = [
     "AbciError",
+    "CHI_ESTIMATE_MARGIN",
+    "MAX_TX_CHI",
     "NonceReservationError",
     "AsyncContractClient",
     "AsyncEventClient",
@@ -176,6 +179,7 @@ __all__ = [
     "canonical_amount",
     "canonical_permit_amount",
     "chain_id_from_xian_network",
+    "chi_to_supply",
     "contract_deadline",
     "construct_payment_message",
     "construct_permit_authorizer_message",

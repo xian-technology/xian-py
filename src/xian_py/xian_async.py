@@ -27,6 +27,7 @@ from xian_py.application_clients import (
     AsyncStateKeyClient,
     AsyncTokenClient,
 )
+from xian_py.chi import chi_to_supply
 from xian_py.config import (
     RetryEvent,
     XianClientConfig,
@@ -628,7 +629,7 @@ class XianAsync:
         function: str,
         kwargs: dict,
     ) -> dict[str, Any]:
-        """Simulate the call; ``estimated`` is the chi to supply for it."""
+        """Simulate the call; ``estimated`` is the chi it used (see ``chi_to_supply``)."""
         payload = {
             "contract": contract,
             "function": function,
@@ -735,7 +736,8 @@ class XianAsync:
         supplied_stamps = chi
         if supplied_stamps is None:
             estimate = await self.estimate_chi(contract, function, kwargs)
-            estimated_stamps = supplied_stamps = estimate["estimated"]
+            estimated_stamps = estimate["estimated"]
+            supplied_stamps = chi_to_supply(estimated_stamps)
 
         reservation = _reservation or Reservation()
         reservation.nonce = await self._reserve_nonce(nonce, chain_id)

@@ -340,7 +340,7 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
     create_payload = create_tx.call_args.args[0]
     assert create_payload["chain_id"] == "xian-mainnet-1"
     assert create_payload["nonce"] == 11
-    assert create_payload["chi_supplied"] == 77
+    assert create_payload["chi_supplied"] == 79
     broadcast_tx_wait_async.assert_awaited_once()
     broadcast_args = broadcast_tx_wait_async.await_args
     assert broadcast_args.args[0] == "http://node"
@@ -352,7 +352,7 @@ def test_xian_async_send_tx_populates_chain_id_nonce_and_chi() -> None:
     assert result.finalized is False
     assert result.tx_hash == "abc123"
     assert result.chi_estimated == 77
-    assert result.chi_supplied == 77
+    assert result.chi_supplied == 79
 
 
 def test_xian_async_estimate_chi_reports_the_simulated_chi_to_supply() -> None:
@@ -481,9 +481,9 @@ def test_xian_async_submit_contract_estimates_chi_from_source_payload() -> None:
     assert "deployment_artifacts" not in simulated_payload["kwargs"]
 
     signed_payload = create_tx.call_args.args[0]
-    assert signed_payload["chi_supplied"] == 90
+    assert signed_payload["chi_supplied"] == 92
     assert result.chi_estimated == 90
-    assert result.chi_supplied == 90
+    assert result.chi_supplied == 92
 
 
 def test_xian_submit_contract_forwards_source_code() -> None:
@@ -3568,7 +3568,7 @@ def test_xian_async_send_tx_uses_submission_defaults_from_config() -> None:
                         result = asyncio.run(run_send())
 
     create_payload = create_tx.call_args.args[0]
-    assert create_payload["chi_supplied"] == 80
+    assert create_payload["chi_supplied"] == 82
     assert result.submitted is True
     assert result.finalized is True
     assert result.receipt is not None
