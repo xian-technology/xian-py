@@ -3,7 +3,7 @@ import base64
 import hashlib
 import json
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import aiohttp
 import pytest
@@ -657,3 +657,42 @@ def test_abci_query_async_sends_the_exact_path_over_http(state_key: str) -> None
     query = urlsplit(raw_paths[0]).query
     assert ";" not in query  # Go's url.ParseQuery rejects raw semicolons.
     assert parse_qs(query, keep_blank_values=True) == {"path": [f'"{path}"']}
+
+
+@pytest.mark.parametrize(
+    "broadcast_fn",
+    [broadcast_tx_wait_async, broadcast_tx_nowait_async, broadcast_tx_commit_async],
+)
+def test_broadcast_returns_the_node_refusal_sent_with_http_500(broadcast_fn) -> None:
+    # CometBFT answers a refused broadcast (mempool full, catching up,
+    # duplicate in cache) with HTTP 500 and a JSON-RPC error body; that body
+    # is the node's answer, not a lost response.
+    refusal = {
+        "jsonrpc": "2.0",
+        "id": -1,
+        "error": {
+            "code": -32603,
+            "message": "Internal error",
+            "data": "tx already exists in cache",
+        },
+    }
+    http_500 = aiohttp.ClientResponseError(MagicMock(), (), status=500)
+    fake_session = _FakeClientSession(post_responses=[_FakeResponse(refusal, error=http_500)])
+    prepared_tx = prepare_transaction(b'{"payload":{},"metadata":{}}')
+
+    with patch("xian_py.transaction.aiohttp.ClientSession", return_value=fake_session):
+        assert asyncio.run(broadcast_fn("http://node", prepared_tx)) == refusal
+
+
+@pytest.mark.parametrize(
+    ("raised", "expected"),
+    [(ValueError("bad url"), XianException), (TransportError("offline"), TransportError)],
+)
+def test_broadcast_reports_a_request_that_could_not_be_made(raised, expected) -> None:
+    session = MagicMock()
+    session.request.side_effect = raised
+    prepared_tx = prepare_transaction(b'{"payload":{},"metadata":{}}')
+
+    with pytest.raises(expected) as caught:
+        asyncio.run(broadcast_tx_wait_async("http://node", prepared_tx, session=session))
+    assert type(caught.value) is expected

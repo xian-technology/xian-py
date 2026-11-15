@@ -194,3 +194,35 @@ def test_receipt_polling_retries_block_until_actual_execution_results_exist(code
             assert [call.args[1] for call in blocks.await_args_list] == [1, 1]
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "refusal",
+    [
+        "endpoint is closed while node is catching up",
+        "mempool is full: number of txs 5000 (max: 5000), total txs bytes 1 (max: 1073741824)",
+    ],
+)
+@pytest.mark.parametrize(
+    ("mode", "broadcaster"),
+    [("checktx", "broadcast_tx_wait_async"), ("async", "broadcast_tx_nowait_async")],
+)
+def test_node_refusal_rpc_error_releases_the_automatic_nonce(refusal, mode, broadcaster):
+    # CometBFT answers a sync/async broadcast the mempool refused with a
+    # JSON-RPC error: the transaction was never admitted, so the nonce is
+    # free again once the node recovers (no hash to reconcile).
+    refused = {"error": {"code": -32603, "message": "Internal error", "data": refusal}}
+
+    async def scenario():
+        async with XianAsync("http://unused", chain_id="local") as client:
+            broadcast = AsyncMock(side_effect=[refused, {"result": {"code": 0, "hash": "AB"}}])
+            with (
+                patch.object(tr, "get_nonce_async", AsyncMock(return_value=7)),
+                patch.object(tr, broadcaster, broadcast),
+            ):
+                first = await client.send_tx("currency", "transfer", {}, chi=100, mode=mode)
+                assert first.submitted is False and first.message == refusal
+                retried = await client.send_tx("currency", "transfer", {}, chi=100, mode=mode)
+                assert retried.nonce == 7
+
+    asyncio.run(scenario())

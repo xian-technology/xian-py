@@ -81,18 +81,25 @@ def _require_executed(simulation: dict[str, Any]) -> dict[str, Any]:
     return simulation
 
 
+def _refused_by_node(result: TransactionSubmission) -> bool:
+    """The node refused the transaction: CheckTx answered a nonzero code, or
+    a sync/async broadcast got a JSON-RPC error (mempool full, catching up,
+    too large), which CometBFT answers before its mempool takes the bytes.
+    A commit-mode error can come after admission (inclusion timeout)."""
+    response = result.response.get("result", {})
+    code = response.get("check_tx", response).get("code")
+    if code is not None:
+        return code != 0
+    return "error" in result.response and result.mode != "commit"
+
+
 def _settle_nonce_reservation(
     state: NonceState, reservation: Reservation, result: TransactionSubmission
 ) -> None:
-    """Release a rejected nonce; keep an uncertain broadcast's nonce reserved."""
-    if result.accepted is False:
-        response = result.response.get("result", {})
-        code = response.get("check_tx", response).get("code")
-        if code is not None and code != 0:
-            state.reject()
-        else:
-            state.quarantine(reservation)
-    elif result.accepted is None and not result.finalized:
+    """Release a refused nonce; keep an uncertain broadcast's nonce reserved."""
+    if result.accepted is False and _refused_by_node(result):
+        state.reject()
+    elif result.accepted is False or (result.accepted is None and not result.finalized):
         state.quarantine(reservation)
 
 

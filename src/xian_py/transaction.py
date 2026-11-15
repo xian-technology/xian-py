@@ -347,9 +347,37 @@ def create_tx(payload: dict, wallet: Wallet, *, vm_profile: str = DEFAULT_VM_PRO
     return json.loads(canonical_json(tx))
 
 
+TransactionInput = PreparedTransaction | dict[str, Any] | str | bytes | bytearray | memoryview
+
+
+async def _post_transaction(
+    node_url: str,
+    endpoint: str,
+    tx: TransactionInput,
+    session: aiohttp.ClientSession | None,
+) -> dict:
+    """POST the exact transaction bytes and return the node's JSON-RPC answer.
+
+    A refusal (mempool full, catching up, duplicate in cache) arrives with
+    HTTP 500 and a JSON-RPC error body: that body is the node's answer.
+    """
+    prepared_tx = prepare_transaction(tx)
+    try:
+        return await request_json_async(
+            "POST",
+            f"{node_url}/{endpoint}",
+            session=session,
+            request_kwargs={"data": {"tx": f'"{prepared_tx.rpc_hex}"'}},
+        )
+    except XianException:
+        raise
+    except Exception as e:
+        raise XianException(e) from e
+
+
 async def broadcast_tx_commit_async(
     node_url: str,
-    tx: PreparedTransaction | dict[str, Any] | str | bytes | bytearray | memoryview,
+    tx: TransactionInput,
     *,
     session: aiohttp.ClientSession | None = None,
 ) -> dict:
@@ -361,26 +389,12 @@ async def broadcast_tx_commit_async(
     :param tx: Transaction object or exact UTF-8 JSON prepared for broadcast
     :return: JSON data with tx hash, CheckTx and DeliverTx results
     """
-    prepared_tx = prepare_transaction(tx)
-
-    try:
-        data = await request_json_async(
-            "POST",
-            f"{node_url}/broadcast_tx_commit",
-            session=session,
-            request_kwargs={"data": {"tx": f'"{prepared_tx.rpc_hex}"'}},
-        )
-    except XianException:
-        raise
-    except Exception as e:
-        raise XianException(e) from e
-
-    return data
+    return await _post_transaction(node_url, "broadcast_tx_commit", tx, session)
 
 
 async def broadcast_tx_wait_async(
     node_url: str,
-    tx: PreparedTransaction | dict[str, Any] | str | bytes | bytearray | memoryview,
+    tx: TransactionInput,
     *,
     session: aiohttp.ClientSession | None = None,
 ) -> dict:
@@ -391,29 +405,15 @@ async def broadcast_tx_wait_async(
     :param tx: Transaction object or exact UTF-8 JSON prepared for broadcast
     :return: JSON data with tx hash and CheckTx result
     """
-    prepared_tx = prepare_transaction(tx)
-
-    try:
-        data = await request_json_async(
-            "POST",
-            f"{node_url}/broadcast_tx_sync",
-            session=session,
-            request_kwargs={"data": {"tx": f'"{prepared_tx.rpc_hex}"'}},
-        )
-    except XianException:
-        raise
-    except Exception as e:
-        raise XianException(e) from e
-
-    return data
+    return await _post_transaction(node_url, "broadcast_tx_sync", tx, session)
 
 
 async def broadcast_tx_nowait_async(
     node_url: str,
-    tx: PreparedTransaction | dict[str, Any] | str | bytes | bytearray | memoryview,
+    tx: TransactionInput,
     *,
     session: aiohttp.ClientSession | None = None,
-):
+) -> dict:
     """
     Submits a transaction to be included in the blockchain and returns
     immediately. Does not wait for CheckTx or DeliverTx results.
@@ -424,20 +424,7 @@ async def broadcast_tx_nowait_async(
     :param node_url: Node URL in format 'http://<IP>:<Port>'
     :param tx: Transaction object or exact UTF-8 JSON prepared for broadcast
     """
-    prepared_tx = prepare_transaction(tx)
-
-    try:
-        return await request_json_async(
-            "POST",
-            f"{node_url}/broadcast_tx_async",
-            session=session,
-            raise_for_status=True,
-            request_kwargs={"data": {"tx": f'"{prepared_tx.rpc_hex}"'}},
-        )
-    except XianException:
-        raise
-    except Exception as e:
-        raise XianException(e) from e
+    return await _post_transaction(node_url, "broadcast_tx_async", tx, session)
 
 
 def _hash_block_tx(block_tx: str) -> str:

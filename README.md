@@ -226,6 +226,11 @@ A "tx already exists in cache/mempool" response is reported as
 automatic nonce stays reserved until the network nonce advances: the node
 holds those bytes, but that proves neither admission nor execution. With
 `wait_for_tx=True`, a receipt for the hash marks it accepted and finalized.
+A sync/async broadcast the node refuses with a JSON-RPC error (for example
+"mempool is full" or "endpoint is closed while node is catching up", sent
+with HTTP 500) is reported as `submitted=False` and releases the automatic
+nonce. A lost response, or an error answering a commit broadcast, keeps it
+reserved until the network nonce advances.
 
 Deploy a contract from source:
 
