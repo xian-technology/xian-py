@@ -3,7 +3,7 @@
   "components": {
     "xian-contracting": {
       "repository": "xian-technology/xian-contracting",
-      "ref": "39f533980f0ae482ea1a9819f0b961311a020ad1",
+      "ref": "83f8f4ea0977dce7f2f48f9eeb28f6b946ad5494",
       "packages": {
         "xian-tech-accounts": {
           "version": "0.1.3",
