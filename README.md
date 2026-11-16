@@ -212,7 +212,9 @@ per-transaction cap `MAX_TX_CHI` (200,000); an estimate above the cap raises
 `TransactionError`. Automatic sends use the same rule, and an explicit `chi`
 always wins unchanged. The margin covers a transaction that lands between
 the estimate and execution and grows a stored value by a byte, which costs one
-chi more; execution charges only the chi used, so the margin costs nothing.
+chi more; a paid transaction pays half of the chi it leaves unused, so the
+margin costs at most one chi. A generous explicit `chi` pays half of its unused
+budget.
 If the state changes more than that (for example a pool moved or a recipient
 was created), the transaction can still run out of chi and fails with
 `Out of chi.`; estimate again and resubmit. Automatic sends simulate with
