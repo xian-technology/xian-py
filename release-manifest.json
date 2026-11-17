@@ -3,10 +3,10 @@
   "components": {
     "xian-contracting": {
       "repository": "xian-technology/xian-contracting",
-      "ref": "83f8f4ea0977dce7f2f48f9eeb28f6b946ad5494",
+      "ref": "1534394452451267397286f8083b220dcfbb4717",
       "packages": {
         "xian-tech-accounts": {
-          "version": "0.1.3",
+          "version": "0.1.4",
           "path": "packages/xian-accounts/pyproject.toml"
         },
         "xian-tech-compiler-core": {
