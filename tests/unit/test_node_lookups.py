@@ -1,6 +1,6 @@
 """Chain id and transaction lookups against CometBFT's real RPC answers.
 
-The fake session answers like a CometBFT 0.39 node: URI-handler errors come
+The fake session answers like a CometBFT 0.40.0 node: URI-handler errors come
 back as HTTP 500 with a JSON-RPC error body (rpc/jsonrpc/server/
 http_uri_handler.go), ``/genesis`` refuses documents above 16 MiB
 (rpc/core/net.go) and ``/tx`` answers ``tx (<HASH>) not found`` for a hash
