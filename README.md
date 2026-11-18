@@ -33,19 +33,22 @@ Install the SDK:
 uv add xian-tech-py
 ```
 
-Read state and submit a transaction with the synchronous client:
+Use a funded local account in `XIAN_PRIVATE_KEY` and a recipient public key in
+`XIAN_RECIPIENT`. Read state and submit a transaction with the synchronous client:
 
 ```python
 import os
 
-from xian_py import Wallet, Xian, chi_to_supply
+from xian_py import Wallet, Xian
 
 wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
 
 with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
     balance = client.token().balance_of(wallet.public_key)
-    submission = client.token().transfer("bob", 5, mode="checktx")
-    print(balance, submission.accepted)
+    submission = client.token().transfer(
+        os.environ["XIAN_RECIPIENT"], 5, mode="checktx", wait_for_tx=True
+    )
+    print(balance, submission.receipt.success if submission.receipt else None)
 ```
 
 Watch indexed events with the async client:
@@ -183,7 +186,7 @@ Estimate chi, submit a transaction, and wait for finality:
 ```python
 import os
 
-from xian_py import Wallet, Xian
+from xian_py import Wallet, Xian, chi_to_supply
 
 wallet = Wallet(private_key=os.environ["XIAN_PRIVATE_KEY"])
 
@@ -191,10 +194,10 @@ with Xian("http://127.0.0.1:26657", wallet=wallet) as client:
     estimate = client.estimate_chi(
         "currency",
         "transfer",
-        {"to": "bob", "amount": 5},
+        {"to": os.environ["XIAN_RECIPIENT"], "amount": 5},
     )
     submission = client.token().transfer(
-        "bob",
+        os.environ["XIAN_RECIPIENT"],
         5,
         chi=chi_to_supply(estimate["estimated"]),
         mode="checktx",
@@ -325,7 +328,7 @@ async def main() -> None:
         chain_id = await client.get_chain_id()
         balance = await client.token().balance_of(wallet.public_key)
         submission = await client.token().transfer(
-            "bob",
+            os.environ["XIAN_RECIPIENT"],
             5,
             mode="checktx",
             wait_for_tx=True,
