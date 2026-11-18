@@ -2369,12 +2369,13 @@ def test_xian_async_list_events_falls_back_to_graphql() -> None:
     assert events[0].tx_hash == "TX-11"
     assert events[0].block_height == 12
     graphql_call = client.session.post_calls[1]
+    assert "id: rowId" in graphql_call[1]["json"]["query"]
     assert graphql_call[0] == "http://127.0.0.1:26657/graphql"
     assert graphql_call[1]["json"]["variables"] == {
         "contract": "currency",
         "event": "Transfer",
         "limit": 2,
-        "afterId": 10,
+        "afterId": "10",
     }
 
 

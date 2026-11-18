@@ -255,12 +255,12 @@ class XianAsync:
           allEvents(
             first: $limit
             offset: $offset
-            orderBy: ID_ASC
+            orderBy: ROW_ID_ASC
             condition: {contract: $contract, event: $event}
           ) {
             edges {
               node {
-                id
+                id: rowId
                 txHash
                 contract
                 event
@@ -268,7 +268,7 @@ class XianAsync:
                 caller
                 dataIndexed
                 data
-                created
+                created: createdAt
                 transactionByTxHash {
                   blockHeight
                 }
@@ -290,17 +290,17 @@ class XianAsync:
               $contract: String!
               $event: String!
               $limit: Int!
-              $afterId: Int!
+              $afterId: BigInt!
             ) {
               allEvents(
                 first: $limit
-                orderBy: ID_ASC
+                orderBy: ROW_ID_ASC
                 condition: {contract: $contract, event: $event}
-                filter: {id: {greaterThan: $afterId}}
+                filter: {rowId: {greaterThan: $afterId}}
               ) {
                 edges {
                   node {
-                    id
+                    id: rowId
                     txHash
                     contract
                     event
@@ -308,7 +308,7 @@ class XianAsync:
                     caller
                     dataIndexed
                     data
-                    created
+                    created: createdAt
                     transactionByTxHash {
                       blockHeight
                     }
@@ -321,7 +321,7 @@ class XianAsync:
                 "contract": contract,
                 "event": event,
                 "limit": limit,
-                "afterId": after_id,
+                "afterId": str(after_id),
             }
 
         data = await self._graphql_query(query, variables=variables)
@@ -347,12 +347,12 @@ class XianAsync:
         query EventsForTx($txHash: String!) {
           allEvents(
             first: 1000
-            orderBy: ID_ASC
+            orderBy: ROW_ID_ASC
             filter: {txHash: {equalTo: $txHash}}
           ) {
             edges {
               node {
-                id
+                id: rowId
                 txHash
                 contract
                 event
@@ -360,7 +360,7 @@ class XianAsync:
                 caller
                 dataIndexed
                 data
-                created
+                created: createdAt
                 transactionByTxHash {
                   blockHeight
                 }
