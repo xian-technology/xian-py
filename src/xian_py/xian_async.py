@@ -82,6 +82,16 @@ def _require_executed(simulation: dict[str, Any]) -> dict[str, Any]:
     return simulation
 
 
+def _balance_value(balance: Any) -> int | ContractingDecimal:
+    if isinstance(balance, (ContractingDecimal, int)):
+        return balance
+    if isinstance(balance, float):
+        return int(balance) if balance.is_integer() else ContractingDecimal(str(balance))
+    if isinstance(balance, str):
+        return int(balance) if balance.isdigit() else ContractingDecimal(balance)
+    raise TypeError(f"Unsupported balance type: {type(balance)}")
+
+
 def _refused_by_node(result: TransactionSubmission) -> bool:
     """The node refused the transaction: CheckTx answered a nonzero code, or
     a sync/async broadcast got a JSON-RPC error (mempool full, catching up,
@@ -561,47 +571,24 @@ class XianAsync:
         contract: str = "currency",
     ) -> int | ContractingDecimal:
         address = address or self.wallet.public_key
-
-        async def query_simulate() -> Any:
-            payload = {
-                "contract": contract,
-                "function": "balance_of",
-                "kwargs": {"address": address},
-                "sender": self.wallet.public_key,
-            }
-            data = await tr.simulate_tx_async(
+        payload = {
+            "contract": contract,
+            "function": "balance_of",
+            "kwargs": {"address": address},
+            "sender": address,
+        }
+        try:
+            simulation = await tr.simulate_tx_async(
                 self.node_url,
                 payload,
                 vm_profile=self.config.vm_profile,
                 session=self.session,
             )
-            return data["result"]
-
-        async def query_abci() -> Any:
-            return await self._abci_query_value(f"/get/{contract}.balances:{address}")
-
-        def normalize_balance(
-            balance: int | float | str | ContractingDecimal,
-        ) -> int | ContractingDecimal:
-            if isinstance(balance, ContractingDecimal):
-                return balance
-            if isinstance(balance, int):
-                return balance
-            if isinstance(balance, float):
-                if balance.is_integer():
-                    return int(balance)
-                return ContractingDecimal(str(balance))
-            if isinstance(balance, str):
-                if balance.isdigit():
-                    return int(balance)
-                return ContractingDecimal(balance)
-            raise TypeError(f"Unsupported balance type: {type(balance)}")
-
-        try:
-            return normalize_balance(await query_simulate())
+            return _balance_value(_require_executed(simulation)["result"])
         except Exception:
             try:
-                return normalize_balance(await query_abci())
+                balance = await self._abci_query_value(f"/get/{contract}.balances:{address}")
+                return _balance_value(balance)
             except Exception as exc:
                 raise XianException(exc) from exc
 

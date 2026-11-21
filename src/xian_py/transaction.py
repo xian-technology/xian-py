@@ -333,6 +333,8 @@ def create_tx(payload: dict, wallet: Wallet, *, vm_profile: str = DEFAULT_VM_PRO
     payload = normalize_transaction_payload(payload, vm_profile=vm_profile)
     if not check_format_of_payload(payload):
         raise TransactionError("Invalid payload provided")
+    if payload["sender"] != wallet.public_key:
+        raise TransactionError("signer address does not match payload sender")
     if vm_profile == "xian_vm_v2":
         for field in ("nonce", "chi_supplied"):
             if payload[field] > SAFE_INTEGER:

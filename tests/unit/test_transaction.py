@@ -9,7 +9,7 @@ import aiohttp
 import pytest
 from xian_runtime_types.decimal import ContractingDecimal
 
-from xian_py.exception import TransportError, XianException
+from xian_py.exception import TransactionError, TransportError, XianException
 from xian_py.formatting import format_dictionary
 from xian_py.transaction import (
     PreparedTransaction,
@@ -225,6 +225,8 @@ def test_create_tx_formats_payload_and_signs_it() -> None:
     assert tx["payload"] == expected_payload
     assert wallet.verify_msg(canonical_payload, signature) is True
     assert wallet.verify_msg(json.dumps(expected_payload), signature) is False
+    with pytest.raises(TransactionError, match="signer address"):
+        create_tx(payload, Wallet())
 
 
 def test_create_tx_signs_unicode_with_clean_canonical_json() -> None:
