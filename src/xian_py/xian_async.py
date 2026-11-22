@@ -1474,12 +1474,15 @@ class XianAsync:
         start: datetime | int | float | str | None = None,
         end: datetime | int | float | str | None = None,
     ) -> DexCandlePage:
-        """Get OHLCV and a timestamp to pass as end for the next older page."""
+        """Get OHLCV. Pass next_before as end to page backward. Offset must be zero."""
+        if offset != 0:
+            raise ValueError(
+                "Candle queries accept only offset=0. Pass next_before as end instead."
+            )
         path_parts = [
             f"dex_candles/{market_id}",
             f"interval={interval}",
             f"limit={limit}",
-            f"offset={offset}",
         ]
         if source is not None:
             path_parts.append(f"source={source}")

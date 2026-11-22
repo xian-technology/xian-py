@@ -2269,7 +2269,7 @@ def test_xian_async_list_dex_candles_builds_bds_query_and_models() -> None:
                 source="xian_pairs_v1",
                 interval="5m",
                 limit=25,
-                offset=5,
+                offset=0,
                 start=datetime(2026, 1, 1, tzinfo=timezone.utc),
                 end=1767225900,
             )
@@ -2314,8 +2314,7 @@ def test_xian_async_list_dex_candles_builds_bds_query_and_models() -> None:
         )
     ]
     query.assert_awaited_once_with(
-        "/dex_candles/7/interval=5m/limit=25/offset=5/source=xian_pairs_v1/"
-        "start=1767225600/end=1767225900"
+        "/dex_candles/7/interval=5m/limit=25/source=xian_pairs_v1/start=1767225600/end=1767225900"
     )
 
 
@@ -2329,9 +2328,18 @@ def test_xian_async_candle_page_preserves_microsecond_bounds() -> None:
 
     assert page.items == []
     query.assert_awaited_once_with(
-        "/dex_candles/7/interval=1m/limit=100/offset=0/"
+        "/dex_candles/7/interval=1m/limit=100/"
         "start=2026-01-01T00:00:00.123456Z/end=2026-01-01T00:00:00.987654Z"
     )
+
+
+@pytest.mark.parametrize("offset", [1, -1])
+def test_xian_async_candle_page_rejects_nonzero_offsets(offset: int) -> None:
+    client = XianAsync("http://node", chain_id="xian-local-1")
+    with patch.object(client, "_abci_query_value", AsyncMock()) as query:
+        with pytest.raises(ValueError, match="next_before"):
+            asyncio.run(client.get_dex_candle_page(7, offset=offset))
+    query.assert_not_awaited()
 
 
 def test_xian_async_list_events_falls_back_to_graphql() -> None:
