@@ -40,10 +40,12 @@ from xian_py.exception import (
     TxNotFoundError,
     XianException,
 )
+from xian_py.markets import MARKET_HISTORY_QUERY, DexMarketHistory
 from xian_py.models import (
     BdsStatus,
     DeveloperRewardSummary,
     DexCandle,
+    DexCandlePage,
     IndexedBlock,
     IndexedEvent,
     IndexedTransaction,
@@ -1405,6 +1407,37 @@ class XianAsync:
             return []
         raise XianException("Unexpected event list payload")
 
+    async def get_dex_market_history(
+        self,
+        token_a: str,
+        token_b: str,
+        *,
+        first: int = 50,
+        after: str | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        interval_seconds: int = 60,
+        candle_limit: int = 100,
+        candle_before: str | None = None,
+    ) -> DexMarketHistory | None:
+        """Resolve either token order and fetch indexed pool fills and OHLCV in one request."""
+        result = await self._graphql_query(
+            MARKET_HISTORY_QUERY,
+            variables={
+                "tokenA": token_a,
+                "tokenB": token_b,
+                "first": first,
+                "after": after,
+                "start": start,
+                "end": end,
+                "interval": interval_seconds,
+                "size": candle_limit,
+                "before": candle_before,
+            },
+        )
+        market = result["dexMarket"]
+        return None if market is None else DexMarketHistory.from_graphql(market)
+
     async def list_dex_candles(
         self,
         market_id: int | str,
@@ -1417,6 +1450,31 @@ class XianAsync:
         start: datetime | int | float | str | None = None,
         end: datetime | int | float | str | None = None,
     ) -> list[DexCandle]:
+        page = await self.get_dex_candle_page(
+            market_id,
+            source=source,
+            contract=contract,
+            interval=interval,
+            limit=limit,
+            offset=offset,
+            start=start,
+            end=end,
+        )
+        return page.items
+
+    async def get_dex_candle_page(
+        self,
+        market_id: int | str,
+        *,
+        source: str | None = None,
+        contract: str | None = None,
+        interval: int | str = "1m",
+        limit: int = 100,
+        offset: int = 0,
+        start: datetime | int | float | str | None = None,
+        end: datetime | int | float | str | None = None,
+    ) -> DexCandlePage:
+        """Get OHLCV and a timestamp to pass as end for the next older page."""
         path_parts = [
             f"dex_candles/{market_id}",
             f"interval={interval}",
@@ -1440,7 +1498,11 @@ class XianAsync:
         items = payload.get("items")
         if not isinstance(items, list):
             raise XianException("Unexpected DEX candle item list")
-        return [DexCandle.from_dict(item) for item in items if isinstance(item, dict)]
+        return DexCandlePage(
+            items=[DexCandle.from_dict(item) for item in items if isinstance(item, dict)],
+            indexed_height=payload.get("indexed_height"),
+            next_before=payload.get("next_before"),
+        )
 
     async def get_state_history(
         self,

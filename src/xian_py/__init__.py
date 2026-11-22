@@ -30,10 +30,12 @@ from xian_py.exception import (
     TxTimeoutError,
     XianException,
 )
+from xian_py.markets import DexMarketHistory, DexPoolFill
 from xian_py.models import (
     BdsStatus,
     DeveloperRewardSummary,
     DexCandle,
+    DexCandlePage,
     IndexedBlock,
     IndexedEvent,
     IndexedTransaction,
@@ -115,6 +117,9 @@ __all__ = [
     "AsyncTokenClient",
     "BdsStatus",
     "DexCandle",
+    "DexCandlePage",
+    "DexMarketHistory",
+    "DexPoolFill",
     "DeveloperRewardSummary",
     "ContractClient",
     "EventClient",

@@ -794,6 +794,13 @@ class DexCandle:
 
 
 @dataclass(frozen=True)
+class DexCandlePage:
+    items: list[DexCandle]
+    indexed_height: int | None
+    next_before: str | None
+
+
+@dataclass(frozen=True)
 class ShieldedOutputTag:
     id: int | None
     tx_hash: str | None
