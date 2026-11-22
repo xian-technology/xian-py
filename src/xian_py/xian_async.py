@@ -4,7 +4,7 @@ import inspect
 import json
 import re
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Literal, Optional
 
@@ -1959,7 +1959,10 @@ class XianAsync:
         if value is None:
             return None
         if isinstance(value, datetime):
-            return str(int(value.timestamp()))
+            timestamp = value.astimezone(timezone.utc)
+            if timestamp.microsecond:
+                return timestamp.isoformat().removesuffix("+00:00") + "Z"
+            return str(int(timestamp.timestamp()))
         if isinstance(value, str):
             text = value.strip()
             if text.endswith("+00:00"):

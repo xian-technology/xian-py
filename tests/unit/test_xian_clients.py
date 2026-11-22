@@ -2319,6 +2319,21 @@ def test_xian_async_list_dex_candles_builds_bds_query_and_models() -> None:
     )
 
 
+def test_xian_async_candle_page_preserves_microsecond_bounds() -> None:
+    client = XianAsync("http://node", chain_id="xian-local-1")
+    start = datetime.fromisoformat("2026-01-01T01:00:00.123456+01:00")
+    end = datetime.fromisoformat("2026-01-01T01:00:00.987654+01:00")
+
+    with patch.object(client, "_abci_query_value", AsyncMock(return_value={"items": []})) as query:
+        page = asyncio.run(client.get_dex_candle_page(7, start=start, end=end))
+
+    assert page.items == []
+    query.assert_awaited_once_with(
+        "/dex_candles/7/interval=1m/limit=100/offset=0/"
+        "start=2026-01-01T00:00:00.123456Z/end=2026-01-01T00:00:00.987654Z"
+    )
+
+
 def test_xian_async_list_events_falls_back_to_graphql() -> None:
     client = XianAsync("http://127.0.0.1:26657", chain_id="xian-local-1")
     client._session = _FakeSession(
