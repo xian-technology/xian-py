@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import pytest
 
 from xian_py.exception import TransportError, XianException
 from xian_py.models import (
@@ -14,6 +18,8 @@ from xian_py.models import (
 from xian_py.shielded_relayer import (
     ShieldedRelayerAsyncClient,
     ShieldedRelayerAsyncPoolClient,
+    ShieldedRelayerClient,
+    ShieldedRelayerPoolClient,
 )
 
 
@@ -53,6 +59,41 @@ class _FakeSession:
 
     async def close(self) -> None:
         self.closed = True
+
+
+@pytest.mark.parametrize("use_pool", [False, True])
+def test_sync_relayer_supports_sequential_requests(use_pool):
+    paths = []
+
+    class RelayerHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            paths.append(self.path)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"available":true}')
+
+    with ThreadingHTTPServer(("127.0.0.1", 0), RelayerHandler) as server:
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{server.server_port}"
+            relayer = (
+                ShieldedRelayerPoolClient([{"id": "local", "relayer_url": url}])
+                if use_pool
+                else ShieldedRelayerClient(url)
+            )
+            for calls in (2, 1):
+                with relayer:
+                    for _ in range(calls):
+                        result = relayer.get_info()
+                        info = result.info if use_pool else result
+                        assert info.available
+        finally:
+            server.shutdown()
+            thread.join()
+
+    assert paths == ["/v1/info"] * 3
 
 
 def test_async_relayer_client_reads_info_and_quote() -> None:

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping
+import asyncio
+import threading
+from contextvars import copy_context
+from typing import Any, Awaitable, Callable, Mapping, TypeVar
 from urllib.parse import quote
 
 import aiohttp
@@ -15,7 +18,8 @@ from xian_py.models import (
     ShieldedRelayerQuote,
     ShieldedRelayerQuoteResult,
 )
-from xian_py.run_sync import run_sync
+
+_T = TypeVar("_T")
 
 
 def _strip_trailing_slash(value: str) -> str:
@@ -81,8 +85,9 @@ class ShieldedRelayerAsyncClient:
         return self._session
 
     async def close(self) -> None:
-        if self._owns_session and self._session is not None and not self._session.closed:
-            await self._session.close()
+        if self._owns_session and self._session is not None:
+            session, self._session = self._session, None
+            await session.close()
 
     async def _request_json(
         self,
@@ -444,6 +449,24 @@ class ShieldedRelayerAsyncPoolClient:
         raise _build_aggregate_transport_error(action, failures)
 
 
+class _SyncRelayerRuntime:
+    """Keep each synchronous client's session on its originating event loop."""
+
+    def __init__(self) -> None:
+        self._runner = asyncio.Runner(loop_factory=asyncio.new_event_loop)
+        self._lock = threading.Lock()
+
+    def run(self, call: Awaitable[_T]) -> _T:
+        with self._lock:
+            return self._runner.run(call, context=copy_context())
+
+    def close(self, close_client: Callable[[], Awaitable[None]]) -> None:
+        with self._lock:
+            self._runner.run(close_client(), context=copy_context())
+            self._runner.close()
+            self._runner = asyncio.Runner(loop_factory=asyncio.new_event_loop)
+
+
 class ShieldedRelayerClient:
     def __init__(
         self,
@@ -455,9 +478,10 @@ class ShieldedRelayerClient:
             relayer_url,
             auth_token=auth_token,
         )
+        self._runtime = _SyncRelayerRuntime()
 
     def close(self) -> None:
-        run_sync(self._async_client.close())
+        self._runtime.close(self._async_client.close)
 
     def __enter__(self) -> "ShieldedRelayerClient":
         return self
@@ -466,7 +490,7 @@ class ShieldedRelayerClient:
         self.close()
 
     def get_info(self) -> ShieldedRelayerInfo:
-        return run_sync(self._async_client.get_info())
+        return self._runtime.run(self._async_client.get_info())
 
     def get_quote(
         self,
@@ -477,7 +501,7 @@ class ShieldedRelayerClient:
         requested_relayer_fee: int | None = None,
         requested_expires_in_seconds: int | None = None,
     ) -> ShieldedRelayerQuote:
-        return run_sync(
+        return self._runtime.run(
             self._async_client.get_quote(
                 kind=kind,
                 contract=contract,
@@ -500,7 +524,7 @@ class ShieldedRelayerClient:
         output_payloads: list[str] | None = None,
         client_request_id: str | None = None,
     ) -> ShieldedRelayerJob:
-        return run_sync(
+        return self._runtime.run(
             self._async_client.submit_shielded_note_relay_transfer(
                 contract=contract,
                 old_root=old_root,
@@ -530,7 +554,7 @@ class ShieldedRelayerClient:
         output_payloads: list[str] | None = None,
         client_request_id: str | None = None,
     ) -> ShieldedRelayerJob:
-        return run_sync(
+        return self._runtime.run(
             self._async_client.submit_shielded_command(
                 contract=contract,
                 target_contract=target_contract,
@@ -548,7 +572,7 @@ class ShieldedRelayerClient:
         )
 
     def get_job(self, job_id: str) -> ShieldedRelayerJob:
-        return run_sync(self._async_client.get_job(job_id))
+        return self._runtime.run(self._async_client.get_job(job_id))
 
 
 class ShieldedRelayerPoolClient:
@@ -557,9 +581,10 @@ class ShieldedRelayerPoolClient:
         relayers: list[ShieldedRelayerCatalogEntry | Mapping[str, Any]],
     ) -> None:
         self._async_client = ShieldedRelayerAsyncPoolClient(relayers)
+        self._runtime = _SyncRelayerRuntime()
 
     def close(self) -> None:
-        run_sync(self._async_client.close())
+        self._runtime.close(self._async_client.close)
 
     def __enter__(self) -> "ShieldedRelayerPoolClient":
         return self
@@ -571,7 +596,7 @@ class ShieldedRelayerPoolClient:
         return self._async_client.list_relayers(kind)
 
     def get_info(self, *, relayer_id: str | None = None) -> ShieldedRelayerInfoResult:
-        return run_sync(self._async_client.get_info(relayer_id=relayer_id))
+        return self._runtime.run(self._async_client.get_info(relayer_id=relayer_id))
 
     def get_quote(
         self,
@@ -583,7 +608,7 @@ class ShieldedRelayerPoolClient:
         requested_expires_in_seconds: int | None = None,
         relayer_id: str | None = None,
     ) -> ShieldedRelayerQuoteResult:
-        return run_sync(
+        return self._runtime.run(
             self._async_client.get_quote(
                 kind=kind,
                 contract=contract,
@@ -608,7 +633,7 @@ class ShieldedRelayerPoolClient:
         client_request_id: str | None = None,
         relayer_id: str | None = None,
     ) -> ShieldedRelayerJobResult:
-        return run_sync(
+        return self._runtime.run(
             self._async_client.submit_shielded_note_relay_transfer(
                 contract=contract,
                 old_root=old_root,
@@ -640,7 +665,7 @@ class ShieldedRelayerPoolClient:
         client_request_id: str | None = None,
         relayer_id: str | None = None,
     ) -> ShieldedRelayerJobResult:
-        return run_sync(
+        return self._runtime.run(
             self._async_client.submit_shielded_command(
                 contract=contract,
                 target_contract=target_contract,
@@ -659,4 +684,4 @@ class ShieldedRelayerPoolClient:
         )
 
     def get_job(self, job_id: str, *, relayer_id: str | None = None) -> ShieldedRelayerJobResult:
-        return run_sync(self._async_client.get_job(job_id, relayer_id=relayer_id))
+        return self._runtime.run(self._async_client.get_job(job_id, relayer_id=relayer_id))
