@@ -208,6 +208,8 @@ class XianAsync:
         return _rpc_ws_url(websocket_url)
 
     def _resolve_bds_graphql_url(self) -> str:
+        if self.config.graphql_url is not None:
+            return self.config.graphql_url
         return _rpc_graphql_url(self.node_url)
 
     async def _graphql_query(
@@ -265,7 +267,7 @@ class XianAsync:
           allEvents(
             first: $limit
             offset: $offset
-            orderBy: ROW_ID_ASC
+            orderBy: ROW_ID_DESC
             condition: {contract: $contract, event: $event}
           ) {
             edges {

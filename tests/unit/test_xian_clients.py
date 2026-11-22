@@ -2379,6 +2379,25 @@ def test_xian_async_list_events_falls_back_to_graphql() -> None:
     }
 
 
+def test_xian_async_event_fallback_uses_the_configured_sidecar_and_newest_first() -> None:
+    client = XianAsync(
+        "http://127.0.0.1:26657",
+        chain_id="xian-local-1",
+        config=XianClientConfig(graphql_url="http://127.0.0.1:5000/graphql"),
+    )
+    client._session = _FakeSession(
+        post_responses=[
+            _FakeResponse({"result": {"response": {"value": None}}}),
+            _FakeResponse({"data": {"allEvents": {"edges": []}}}),
+        ]
+    )
+
+    assert asyncio.run(client.list_events("currency", "Transfer", limit=2)) == []
+    url, request = client.session.post_calls[1]
+    assert url == "http://127.0.0.1:5000/graphql"
+    assert "orderBy: ROW_ID_DESC" in request["json"]["query"]
+
+
 def test_xian_async_get_events_for_tx_falls_back_to_graphql() -> None:
     client = XianAsync("http://127.0.0.1:26657", chain_id="xian-local-1")
     client._session = _FakeSession(

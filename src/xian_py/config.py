@@ -62,6 +62,7 @@ class XianClientConfig:
     submission: SubmissionConfig = field(default_factory=SubmissionConfig)
     watcher: WatcherConfig = field(default_factory=WatcherConfig)
     vm_profile: Literal["xian_vm_v1", "xian_vm_v2"] = DEFAULT_VM_PROFILE
+    graphql_url: str | None = None
 
     def __post_init__(self):
         if self.vm_profile not in ("xian_vm_v1", "xian_vm_v2"):
