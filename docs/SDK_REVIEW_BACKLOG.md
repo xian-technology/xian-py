@@ -41,6 +41,6 @@
 
 ## Still Worth Doing
 
-- revisit the validator helper in `validator.py`; it should either consume the
-  authoritative `xian-contracting` standard rules or move out of the SDK
-  `ast.unparse` based path if possible
+- Review whether the SDK's Python AST-based standard checker in `validator.py`
+  can use the authoritative `xian-contracting` rules or move to the tooling
+  layer.
