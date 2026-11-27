@@ -111,7 +111,7 @@ def _settle_nonce_reservation(
 ) -> None:
     """Release a refused nonce; keep an uncertain broadcast's nonce reserved."""
     if result.accepted is False and _refused_by_node(result):
-        state.reject()
+        state.reject(reservation)
     elif result.accepted is False or (result.accepted is None and not result.finalized):
         state.quarantine(reservation)
 
