@@ -234,8 +234,10 @@ holds those bytes, but that proves neither admission nor execution. With
 A sync/async broadcast the node refuses with a JSON-RPC error (for example
 "mempool is full" or "endpoint is closed while node is catching up", sent
 with HTTP 500) is reported as `submitted=False` and releases the automatic
-nonce. A lost response, or an error answering a commit broadcast, keeps it
-reserved until the network nonce advances.
+nonce. The client keeps earlier admitted nonces allocated when it refreshes
+after a refusal. A lost response or commit broadcast error keeps the nonce
+reserved until the committed nonce reaches or passes it. Use the transaction
+hash to confirm the original call's outcome.
 
 Deploy a contract from source:
 

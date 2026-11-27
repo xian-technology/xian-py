@@ -84,6 +84,35 @@ def test_automatic_broadcasts_wait_for_preceding_admission():
     asyncio.run(scenario())
 
 
+def test_refusal_and_refresh_preserve_previously_admitted_nonces():
+    async def scenario():
+        async with XianAsync("http://unused", chain_id="local") as client:
+            broadcast = AsyncMock(
+                side_effect=[
+                    {"result": {"code": 0}},
+                    {"result": {"code": 1}},
+                    {"result": {"code": 0}},
+                    {"result": {"code": 0}},
+                ]
+            )
+            with (
+                patch.object(tr, "get_nonce_async", AsyncMock(side_effect=[7, 7, 7, 12])),
+                patch.object(tr, "broadcast_tx_wait_async", broadcast),
+            ):
+
+                async def send():
+                    return await client.send_tx("currency", "transfer", {}, chi=100)
+
+                assert (await send()).nonce == 7
+                assert (await send()).nonce == 8
+                assert (await send()).nonce == 8
+                assert await client.refresh_nonce() == 9
+                assert await client.refresh_nonce() == 12
+                assert (await send()).nonce == 12
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize(
     "results",
     [
